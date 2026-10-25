@@ -14,11 +14,12 @@ GitHub Pages later.
 | Path | What it holds | Phase |
 | --- | --- | --- |
 | `supabase/config.toml` | Supabase CLI config. `recruiting` is in the exposed schemas; auth defaults match the dashboard steps below | 2 |
-| `supabase/migrations/` | Database migrations, applied with `npx supabase db push`. One file per change, never edited after it has been pushed | 2+ |
+| `supabase/migrations/` | Database migrations. Applied to the hosted project with `npm run db:migrate`, never with `supabase db push` (see "Two repos, one project"). One file per change, never edited after it has been applied | 2+ |
 | `supabase/seed.sql` | Local-only seed for `npx supabase start` / `db reset` | 3 |
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform submissions | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions | 4 |
-| `scripts/sync-migration-stubs.mjs` | Keeps `db push` working alongside the inventory app's repo (see "Two repos, one project") | 2 |
+| `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate` and `npm run db:status` | 2 |
+| `package.json` | Only the runner's `pg` dependency and the npm scripts. The frontend has no build step | 2 |
 | `web/` | The tracker frontend | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (fill in before Phase 3) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
@@ -42,8 +43,8 @@ applied to `am-projects`; that is step 4 below.
 
 ## Manual steps in Supabase (do these in order)
 
-You need: a terminal with Node 18 or newer (the CLI runs through `npx`, nothing to install),
-and owner access to the `am-projects` project in the Supabase dashboard. Run every command from
+You need: a terminal with Node 20.12 or newer (the Supabase CLI runs through `npx`; the
+migration runner needs one `npm install`), and owner access to the `am-projects` project in the Supabase dashboard. Run every command from
 the root of this repo.
 
 Never paste a key, password, or token into chat, a file in this repo, or a commit. Everything
@@ -88,23 +89,41 @@ password**. To avoid the prompt in future runs, export it as `SUPABASE_DB_PASSWO
 session. The link state is written to `supabase/.temp/`, which is gitignored.
 
 The link command may print a warning that the local config differs from the remote project
-(auth and API settings). That is expected until steps 5 and 6 are done.
+(auth and API settings). That is expected until steps 5 and 6 are done. Linking is for Edge
+Functions and secrets in later phases; migrations do not go through it (next step).
 
 ### 4. Apply the migration
 
-```sh
-node scripts/sync-migration-stubs.mjs
-npx supabase db push --dry-run
-npx supabase db push
-npx supabase migration list
+Migrations are applied by this repo's own runner, not by `npx supabase db push`. The reason is
+in "Two repos, one project" below; the short version is that `db push` would make the
+inventory app's CLI stop working on the shared project.
+
+Get the connection string: Dashboard → **Connect** (button in the top bar) → **Session pooler**
+tab (not Transaction pooler) → copy the URI and replace `[YOUR-PASSWORD]` with the database
+password from step 3. Put it in a file named `.env` at the root of this repo (copy
+`.env.example`), which git ignores:
+
+```
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-The first command only matters once the inventory app has pushed migrations of its own to
-`am-projects` (see "Two repos, one project" below); today it prints that there is nothing to do.
-The dry run lists `20261025000000_create_recruiting_schema_and_profiles.sql`; the real push
-asks for confirmation and applies it; the list shows the same version under both Local and
-Remote. Then in the dashboard, **Table Editor** → schema selector (top left, says `public`) →
-pick `recruiting` → you should see `profiles`.
+Then:
+
+```sh
+npm install
+npm run db:status
+npm run db:migrate
+npm run db:status
+```
+
+The first status shows `20261025000000_create_recruiting_schema_and_profiles.sql` as pending;
+migrate applies it inside a transaction and records it in `recruiting.schema_migrations`; the
+second status shows it as applied. In the dashboard, **Table Editor** → schema selector (top
+left, says `public`) → pick `recruiting` → you should see `profiles` and `schema_migrations`.
+
+If the runner reports a certificate error: **Project Settings** → **Database** → **SSL
+Configuration** → download the certificate, and add
+`SUPABASE_DB_SSL_CA=/path/to/prod-ca-2021.crt` to `.env`.
 
 ### 5. Expose the `recruiting` schema in the Data API
 
@@ -168,6 +187,7 @@ SQL as a reusable script and the invite flow for HR and managers arrives in Phas
 | Secret | Needed from | Where to set it |
 | --- | --- | --- |
 | Database password | Step 3 | Prompted by `supabase link`, or `SUPABASE_DB_PASSWORD` in your shell |
+| `SUPABASE_DB_URL` (connection string, contains the password) | Step 4 and every later migration | `.env` at the repo root, gitignored |
 | CLI access token | Step 3 | `supabase login`, or `SUPABASE_ACCESS_TOKEN` in your shell |
 | `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | `npx supabase secrets set --env-file ./supabase/.env` with the key in that gitignored file, or Dashboard → **Edge Functions** → **Secrets**. The backfill script reads it from your local environment |
 | `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as above |
@@ -188,43 +208,39 @@ npx serve web        # http://localhost:3000, which is why that URL is registere
 A full local Supabase stack (`npx supabase start`) needs Docker Desktop and gives you a
 throwaway database at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:54323`.
 `npx supabase db reset` replays the migrations and `supabase/seed.sql` into it. This is useful
-from Phase 3 on; nothing in Phase 2 requires it.
+from Phase 3 on; nothing in Phase 2 requires it. The runner can target it too, with
+`SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres`, but `db reset` is the
+simpler way locally.
 
 ## Two repos, one project
 
-The inventory app lives in its own repository and shares `am-projects`. Three things follow.
+The inventory app is its own project in its own repository and environment; the only thing it
+shares with this one is the `am-projects` Supabase project. Nothing in the inventory repo needs
+to know this repo exists. Three things make that hold.
 
-**Schemas.** This app creates objects only in schema `recruiting` (plus its own Storage bucket
-and `recruiting-` prefixed Edge Functions). The inventory app must do the same in its own
-schema and never touch `recruiting`. `auth.users` is shared; each app keeps its own `profiles`
-table.
+**Schemas.** This app creates objects only in schema `recruiting`, plus its own Storage bucket
+and `recruiting-` prefixed Edge Functions. `auth.users` is shared; each app keeps its own
+`profiles` table. The inventory app's only obligations are to use its own schema and not touch
+`recruiting`.
 
-**Migration history.** The Supabase CLI records every applied migration in one table per project
-(`supabase_migrations.schema_migrations`) and `supabase db push` refuses to run while that table
-lists a version that has no file in the local `supabase/migrations/` folder. So once the
-inventory repo has pushed, a push from this repo fails with "Remote migration versions not found
-in local migrations directory", and the other way round. Do not follow the CLI's suggestion to
-run `migration repair --status reverted`: that erases the other app's history and its next push
-would re-run its migrations.
+**Migrations.** The Supabase CLI keeps one migration history per project
+(`supabase_migrations.schema_migrations`), and `supabase db push` refuses to run while that
+table lists a version it cannot find locally. If both repos used `db push`, each would break the
+other's. So this repo never uses `db push`: `npm run db:migrate` applies files from
+`supabase/migrations/` and records them in its own table, `recruiting.schema_migrations`. The
+CLI's history table is never created or written by this repo, so the inventory repo can use
+`db push`, `db pull`, or whatever it likes. (If it runs `db pull` or `db diff` it will see the
+`recruiting` schema in the database; scoping those commands to its own schema with `-s` keeps
+its files clean. That is its choice and nothing here depends on it.)
 
-Instead run `node scripts/sync-migration-stubs.mjs` before every `db push`. It asks the project
-which versions are applied and writes an empty placeholder file
-(`<version>_external_app_placeholder.sql`) for each one this repo lacks. The CLI then treats
-those versions as applied and pushes only this repo's new migrations. Commit the placeholders.
-The inventory repo needs a copy of the same script (change the suffix so the two sets of
-placeholders are told apart). The script was tested against a database seeded with foreign
-history entries: the push failed before, and succeeded after, with only the new file applied.
-
-Two rules keep it painless:
-
-- Name new migrations with the current timestamp, so they sort after everything already on the
-  project. If a push complains that a local file sorts before the last remote migration, rename
-  the file with a fresh timestamp rather than using `--include-all`.
-- Run the sync script and commit its output as part of the same pull request as the migration.
+Do not run `npx supabase db push` from this repo, even once: it would write this app's versions
+into the CLI's history and the inventory app's next push would fail. `npx supabase migration
+list` and `db pull` are also not useful here. The local Docker stack is unaffected:
+`npx supabase start` and `db reset` still apply `supabase/migrations/` locally.
 
 **Project-wide settings.** Exposed schemas, auth URLs, signup, and email settings are shared.
 Change them in the dashboard, adding to what is there rather than replacing it, and never run
-`supabase config push` from either repo.
+`supabase config push` from this repo. `config.toml` drives only the local Docker stack.
 
 ## Conventions
 

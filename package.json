@@ -1,0 +1,17 @@
+{
+  "name": "rexius-recruiting",
+  "private": true,
+  "type": "module",
+  "description": "Rexius Recruiter: scripts for the shared Supabase project. The frontend in web/ has no build step.",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:status": "node scripts/db-migrate.mjs --status",
+    "serve": "npx serve web"
+  },
+  "devDependencies": {
+    "pg": "8.23.1"
+  }
+}

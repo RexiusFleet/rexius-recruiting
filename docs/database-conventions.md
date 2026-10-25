@@ -44,11 +44,18 @@ Functions are executable by `public` by default in Postgres. Every function the 
 
 ## Shared project
 
-The inventory app's repository pushes migrations to the same project. Run
-`node scripts/sync-migration-stubs.mjs` before `npx supabase db push` and commit the placeholder
-files it writes; never run `supabase migration repair --status reverted` against a version that
-belongs to the other app; never run `supabase config push`. README.md, "Two repos, one project",
-has the reasoning.
+The inventory app shares the Supabase project from its own, unrelated repository. This repo
+applies migrations with `npm run db:migrate` (`scripts/db-migrate.mjs`), which records them in
+`recruiting.schema_migrations`, and never with `supabase db push`, which would write to the
+CLI's project-wide history table and break the inventory app's pushes. Never run `supabase
+config push` either; project-wide settings are changed in the dashboard. README.md, "Two repos,
+one project", has the reasoning.
+
+Consequences for writing migrations: each file runs in one transaction (so no `create index
+concurrently` or other statements that refuse to run inside a transaction; an enum value added
+with `alter type … add value` cannot be used in the same file), plain SQL only (no psql
+meta-commands), and a file is never edited after it has been applied (the runner stores a
+checksum and warns).
 
 ## Naming
 
@@ -67,6 +74,6 @@ are private objects in Storage served through short-lived signed URLs.
 
 ## Local validation before pushing
 
-Before `npx supabase db push`, apply the new migration to a local database (`npx supabase db
+Before `npm run db:migrate` against the hosted project, apply the new migration to a local database (`npx supabase db
 reset` with Docker, or any Postgres 15–17 with stand-ins for the `auth` schema and the three
 roles) and exercise the policies as each role. Phase 2's migration was checked that way.
