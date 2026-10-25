@@ -1,0 +1,21 @@
+# Secrets and local environment. Never commit keys, passwords, or tokens.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Supabase CLI working files (link state, local service data)
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

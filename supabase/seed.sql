@@ -1,0 +1,3 @@
+-- Local development seed. Loaded by `npx supabase db reset` (local Docker stack only); never
+-- applied to the hosted project. Phase 3 adds a local admin user and sample rows here so the
+-- frontend can be developed without touching real applicant data.
