@@ -42,6 +42,14 @@ Functions are executable by `public` by default in Postgres. Every function the 
   fully schema-qualified references, so they can read `profiles` without recursing through its
   own policies and cannot be hijacked by a malicious search path.
 
+## Shared project
+
+The inventory app's repository pushes migrations to the same project. Run
+`node scripts/sync-migration-stubs.mjs` before `npx supabase db push` and commit the placeholder
+files it writes; never run `supabase migration repair --status reverted` against a version that
+belongs to the other app; never run `supabase config push`. README.md, "Two repos, one project",
+has the reasoning.
+
 ## Naming
 
 - Migrations: `YYYYMMDDHHMMSS_short_description.sql`, lower snake case. Once a migration has been

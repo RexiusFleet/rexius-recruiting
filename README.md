@@ -18,6 +18,7 @@ GitHub Pages later.
 | `supabase/seed.sql` | Local-only seed for `npx supabase start` / `db reset` | 3 |
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform submissions | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions | 4 |
+| `scripts/sync-migration-stubs.mjs` | Keeps `db push` working alongside the inventory app's repo (see "Two repos, one project") | 2 |
 | `web/` | The tracker frontend | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (fill in before Phase 3) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
@@ -92,11 +93,14 @@ The link command may print a warning that the local config differs from the remo
 ### 4. Apply the migration
 
 ```sh
+node scripts/sync-migration-stubs.mjs
 npx supabase db push --dry-run
 npx supabase db push
 npx supabase migration list
 ```
 
+The first command only matters once the inventory app has pushed migrations of its own to
+`am-projects` (see "Two repos, one project" below); today it prints that there is nothing to do.
 The dry run lists `20261025000000_create_recruiting_schema_and_profiles.sql`; the real push
 asks for confirmation and applies it; the list shows the same version under both Local and
 Remote. Then in the dashboard, **Table Editor** → schema selector (top left, says `public`) →
@@ -137,9 +141,10 @@ Dashboard → **Authentication** → **Sign In / Providers**:
   able to create an account from the login page. (Admin-created users and invites still work
   with this off.)
 
-If you prefer the CLI to the dashboard for the auth and API settings, `npx supabase config
-diff` shows what `config.toml` would change on the hosted project and `npx supabase config push`
-applies it. The dashboard route is fine; they end up the same.
+Do these in the dashboard, not with `npx supabase config push`. Auth URLs and exposed schemas
+are project-wide settings shared with the inventory app, and a config push from either repo
+would replace them with that repo's `config.toml`. `npx supabase config diff` is safe to run to
+compare, and `config.toml` still drives the local Docker stack.
 
 ### 7. Create your own admin user
 
@@ -185,21 +190,41 @@ throwaway database at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:
 `npx supabase db reset` replays the migrations and `supabase/seed.sql` into it. This is useful
 from Phase 3 on; nothing in Phase 2 requires it.
 
-## One thing to decide: the shared project and migration history
+## Two repos, one project
 
-`am-projects` is shared with the inventory app. The Supabase CLI records every applied migration
-in one table per project (`supabase_migrations.schema_migrations`), and `supabase db push`
-refuses to run when that table lists versions it cannot find in the local `supabase/migrations/`
-folder. Two repos each pushing their own migrations to the same project will therefore block
-each other as soon as the second one pushes.
+The inventory app lives in its own repository and shares `am-projects`. Three things follow.
 
-Recommended: make this repo the single home for the project's migrations. The inventory app's
-migrations live in this same `supabase/migrations/` folder (named with an `inventory_` prefix
-after the timestamp, creating only objects in its own schema), and the inventory app's repo
-holds no `supabase/` folder of its own. The alternative is to apply the inventory app's SQL
-through the dashboard's SQL Editor instead of the CLI, which works but loses the history.
-Nothing in Phase 2 depends on this choice, but settle it before the inventory app's first
-migration.
+**Schemas.** This app creates objects only in schema `recruiting` (plus its own Storage bucket
+and `recruiting-` prefixed Edge Functions). The inventory app must do the same in its own
+schema and never touch `recruiting`. `auth.users` is shared; each app keeps its own `profiles`
+table.
+
+**Migration history.** The Supabase CLI records every applied migration in one table per project
+(`supabase_migrations.schema_migrations`) and `supabase db push` refuses to run while that table
+lists a version that has no file in the local `supabase/migrations/` folder. So once the
+inventory repo has pushed, a push from this repo fails with "Remote migration versions not found
+in local migrations directory", and the other way round. Do not follow the CLI's suggestion to
+run `migration repair --status reverted`: that erases the other app's history and its next push
+would re-run its migrations.
+
+Instead run `node scripts/sync-migration-stubs.mjs` before every `db push`. It asks the project
+which versions are applied and writes an empty placeholder file
+(`<version>_external_app_placeholder.sql`) for each one this repo lacks. The CLI then treats
+those versions as applied and pushes only this repo's new migrations. Commit the placeholders.
+The inventory repo needs a copy of the same script (change the suffix so the two sets of
+placeholders are told apart). The script was tested against a database seeded with foreign
+history entries: the push failed before, and succeeded after, with only the new file applied.
+
+Two rules keep it painless:
+
+- Name new migrations with the current timestamp, so they sort after everything already on the
+  project. If a push complains that a local file sorts before the last remote migration, rename
+  the file with a fresh timestamp rather than using `--include-all`.
+- Run the sync script and commit its output as part of the same pull request as the migration.
+
+**Project-wide settings.** Exposed schemas, auth URLs, signup, and email settings are shared.
+Change them in the dashboard, adding to what is there rather than replacing it, and never run
+`supabase config push` from either repo.
 
 ## Conventions
 
