@@ -1,0 +1,1966 @@
+{
+ "260115636145148": {
+  "title": "Employment Application 2026",
+  "submission_count_2026_10_23": 1000,
+  "questions": {
+   "5": {
+    "text": "Rexius is an equal opportunity employer. Please complete this form fully, honestly and accurately.We appreciate your interest in employment with Rexius.",
+    "type": "control_text",
+    "order": "2",
+    "name": "ltpgtltspanStylecolor"
+   },
+   "342": {
+    "text": "What location are you applying to?",
+    "type": "control_dropdown",
+    "order": "4",
+    "options": {
+     "Eugene/Springfield": "Eugene/Springfield",
+     "Central Oregon": "Central Oregon",
+     "Lake Oswego": "Lake Oswego"
+    },
+    "name": "whatLocation"
+   },
+   "343": {
+    "text": "What position are you applying for in Lake Oswego?",
+    "type": "control_dropdown",
+    "order": "5",
+    "options": {
+     "Blower Truck Operator": "Blower Truck Operator",
+     "Blower Truck Crew Member": "Blower Truck Crew Member",
+     "Any": "Any"
+    },
+    "name": "whatPosition"
+   },
+   "340": {
+    "text": "What position are you applying for in Eugene/Springfield?",
+    "type": "control_dropdown",
+    "order": "6",
+    "options": {
+     "Residential Landscape Construction Manager": "Residential Landscape Construction Manager",
+     "Irrigation Installation Crew Member": "Irrigation Installation Crew Member",
+     "Commercial Landcape Project Lead": "Commercial Landcape Project Lead",
+     "Commercial Landscape Crew Member": "Commercial Landscape Crew Member",
+     "Digital Marketer": "Digital Marketer",
+     "Landscape Maintenance Crew Member": "Landscape Maintenance Crew Member",
+     "Commercial Landscape Crew Lead": "Commercial Landscape Crew Lead",
+     "Flatbed Truck Driver": "Flatbed Truck Driver",
+     "Experienced Irrigation Technician": "Experienced Irrigation Technician",
+     "Landscape Maintenance Crew Leader": "Landscape Maintenance Crew Leader",
+     "Any": "Any"
+    },
+    "name": "whatPosition340"
+   },
+   "341": {
+    "text": "What position are you applying for in Central Oregon?",
+    "type": "control_dropdown",
+    "order": "7",
+    "options": {
+     "Landscape Maintenance Crew Member": "Landscape Maintenance Crew Member",
+     "Landscape Maintenance Crew Lead": "Landscape Maintenance Crew Lead",
+     "Landscape Construction Crew Member": "Landscape Construction Crew Member",
+     "Landscape Construction Lead": "Landscape Construction Lead",
+     "Irrigation Service Technician": "Irrigation Service Technician",
+     "Any": "Any"
+    },
+    "name": "whatPosition341"
+   },
+   "268": {
+    "text": "How did you learn about this job position?",
+    "type": "control_checkbox",
+    "order": "8",
+    "options": {
+     "Indeed.com": "Indeed.com",
+     "Rexius.com": "Rexius.com",
+     "Google": "Google",
+     "Facebook": "Facebook",
+     "Craigslist.com": "Craigslist.com",
+     "I am a Previous Employee": "I am a Previous Employee",
+     "Walk In": "Walk In",
+     "Other": "Other"
+    },
+    "name": "name268"
+   },
+   "355": {
+    "text": "Who referred you?",
+    "type": "control_textbox",
+    "order": "9",
+    "name": "whoReferred"
+   },
+   "384": {
+    "text": "How did you learn about the position?",
+    "type": "control_textbox",
+    "order": "10",
+    "name": "howDid"
+   },
+   "272": {
+    "text": "Have you ever worked for Rexius or its affiliates before?",
+    "type": "control_radio",
+    "order": "11",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou"
+   },
+   "273": {
+    "text": "If yes, please give dates of employment, location, and job title.",
+    "type": "control_textarea",
+    "order": "12",
+    "name": "ifYes273"
+   },
+   "274": {
+    "text": "Have you ever applied for work with Rexius or its affiliates before?",
+    "type": "control_radio",
+    "order": "13",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou274"
+   },
+   "275": {
+    "text": "If yes, please give date, location, and job for which you applied.",
+    "type": "control_textarea",
+    "order": "14",
+    "name": "ifYes275"
+   },
+   "261": {
+    "text": "Available Start Date",
+    "type": "control_datetime",
+    "order": "16",
+    "name": "availableStart261"
+   },
+   "9": {
+    "text": "Name",
+    "type": "control_fullname",
+    "order": "17",
+    "name": "name"
+   },
+   "263": {
+    "text": "Address",
+    "type": "control_address",
+    "order": "18",
+    "name": "address"
+   },
+   "264": {
+    "text": "Phone Number",
+    "type": "control_phone",
+    "order": "19",
+    "name": "phoneNumber264"
+   },
+   "266": {
+    "text": "Phone Type",
+    "type": "control_radio",
+    "order": "20",
+    "options": {
+     "Home": "Home",
+     "Cell": "Cell"
+    },
+    "name": "phoneType"
+   },
+   "265": {
+    "text": "Alternate Phone Number",
+    "type": "control_phone",
+    "order": "21",
+    "name": "alternatePhone265"
+   },
+   "267": {
+    "text": "Phone Type",
+    "type": "control_radio",
+    "order": "22",
+    "options": {
+     "Home": "Home",
+     "Cell": "Cell"
+    },
+    "name": "phoneType267"
+   },
+   "22": {
+    "text": "Email Address",
+    "type": "control_email",
+    "order": "23",
+    "name": "emailAddress"
+   },
+   "21": {
+    "text": "Preferred Contact Method",
+    "type": "control_checkbox",
+    "order": "24",
+    "options": {
+     "Phone": "Phone",
+     "Email": "Email"
+    },
+    "name": "name21"
+   },
+   "311": {
+    "text": "Are you at least 18 years of Age?",
+    "type": "control_radio",
+    "order": "25",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "areYou"
+   },
+   "312": {
+    "text": "Can you, upon hiring, provide appropriate identification documenting and verifying your identity and your legal right to work in the USA?",
+    "type": "control_radio",
+    "order": "26",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "canYou"
+   },
+   "386": {
+    "text": "Do you have forklift experience?",
+    "type": "control_radio",
+    "order": "27",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "doYou"
+   },
+   "395": {
+    "text": "Do you have a valid Herbicide Spray Applicators License, or a valid Apprentice Herbicide Spray Applicators License?",
+    "type": "control_dropdown",
+    "order": "28",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "doYou395"
+   },
+   "370": {
+    "text": "You selected to apply for a job which requires driving a company vehicle. Please fill out the information below.",
+    "type": "control_text",
+    "order": "29",
+    "name": "input370"
+   },
+   "30": {
+    "text": "Driver License number",
+    "type": "control_textbox",
+    "order": "30",
+    "name": "driverLicense30"
+   },
+   "31": {
+    "text": "Expiration Date",
+    "type": "control_datetime",
+    "order": "31",
+    "name": "expirationDate31"
+   },
+   "35": {
+    "text": "Class or Type of License",
+    "type": "control_textbox",
+    "order": "32",
+    "name": "classOr35"
+   },
+   "368": {
+    "text": "I, the undersigned, hereby authorize Rexius Forest By-Products, Inc. to procure a Motor Vehicle Record (MVR) report. I understand that this report may include information about my driving record, including but not limited to traffic citations, accidents, driving offenses, and other related data. I acknowledge that Rexius may rely on this report to make decisions about my application, employment, or other related considerations.\r\nI understand that I have rights under the Fair Credit Reporting Act (FCRA), including the right to know if adverse action has been taken based on the information in the MVR report, and the right to verify the accuracy and completeness of any information provided by the consumer reporting agency.\r\nI acknowledge that this authorization will remain in effect until I revoke it in writing, and I agree that a copy of this authorization is as valid as the original.\r\nBy signing below, I affirm my understanding and consent to the above terms.",
+    "type": "control_text",
+    "order": "33",
+    "name": "input368"
+   },
+   "369": {
+    "text": "Signature",
+    "type": "control_signature",
+    "order": "34",
+    "name": "signature"
+   },
+   "66": {
+    "text": "Please list any currently valid and special motor vehicle, operator licenses or trade/craft certifications you hold.",
+    "type": "control_textarea",
+    "order": "35",
+    "name": "pleaseList66"
+   },
+   "344": {
+    "text": "Please check your highest level of education:",
+    "type": "control_radio",
+    "order": "37",
+    "options": {
+     "None": "None",
+     "GED": "GED",
+     "High School Diploma": "High School Diploma",
+     "Certification(s)": "Certification(s)",
+     "Associates Degree": "Associates Degree",
+     "Bachelor's Degree": "Bachelor's Degree",
+     "Graduate Degree": "Graduate Degree"
+    },
+    "name": "pleaseCheck"
+   },
+   "362": {
+    "text": "Please list your complete job history in order of occurance. Begin with your current or most recent job (if unemployed). ",
+    "type": "control_text",
+    "order": "39",
+    "name": "input362"
+   },
+   "385": {
+    "text": "If you have not yet had a job or are a student, please check the appropriate box below.",
+    "type": "control_checkbox",
+    "order": "40",
+    "options": {
+     "I am currently a student": "I am currently a student",
+     "I do not have job experience to enter": "I do not have job experience to enter"
+    },
+    "name": "ifYou385"
+   },
+   "372": {
+    "text": "Please list any relevant skills or experiences.",
+    "type": "control_textarea",
+    "order": "41",
+    "name": "pleaseList"
+   },
+   "323": {
+    "text": "If presently employed, may we contact your current employer to verify employment?",
+    "type": "control_radio",
+    "order": "42",
+    "options": {
+     "Yes": "Yes",
+     "No": "No",
+     "Unemployed/NA": "Unemployed/NA"
+    },
+    "name": "ifPresently"
+   },
+   "72": {
+    "text": "1. Name of Employer",
+    "type": "control_textbox",
+    "order": "43",
+    "name": "1Name"
+   },
+   "280": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "44",
+    "name": "location"
+   },
+   "75": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "45",
+    "name": "phoneNumber"
+   },
+   "76": {
+    "text": "Your Job Title",
+    "type": "control_textbox",
+    "order": "46",
+    "name": "yourJob"
+   },
+   "380": {
+    "text": "Please describe your role and responsibilities",
+    "type": "control_textarea",
+    "order": "47",
+    "name": "pleaseDescribe"
+   },
+   "363": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "48",
+    "name": "input363"
+   },
+   "348": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "49",
+    "name": "startDate"
+   },
+   "377": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "50",
+    "name": "endDate"
+   },
+   "80": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "51",
+    "name": "supervisorsName80"
+   },
+   "81": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "52",
+    "name": "supervisorsTitletitulo81"
+   },
+   "352": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "53",
+    "name": "reasonFor352"
+   },
+   "83": {
+    "text": "2. Name of Employer",
+    "type": "control_textbox",
+    "order": "55",
+    "name": "2Name"
+   },
+   "85": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "56",
+    "name": "location85"
+   },
+   "86": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "57",
+    "name": "phoneNumber86"
+   },
+   "87": {
+    "text": "Your Job Title /Responsibility",
+    "type": "control_textbox",
+    "order": "58",
+    "name": "yourJob87"
+   },
+   "381": {
+    "text": "Please describe your role and responsibilities",
+    "type": "control_textarea",
+    "order": "59",
+    "name": "pleaseDescribe381"
+   },
+   "364": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "60",
+    "name": "ltpgtltstronggtdatesOf"
+   },
+   "349": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "61",
+    "name": "startAnd349"
+   },
+   "378": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "62",
+    "name": "endDate378"
+   },
+   "92": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "63",
+    "name": "supervisorsName"
+   },
+   "93": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "64",
+    "name": "supervisorsTitletitulo93"
+   },
+   "94": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "65",
+    "name": "reasonFor"
+   },
+   "95": {
+    "text": "3. Name of Employer",
+    "type": "control_textbox",
+    "order": "67",
+    "name": "3Name"
+   },
+   "287": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "68",
+    "name": "locationUbicacion287"
+   },
+   "98": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "69",
+    "name": "phoneNumber98"
+   },
+   "99": {
+    "text": "Your Job Title / Responsibility",
+    "type": "control_textbox",
+    "order": "70",
+    "name": "yourJob99"
+   },
+   "382": {
+    "text": "Please describe your role and responsibilities",
+    "type": "control_textarea",
+    "order": "71",
+    "name": "pleaseDescribe382"
+   },
+   "365": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "72",
+    "name": "ltpgtltstronggtdatesOf365"
+   },
+   "350": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "73",
+    "name": "startAnd350"
+   },
+   "379": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "74",
+    "name": "endDate379"
+   },
+   "105": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "75",
+    "name": "supervisorsName105"
+   },
+   "106": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "76",
+    "name": "supervisorsTitletitulo106"
+   },
+   "107": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "77",
+    "name": "reasonFor107"
+   },
+   "276": {
+    "text": "You may comment on any other special qualifications you have related to this job or this company. ",
+    "type": "control_textarea",
+    "order": "78",
+    "name": "youMay276"
+   },
+   "387": {
+    "text": "If you have a resume you may upload it here:",
+    "type": "control_fileupload",
+    "order": "79",
+    "name": "ifYou387"
+   },
+   "393": {
+    "text": "If you have a portfolio you may upload it here:",
+    "type": "control_fileupload",
+    "order": "80",
+    "name": "ifYou"
+   },
+   "394": {
+    "text": "Link to Portfolio",
+    "type": "control_textbox",
+    "order": "81",
+    "name": "typeA"
+   },
+   "313": {
+    "text": "Can you fulfill the job duties and responsibilities of the position(s) for which you are applying as they have been described to you through our written job description(s), with or without a reasonable accommodation?",
+    "type": "control_radio",
+    "order": "83",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "regardingThejob313"
+   },
+   "217": {
+    "text": "PLEASE READ THE ENTIRE FOLLOWING SECTION HERE AND ON THE NEXT PAGE BEFORE SIGNING.\r\nInitial each section in the center column indicating you have read and agree with that section. Sign the bottom of this application on the following page.",
+    "type": "control_text",
+    "order": "85",
+    "name": "ltpgtltspanStylefontweight217"
+   },
+   "219": {
+    "text": "Term, Condition, Expectation and/or Agreement\r\nI certify that the information I have provided on this Application Form and on my Resume (if applicable) is true and correct to the best of my knowledge.\r\nI understand that any misrepresentation, falsification, or omission of material information on this application may result in my failure to receive an offer, or, if I am hired, in my termination from employment.",
+    "type": "control_text",
+    "order": "87",
+    "name": "ltpgtltspanStylefontweight219"
+   },
+   "324": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "88",
+    "name": "initials"
+   },
+   "325": {
+    "text": "Term, Condition, Expectation and/or Agreement\r\nIn the event that I am requested to undergo a medical examination or evaluation as a part of the job placement process of the Company, I agree to supply only information which is true and correct to the best of my knowledge.\r\nIf the Company determines that I have made any false oral or written statements, misrepresentations or omissions of material information to them or to the physician or their representative, the Company is entitled to rescind my conditional offer of employment or terminate my employment at any time.",
+    "type": "control_text",
+    "order": "89",
+    "name": "ltpgtltspanStylefontweight"
+   },
+   "326": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "90",
+    "name": "initials326"
+   },
+   "327": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI authorize any person, school, current employer, past employer, physician or organization with knowledge of me or my work to provide the Company or its agent or representative with any information or opinion about me in response to an inquiry by the Company.\nI release any such person, employer, physician or organization from any legal liability in making such statements or furnishing any and all information to the Company or to its representative or agent.",
+    "type": "control_text",
+    "order": "91",
+    "name": "ltpgtltspanStylefontweight327"
+   },
+   "328": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "92",
+    "name": "initials328"
+   },
+   "329": {
+    "text": "Term, Condition, Expectation and/or Agreement\r\nI authorize the Company, its agents, or representatives to check references regarding my employment and investigate any of the statements or answers provided by me on this application or made directly to a company representative. The only exception to this authorization is where I have specifically requested in writing on this application form that no such inquiry be made.",
+    "type": "control_text",
+    "order": "93",
+    "name": "ltpgtltspanStylefontweight329"
+   },
+   "330": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "94",
+    "name": "initials330"
+   },
+   "331": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI understand that my employment at this Company is on an “at will” (that is, mutual consent) basis. Therefore I agree that either I or the Company has the proper right to terminate my employment with or without cause at any time.",
+    "type": "control_text",
+    "order": "95",
+    "name": "ltpgtltspanStylefontweight331"
+   },
+   "332": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "96",
+    "name": "initials332"
+   },
+   "322": {
+    "text": "Rexius believes that use of drugs or alcohol in the workplace is an unsafe work practice and creates increased risk to the consumer, fellow employees, customers and the public. Rexius is a Drug-Free and Alcohol-Free workplace. Use of illegal substances or abuse of controlled substances may result in disciplinary action or termination of employment.If employed, do you agree to abide by the Rexius Drug-Free and Alcohol-Free workplace standards?",
+    "type": "control_radio",
+    "order": "97",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "rexiusBelieves322"
+   },
+   "333": {
+    "text": "I have read and understood, and I agree to this entire section above, entitled AGREEMENT & RELEASE.",
+    "type": "control_signature",
+    "order": "98",
+    "name": "iHave"
+   },
+   "238": {
+    "text": "Rexius has requested that I take a drug/alcohol test under its Alcohol & Drug Policy as part of my application for employment. Accordingly, by my signature below, herby authorize Rexius, the Medical Review Officer and licensed laboratory selected by Rexius to perform a urinalysis on a urine specimen provided by me to test for drug use. I consent to this test and I also give my permission to the laboratory and Medical Review Officer to release the results of this drug test to Rexius. I agree that Rexius may use these results to determine my suitability for employment. If I am employed by Rexius I agree to any drug/alcohol testing the Company may require under its Alcohol and Drug Policy. If the laboratory finds the test invalid, and if the laboratory, Medical Review Officer or Rexius believe another test is appropriate, I agree to submit another specimen(s) for further testing. I understand that I will not be informed of the results of my pre-employment drug test unless I request it within 60 days of being notified of the disposition of my application. ",
+    "type": "control_signature",
+    "order": "100",
+    "name": "rexiusHas238"
+   }
+  }
+ },
+ "232824275836160": {
+  "title": "Employment Application-ESP 2025",
+  "submission_count_2026_10_23": 228,
+  "questions": {
+   "5": {
+    "text": "Rexius is an equal opportunity employer. Please complete this form fully, honestly and accurately. At the end of this application, you will be prompted to complete a questionairre. To have your application considered, you must complete the questionairre. We appreciate your interest in employment with Rexius./\r\nRexius es un empleador que ofrece igualdad de oportunidades. Complete este formulario de manera completa, honesta y precisa. Al final de esta solicitud, se le pedirá que complete un cuestionario. Para que se considere su solicitud, debe completar el cuestionario. Apreciamos su interés en trabajar con Rexius. ",
+    "type": "control_text",
+    "order": "2",
+    "name": "ltpgtltspanStylecolor"
+   },
+   "342": {
+    "text": "What location are you applying to?/ A qué ubicación está solicitando?",
+    "type": "control_dropdown",
+    "order": "4",
+    "options": {
+     "Eugene-Springfield/": "Eugene-Springfield/",
+     "Central Oregon/": "Central Oregon/",
+     "Lake Oswego/": "Lake Oswego/"
+    },
+    "name": "whatLocation"
+   },
+   "343": {
+    "text": "What position are you applying for in Lake Oswego?/ Qué puesto estás solicitando en Lake Oswego?",
+    "type": "control_dropdown",
+    "order": "5",
+    "options": {
+     "Blower Truck Driver/": "Blower Truck Driver/",
+     "Landscape Material Blower Truck Crew Member/": "Landscape Material Blower Truck Crew Member/",
+     "Any/": "Any/",
+     "": ""
+    },
+    "name": "whatPosition"
+   },
+   "340": {
+    "text": "What position are you applying for in Eugene-Springfield?/ Qué puesto estás solicitando en Eugene-Springfield?",
+    "type": "control_dropdown",
+    "order": "6",
+    "options": {
+     "Landscape Commercial Construction Project Lead": "Landscape Commercial Construction Project Lead",
+     "Landscape Residential Construction Project Lead": "Landscape Residential Construction Project Lead",
+     "Retail Yard Associate / Delivery Driver": "Retail Yard Associate / Delivery Driver",
+     "Landscape Maintenance Crew Leader": "Landscape Maintenance Crew Leader",
+     "Flatbed Truck Driver": "Flatbed Truck Driver",
+     "Credit & Collections Coordinator": "Credit & Collections Coordinator",
+     "Experienced Irrigation Lead": "Experienced Irrigation Lead",
+     "Experienced Irrigation Technician": "Experienced Irrigation Technician",
+     "Heavy Diesel Truck Mechanic": "Heavy Diesel Truck Mechanic",
+     "Skilled Landscape Construction Crew Member": "Skilled Landscape Construction Crew Member",
+     "Landscape Construction Lead": "Landscape Construction Lead",
+     "Landscape Construction Maintenance Lead": "Landscape Construction Maintenance Lead",
+     "Landscape Construction Crew": "Landscape Construction Crew",
+     "Any": "Any"
+    },
+    "name": "whatPosition340"
+   },
+   "341": {
+    "text": "What position are you applying for in Central Oregon?/ Qué puesto estás solicitando en Centro Oregon?",
+    "type": "control_dropdown",
+    "order": "7",
+    "options": {
+     "Landscape Maintenance Crew Member": "Landscape Maintenance Crew Member",
+     "Landscape Maintenance Crew Lead": "Landscape Maintenance Crew Lead",
+     "Landscape Construction Crew Member": "Landscape Construction Crew Member",
+     "Irrigation Service Technician": "Irrigation Service Technician",
+     "Landscape Construction Lead": "Landscape Construction Lead",
+     "Any": "Any"
+    },
+    "name": "whatPosition341"
+   },
+   "268": {
+    "text": "How did you learn about this job position?/ Cómo se enteró de este puesto de trabajo?",
+    "type": "control_checkbox",
+    "order": "8",
+    "options": {
+     "Indeed.com/": "Indeed.com/",
+     "Craigslist.com/": "Craigslist.com/",
+     "Rexius.com/": "Rexius.com/",
+     "CareerAmerica/": "CareerAmerica/",
+     "Facebook/": "Facebook/",
+     "Instagram/": "Instagram/",
+     "Referral/ Referencia": "Referral/ Referencia"
+    },
+    "name": "name268"
+   },
+   "355": {
+    "text": "Who referred you?/ Quién te refirió?",
+    "type": "control_textbox",
+    "order": "9",
+    "name": "whoReferred"
+   },
+   "272": {
+    "text": "Have you ever worked for Rexius or its affiliates before?/ Alguna vez has trabajado para Rexius o sus afiliados?",
+    "type": "control_radio",
+    "order": "10",
+    "options": {
+     "Yes/Si": "Yes/Si",
+     "No": "No"
+    },
+    "name": "haveYou"
+   },
+   "273": {
+    "text": "If yes, please give dates of employment, location, and job title./ En caso afirmativo, indique las fechas de empleo, la ubicación y el título del trabajo.",
+    "type": "control_textarea",
+    "order": "11",
+    "name": "ifYes273"
+   },
+   "274": {
+    "text": "Have you ever applied for work with Rexius or its affiliates before?/ ¿Alguna vez has solicitado trabajo con Rexius o sus afiliados antes?",
+    "type": "control_radio",
+    "order": "12",
+    "options": {
+     "Yes/Si": "Yes/Si",
+     "No": "No"
+    },
+    "name": "haveYou274"
+   },
+   "275": {
+    "text": "If yes, please give date, location, and job for which you applied?/ En caso afirmativo, indique la fecha, la ubicación y el trabajo para el que se postuló?",
+    "type": "control_textarea",
+    "order": "13",
+    "name": "ifYes275"
+   },
+   "261": {
+    "text": "Available Start Date/ Fecha de inicio disponible",
+    "type": "control_datetime",
+    "order": "15",
+    "name": "availableStart261"
+   },
+   "9": {
+    "text": "Name/ Nombre",
+    "type": "control_fullname",
+    "order": "16",
+    "name": "nameNombre"
+   },
+   "263": {
+    "text": "Address/ Dirección",
+    "type": "control_address",
+    "order": "17",
+    "name": "addressDireccion"
+   },
+   "264": {
+    "text": "Phone Number/ Número de teléfono",
+    "type": "control_phone",
+    "order": "18",
+    "name": "phoneNumber264"
+   },
+   "266": {
+    "text": "Phone Type/ Tipo de teléfono",
+    "type": "control_radio",
+    "order": "19",
+    "options": {
+     "Home/ Casa": "Home/ Casa",
+     "Cell/ Cellular": "Cell/ Cellular"
+    },
+    "name": "phoneType"
+   },
+   "265": {
+    "text": "Alternate Phone Number/ Número de teléfono alternativo",
+    "type": "control_phone",
+    "order": "20",
+    "name": "alternatePhone265"
+   },
+   "267": {
+    "text": "Phone Type/ Tipo de teléfono",
+    "type": "control_radio",
+    "order": "21",
+    "options": {
+     "Home/ Casa": "Home/ Casa",
+     "Cell/ Cellular": "Cell/ Cellular"
+    },
+    "name": "phoneType267"
+   },
+   "22": {
+    "text": "Email Address/ Correo electrónico",
+    "type": "control_email",
+    "order": "22",
+    "name": "emailAddress"
+   },
+   "21": {
+    "text": "Preferred Contact Method/ Método de contacto preferido",
+    "type": "control_checkbox",
+    "order": "23",
+    "options": {
+     "Phone/ Teléfono": "Phone/ Teléfono",
+     "Email/ Correo electrónico": "Email/ Correo electrónico"
+    },
+    "name": "name21"
+   },
+   "311": {
+    "text": "Are you at least 18 years of Age?/ Tienes al menos 18 años de edad?",
+    "type": "control_radio",
+    "order": "24",
+    "options": {
+     "Yes/ Si": "Yes/ Si",
+     "No": "No"
+    },
+    "name": "areYou"
+   },
+   "312": {
+    "text": "Can you, upon hiring, provide appropriate identification documenting and verifying your identity and your legal right to work in the USA?/ Puede, al momento de la contratación, proporcionar una identificación adecuada para documentar y verifique su identidad y su derecho legal a trabajar en los EE. UU.?",
+    "type": "control_radio",
+    "order": "25",
+    "options": {
+     "Yes/Si": "Yes/Si",
+     "No": "No"
+    },
+    "name": "canYou"
+   },
+   "370": {
+    "text": "You selected to apply for a job which requires driving a company vehicle. Please fill out the information below./ Seleccionó solicitar un trabajo que requiere conducir un vehículo de la empresa. Por favor, rellene la siguiente información.",
+    "type": "control_text",
+    "order": "26",
+    "name": "input370"
+   },
+   "30": {
+    "text": "Driver License number/ Número de licencia de conducir",
+    "type": "control_textbox",
+    "order": "27",
+    "name": "driverLicense30"
+   },
+   "31": {
+    "text": "Expiration Date/ Fecha de vencimiento",
+    "type": "control_datetime",
+    "order": "28",
+    "name": "expirationDate31"
+   },
+   "35": {
+    "text": "Class or Type of License/Clase o tipo de licencia",
+    "type": "control_textbox",
+    "order": "29",
+    "name": "classOr35"
+   },
+   "368": {
+    "text": "I, the undersigned, hereby authorize Rexius Forest By-Products, Inc. to procure a Motor Vehicle Record (MVR) report. I understand that this report may include information about my driving record, including but not limited to traffic citations, accidents, driving offenses, and other related data. I acknowledge that Rexius&nbsp;may rely on this report to make decisions about my application, employment, or other related considerations.\nI understand that I have rights under the Fair Credit Reporting Act (FCRA), including the right to know if adverse action has been taken based on the information in the MVR report, and the right to verify the accuracy and completeness of any information provided by the consumer reporting agency.\nI acknowledge that this authorization will remain in effect until I revoke it in writing, and I agree that a copy of this authorization is as valid as the original.\nBy signing below, I affirm my understanding and consent to the above terms./&nbsp;\nYo, el abajo firmante, autorizo a Rexius Forest By-Products, Inc. A obtener un informe del Registro de Veh&iacute;culos Motorizados (MVR). Entiendo que este informe puede incluir informaci&oacute;n sobre mi historial de manejo, que incluye, entre otros, citaciones de tr&aacute;fico, accidentes, infracciones de tr&aacute;fico y otros datos relacionados. Reconozco que Rexius puede basarse en este informe para tomar decisiones sobre mi solicitud, empleo u otras consideraciones relacionadas.\nEntiendo que tengo derechos bajo la Ley de Informes Justos de Cr&eacute;dito (FCRA), incluido el derecho a saber si se ha tomado una medida adversa basada en la informaci&oacute;n en el informe MVR, y el derecho a verificar la precisi&oacute;n y integridad de cualquier informaci&oacute;n proporcionada por la agencia de informes del consumidor.\nReconozco que esta autorizaci&oacute;n permanecer&aacute; en vigor hasta que la revoque por escrito, y acepto que una copia de esta autorizaci&oacute;n tiene la misma validez que el original.\nAl firmar a continuaci&oacute;n, afirmo mi comprensi&oacute;n y consentimiento a los t&eacute;rminos anteriores.",
+    "type": "control_text",
+    "order": "30",
+    "name": "input368"
+   },
+   "369": {
+    "text": "Signature/ Frima",
+    "type": "control_signature",
+    "order": "31",
+    "name": "signatureFrima"
+   },
+   "344": {
+    "text": "Please check your highest level of education:/ Por favor, compruebe su nivel más alto de educación:",
+    "type": "control_radio",
+    "order": "33",
+    "options": {
+     "None/ Ninguno": "None/ Ninguno",
+     "GED": "GED",
+     "High School Diploma/ Diploma de secundaria": "High School Diploma/ Diploma de secundaria",
+     "Certification(s)/ Certificatión(s)": "Certification(s)/ Certificatión(s)",
+     "Associates Degree/ Título de Asociado": "Associates Degree/ Título de Asociado",
+     "Bachelor's Degree/ Licenciatura": "Bachelor's Degree/ Licenciatura",
+     "Graduate Degree/ Título de posgrado": "Graduate Degree/ Título de posgrado"
+    },
+    "name": "pleaseCheck"
+   },
+   "362": {
+    "text": "Please list your complete job history in order of occurance. Begin with your current or most recent job (if unemployed). / Por favor, enumere su historial de trabajo completo. Comience con su trabajo actual o más reciente (si esta desempleado).",
+    "type": "control_text",
+    "order": "35",
+    "name": "input362"
+   },
+   "323": {
+    "text": "If presently employed, may we contact your current employer to verify employment?/ Si está actualmente empleado, Podemos contactar a su empleador actual para verificar su empleo?",
+    "type": "control_radio",
+    "order": "36",
+    "options": {
+     "Yes/Si": "Yes/Si",
+     "No": "No",
+     "Unemployed/NA / Desempleado/No aplica": "Unemployed/NA / Desempleado/No aplica"
+    },
+    "name": "ifPresently"
+   },
+   "371": {
+    "text": "If you have not yet had a job or are a student. Please check the box below./ Si aún no has tenido un trabajo o eres un estudiante, por favor marca la casilla a continuación.",
+    "type": "control_radio",
+    "order": "37",
+    "options": {
+     "Yes/ Si": "Yes/ Si"
+    },
+    "name": "ifYou"
+   },
+   "372": {
+    "text": "If you have not yet had a job or are a student. Please list any relevant skills or experiences./ Si aún no has tenido un trabajo o eres un estudiante, por favor enumera cualquier habilidad o experiencia relevante.",
+    "type": "control_textarea",
+    "order": "38",
+    "name": "ifYou372"
+   },
+   "72": {
+    "text": "1. Name of Employer/ Nombre de empleador",
+    "type": "control_textbox",
+    "order": "39",
+    "name": "1Name"
+   },
+   "280": {
+    "text": "Location/ Ubicación",
+    "type": "control_textbox",
+    "order": "40",
+    "name": "locationUbicacion"
+   },
+   "75": {
+    "text": "Phone number/ Número de teléfono",
+    "type": "control_phone",
+    "order": "41",
+    "name": "phoneNumber"
+   },
+   "76": {
+    "text": "Your Job Title / Responsibility / Su Puesto de Trabajo / Responsabilidad",
+    "type": "control_textbox",
+    "order": "42",
+    "name": "yourJob"
+   },
+   "363": {
+    "text": "Dates of employment: /&nbsp;Fechas de empleo:",
+    "type": "control_text",
+    "order": "43",
+    "name": "input363"
+   },
+   "348": {
+    "text": "Start Date (MM/YEAR) / Fecha de inicio (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "44",
+    "name": "startDate"
+   },
+   "375": {
+    "text": "End Date (MM/YEAR) / Fecha de finalización (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "45",
+    "name": "startAnd375"
+   },
+   "80": {
+    "text": "Supervisor’s Name/ Nombre de Supervisor",
+    "type": "control_textbox",
+    "order": "46",
+    "name": "supervisorsName80"
+   },
+   "81": {
+    "text": "Supervisor’s Title/ Título de Supervisor",
+    "type": "control_textbox",
+    "order": "47",
+    "name": "supervisorsTitletitulo81"
+   },
+   "352": {
+    "text": "Reason for leaving (please be specific)/ Motivo de la salida (por favor, sea específico)",
+    "type": "control_textbox",
+    "order": "48",
+    "name": "reasonFor352"
+   },
+   "276": {
+    "text": "You may comment on any other special qualifications you have related to this job or this company. / Puedes comentar sobre cualquier otra cualificación especial que tengas relacionada con este trabajo o esta empresa.",
+    "type": "control_textarea",
+    "order": "49",
+    "name": "youMay276"
+   },
+   "356": {
+    "text": "Have more job experience to enter? Check the box below./ Tienes más experiencia laboral para ingresar? Marque la casilla a continuación.",
+    "type": "control_radio",
+    "order": "50",
+    "options": {
+     "Yes, I have more job experience to enter./ Sí, tengo más experiencia laboral para ingresar.": "Yes, I have more job experience to enter./ Sí, tengo más experiencia laboral para ingresar."
+    },
+    "name": "haveMore"
+   },
+   "83": {
+    "text": "2. Name of Employer/ Nombre de empleador",
+    "type": "control_textbox",
+    "order": "51",
+    "name": "2Name"
+   },
+   "85": {
+    "text": "Location/ Ubicación",
+    "type": "control_textbox",
+    "order": "52",
+    "name": "location85"
+   },
+   "86": {
+    "text": "Phone number / Número de teléfono",
+    "type": "control_phone",
+    "order": "53",
+    "name": "phoneNumber86"
+   },
+   "87": {
+    "text": "Your Job Title /Responsibility / Su Puesto de Trabajo / Responsabilidad",
+    "type": "control_textbox",
+    "order": "54",
+    "name": "yourJob87"
+   },
+   "364": {
+    "text": "Dates of employment: /&nbsp;Fechas de empleo:",
+    "type": "control_text",
+    "order": "55",
+    "name": "ltpgtltstronggtdatesOf"
+   },
+   "349": {
+    "text": "Start Date (MM/YEAR) / Fecha de inicio (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "56",
+    "name": "startAnd349"
+   },
+   "376": {
+    "text": "End Date (MM/YEAR) / Fecha de finalización (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "57",
+    "name": "endDate"
+   },
+   "92": {
+    "text": "Supervisor’s Name / Nombre de Supervisor",
+    "type": "control_textbox",
+    "order": "58",
+    "name": "supervisorsName"
+   },
+   "93": {
+    "text": "Supervisor’s Title / Título de Supervisor",
+    "type": "control_textbox",
+    "order": "59",
+    "name": "supervisorsTitletitulo93"
+   },
+   "94": {
+    "text": "Reason for leaving (please be specific) Motivo de la salida (por favor, sea específico)",
+    "type": "control_textbox",
+    "order": "60",
+    "name": "reasonFor"
+   },
+   "358": {
+    "text": "Have more job experience to enter? Check the box below. / Tienes más experiencia laboral para ingresar? Marque la casilla a continuación.",
+    "type": "control_radio",
+    "order": "61",
+    "options": {
+     "Yes, I have more job history to enter. / Sí, tengo más experiencia laboral para ingresar.": "Yes, I have more job history to enter. / Sí, tengo más experiencia laboral para ingresar."
+    },
+    "name": "haveMore358"
+   },
+   "95": {
+    "text": "3. Name of Employer / Nombre de empleador",
+    "type": "control_textbox",
+    "order": "63",
+    "name": "3Name"
+   },
+   "287": {
+    "text": "Location / Ubicación",
+    "type": "control_textbox",
+    "order": "64",
+    "name": "locationUbicacion287"
+   },
+   "98": {
+    "text": "Phone number / Número de teléfono",
+    "type": "control_phone",
+    "order": "65",
+    "name": "phoneNumber98"
+   },
+   "99": {
+    "text": "Your Job Title / Responsibility / Su Puesto de Trabajo / Responsabilidad",
+    "type": "control_textbox",
+    "order": "66",
+    "name": "yourJob99"
+   },
+   "365": {
+    "text": "Dates of employment: /&nbsp;Fechas de empleo:",
+    "type": "control_text",
+    "order": "67",
+    "name": "ltpgtltstronggtdatesOf365"
+   },
+   "350": {
+    "text": "Start Date (MM/YEAR) / Fecha de inicio (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "68",
+    "name": "startAnd350"
+   },
+   "377": {
+    "text": "End Date (MM/YEAR) / Fecha de finalización (MM/AÑO)",
+    "type": "control_textbox",
+    "order": "69",
+    "name": "endDate377"
+   },
+   "105": {
+    "text": "Supervisor’s Name / Nombre de Supervisor",
+    "type": "control_textbox",
+    "order": "70",
+    "name": "supervisorsName105"
+   },
+   "106": {
+    "text": "Supervisor’s Title / Título de Supervisor",
+    "type": "control_textbox",
+    "order": "71",
+    "name": "supervisorsTitletitulo106"
+   },
+   "107": {
+    "text": "Reason for leaving (please be specific) / Motivo de la salida (por favor, sea específico)",
+    "type": "control_textbox",
+    "order": "72",
+    "name": "reasonFor107"
+   },
+   "140": {
+    "text": "Please explain any gaps greater than three months, in the above dates of employment (between one employer and another) / Explique cualquier brecha mayor a tres meses en las fechas de empleo anteriores (entre un empleador y otro) utilizando",
+    "type": "control_textarea",
+    "order": "73",
+    "name": "pleaseExplain"
+   },
+   "148": {
+    "text": "Please check ALL that apply to or describe your physical capabilities / Por favor, marque TODOS los que se apliquen o describan sus capacidades físicas.",
+    "type": "control_checkbox",
+    "order": "75",
+    "options": {
+     "I can stand 8-10 hours per day / Puedo estar de pie de 8 a 10 horas al día.": "I can stand 8-10 hours per day / Puedo estar de pie de 8 a 10 horas al día.",
+     "I can sit 8-10 hours per day / Puedo sentarme de 8 a 10 horas al día.": "I can sit 8-10 hours per day / Puedo sentarme de 8 a 10 horas al día.",
+     "I can walk 8-10 hours per day / Puedo caminar de 8 a 10 horas al día.": "I can walk 8-10 hours per day / Puedo caminar de 8 a 10 horas al día.",
+     "I can bend or reach 8-10 hours per day / Puedo doblarme o alcanzar de 8 a 10 horas al día.": "I can bend or reach 8-10 hours per day / Puedo doblarme o alcanzar de 8 a 10 horas al día.",
+     "I can twist or lift or reach 8-10 hours per day / Puedo torcerme, levantar o alcanzar de 8 a 10 horas al día.": "I can twist or lift or reach 8-10 hours per day / Puedo torcerme, levantar o alcanzar de 8 a 10 horas al día."
+    },
+    "name": "name148"
+   },
+   "296": {
+    "text": "Please check only one from the options below / Por favor, marca solo una de las opciones a continuación.",
+    "type": "control_radio",
+    "order": "76",
+    "options": {
+     "I can lift, push, or pull up to 10 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 10 libras de manera regular.": "I can lift, push, or pull up to 10 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 10 libras de manera regular.",
+     "I can lift, push, or pull up to 20 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 20 libras de manera regular.": "I can lift, push, or pull up to 20 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 20 libras de manera regular.",
+     "I can lift, push, or pull up to 30 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 30 libras de manera regular.": "I can lift, push, or pull up to 30 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 30 libras de manera regular.",
+     "I can lift, push, or pull up to 40 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 40 libras de manera regular.": "I can lift, push, or pull up to 40 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 40 libras de manera regular.",
+     "I can lift, push, or pull up to 50 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 50 libras de manera regular.": "I can lift, push, or pull up to 50 lbs on a regular basis / Puedo levantar, empujar o jalar hasta 50 libras de manera regular.",
+     "I can lift, push, or pull more than 50 lbs on a regular basis / Puedo levantar, empujar o jalar más de 50 libras de manera regular.": "I can lift, push, or pull more than 50 lbs on a regular basis / Puedo levantar, empujar o jalar más de 50 libras de manera regular."
+    },
+    "name": "pleaseCheckonly296"
+   },
+   "313": {
+    "text": "1. Regarding the job for which you have applied, are you familiar with this job and do you understand the basic physical requirements needed to perform it? / 1. En cuanto al trabajo para el cual has solicitado, estás familiarizado con este trabajo y comprendes los requisitos físicos básicos necesarios para desempeñarlo?",
+    "type": "control_radio",
+    "order": "78",
+    "options": {
+     "Yes / Si": "Yes / Si",
+     "No": "No"
+    },
+    "name": "regardingThejob313"
+   },
+   "314": {
+    "text": "2. If yes, are you physically able to perform this job safely and without a significant risk of substantial harm to yourself or to others? / 2. Si es así, ¿tienes la capacidad física para desempeñar este trabajo de manera segura y sin un riesgo significativo de daño sustancial para ti mismo o para otros?",
+    "type": "control_radio",
+    "order": "79",
+    "options": {
+     "Yes / Si": "Yes / Si",
+     "No": "No"
+    },
+    "name": "2If"
+   },
+   "373": {
+    "text": "*You may answer “Yes” to question #2 above if you can perform all essential functions of the job with or without reasonable accommodation. The Company will provide reasonable accommodation to a person with a disability. However, you still are not required to identify yourself as a disabled person on this Application Form. / Puedes responder 'Sí' a la pregunta #2 anterior si puedes desempeñar todas las funciones esenciales del trabajo con o sin ajustes razonables. La Compañía proporcionará ajustes razonables a una persona con discapacidad. Sin embargo, no estás obligado a identificarte como una persona discapacitada en este Formulario de Solicitud.",
+    "type": "control_text",
+    "order": "81",
+    "name": "input373"
+   },
+   "195": {
+    "text": "If you can perform the essential tasks of the job ONLY with an accommodation, then please respond to this question: How would you perform the tasks, and with what accommodations(s)? / Si puedes realizar las tareas esenciales del trabajo SOLAMENTE con un ajuste, por favor responde a esta pregunta: Cómo llevarías a cabo las tareas y con qué ajuste(s)?",
+    "type": "control_textbox",
+    "order": "82",
+    "name": "ifYou195"
+   },
+   "316": {
+    "text": "Have you ever been counseled, warned or disciplined for an unsafe work practice or other safety violation in the past year? ( Note: A “Yes” answer may not necessarily bar you from employment here.) / Alguna vez has recibido asesoramiento, advertencias o disciplina por prácticas laborales inseguras u otras violaciones de seguridad en el último año? (Nota: Una respuesta 'Sí' no necesariamente te excluye de empleo aquí).",
+    "type": "control_radio",
+    "order": "84",
+    "options": {
+     "Yes/ Si": "Yes/ Si",
+     "No": "No"
+    },
+    "name": "haveYou316"
+   },
+   "318": {
+    "text": "If YES, please explain. / Si la respuesta es 'Sí', por favor explique.",
+    "type": "control_textarea",
+    "order": "85",
+    "name": "ifYesplease"
+   },
+   "319": {
+    "text": "Have you ever had a “near miss” on the job where you nearly missed being injured or injuring someone else in the past year? ( Note: A “Yes” answer may not necessarily bar you from employment here.) / Alguna vez has tenido un 'casi accidente' en el trabajo en el que estuviste a punto de resultar herido o de herir a otra persona en el último año? (Nota: Una respuesta 'Sí' no necesariamente te excluye de empleo aquí).",
+    "type": "control_radio",
+    "order": "86",
+    "options": {
+     "Yes/ Si": "Yes/ Si",
+     "No": "No"
+    },
+    "name": "haveYou319"
+   },
+   "320": {
+    "text": "If YES, please explain. / Si la respuesta es 'Sí', por favor explique.",
+    "type": "control_textarea",
+    "order": "87",
+    "name": "ifYesplease320"
+   },
+   "322": {
+    "text": "Rexius believes that use of drugs or alcohol in the workplace is an unsafe work practice and creates increased risk to the consumer, fellow employees, customers and the public. Rexius is a Drug-Free and Alcohol-Free workplace. Use of illegal substances or abuse of controlled substances may result in disciplinary action or termination of employment.If employed, do you agree to abide by the Rexius Drug-Free and Alcohol-Free workplace standards? / Rexius considera que el uso de drogas o alcohol en el lugar de trabajo es una práctica laboral insegura y crea un mayor riesgo para el consumidor, los compañeros de trabajo, los clientes y el público. Rexius es un lugar de trabajo libre de drogas y alcohol. El uso de sustancias ilegales o el abuso de sustancias controladas puede dar lugar a medidas disciplinarias o a la terminación del empleo. Si eres empleado, ¿estás de acuerdo en cumplir con las normas de Rexius de un lugar de trabajo libre de drogas y alcohol?",
+    "type": "control_radio",
+    "order": "88",
+    "options": {
+     "Yes / Si": "Yes / Si",
+     "No": "No"
+    },
+    "name": "rexiusBelieves322"
+   },
+   "217": {
+    "text": "PLEASE READ THE ENTIRE FOLLOWING SECTION HERE AND ON THE NEXT PAGE BEFORE SIGNING. / POR FAVOR, LEE LA SIGUIENTE SECCIÓN COMPLETA AQUÍ Y EN LA PÁGINA SIGUIENTE ANTES DE FIRMAR.\r\nThen please sign this form at the bottom of the next page. Also, please initial each section in the center column indicating you have read that section. / Luego, por favor firma este formulario en la parte inferior de la siguiente página. Además, por favor pon iniciales en cada sección en la columna del centro para indicar que has leído esa sección.",
+    "type": "control_text",
+    "order": "90",
+    "name": "ltpgtltspanStylefontweight217"
+   },
+   "219": {
+    "text": "Term, Condition, Expectation and/or Agreement / Término, Condición, Expectativa y/o Acuerdo\r\nI certify that the information I have provided on this Application Form and on my Resume (if any) is true to the best of my knowledge.\r\nRegarding this application, I understand that if the Company determines that I have made any false statements, answers or any misrepresentation or any omission of significant information, the Company is entitled to reject my Application, or if hired, to terminate my employment. / \r\nCertifico que la información que he proporcionado en este Formulario de Solicitud y en mi Currículum (si lo hubiera) es verdadera según mi leal saber y entender.\r\nRespecto a esta solicitud, entiendo que si la Compañía determina que he realizado declaraciones falsas, respuestas incorrectas o cualquier representación inexacta u omisión de información significativa, la Compañía tiene el derecho de rechazar mi solicitud, o si soy contratado, de terminar mi empleo.\r\n ",
+    "type": "control_text",
+    "order": "92",
+    "name": "ltpgtltspanStylefontweight219"
+   },
+   "324": {
+    "text": "Initials / Iniciales",
+    "type": "control_textbox",
+    "order": "93",
+    "name": "initials"
+   },
+   "325": {
+    "text": "Term, Condition, Expectation and/or Agreement / Término, Condición, Expectativa y/o Acuerdo\r\nIn the event I undergo a medical examination or evaluation as a part of the job placement process of the Company I agree to supply only information which is true to the best of my knowledge.\r\nRegarding this examination or evaluation, I understand that if the Company determines that I have made any false oral or written statements or answers or any misrepresentation or any omission of significant information to the Company or to the physician or to his or her representative, the Company is entitled to terminate my conditional or actual employment at any time. / \r\nEn caso de que me someta a un examen o evaluación médica como parte del proceso de colocación laboral de la Compañía, acepto proporcionar solo información que sea verdadera según mi leal saber y entender.\r\nRespecto a esta evaluación o examen, entiendo que si la Compañía determina que he realizado declaraciones falsas, respuestas incorrectas o cualquier representación inexacta u omisión de información significativa a la Compañía, al médico o a su representante, la Compañía tiene el derecho de dar por terminado mi empleo condicional o efectivo en cualquier momento.",
+    "type": "control_text",
+    "order": "94",
+    "name": "ltpgtltspanStylefontweight"
+   },
+   "326": {
+    "text": "Initials / Iniciales",
+    "type": "control_textbox",
+    "order": "95",
+    "name": "initials326"
+   },
+   "327": {
+    "text": "Term, Condition, Expectation and/or Agreement / Término, Condición, Expectativa y/o Acuerdo\r\nI authorize any person, school, current employer, past employer, physician or organization with knowledge of me or my work to provide the Company or its agent or representative with any information or opinion about me in response to an inquiry by the Company.\r\nI release any such person, employer, physician or organization from any legal liability in making such statements or furnishing any and all information to the Company or to its representative or agent. / \r\nAutorizo a cualquier persona, escuela, empleador actual, empleador anterior, médico u organización que tenga conocimiento de mí o de mi trabajo a proporcionar a la Compañía o a su agente o representante cualquier información u opinión sobre mí en respuesta a una consulta de la Compañía.\r\nEximo a dicha persona, empleador, médico u organización de cualquier responsabilidad legal al hacer tales declaraciones o proporcionar cualquier información a la Compañía o a su representante o agente.",
+    "type": "control_text",
+    "order": "96",
+    "name": "ltpgtltspanStylefontweight327"
+   },
+   "328": {
+    "text": "Initials / Iniciales",
+    "type": "control_textbox",
+    "order": "97",
+    "name": "initials328"
+   },
+   "329": {
+    "text": "Term, Condition, Expectation and/or Agreement / Término, Condición, Expectativa y/o Acuerdo\r\nI authorize the Company or its agent or representative to check references regarding my employment and investigate any of the statements or answers provided by me on this Application or made to a physician or his or her representative (in the event of a medical examination or evaluation). The only exception to this authorization is where I have specifically requested in writing on this Application Form on the date below that no such inquiry be made. /\r\nAutorizo a la Compañía o a su agente o representante a verificar las referencias con respecto a mi empleo e investigar cualquiera de las declaraciones o respuestas proporcionadas por mí en esta Solicitud o hechas a un médico o su representante (en caso de un examen médico o evaluación). La única excepción a esta autorización es cuando he solicitado específicamente por escrito en esta Solicitud en la fecha a continuación que no se realice dicha investigación.",
+    "type": "control_text",
+    "order": "98",
+    "name": "ltpgtltspanStylefontweight329"
+   },
+   "330": {
+    "text": "Initials / Iniciales",
+    "type": "control_textbox",
+    "order": "99",
+    "name": "initials330"
+   },
+   "331": {
+    "text": "Term, Condition, Expectation and/or Agreement / Término, Condición, Expectativa y/o Acuerdo\r\nI understand that my employment at this Company is on an “at will” (that is, mutual consent) basis. Therefore I agree that either I or the Company has the proper right to terminate my employment with or without cause at any time. / \r\nEntiendo que mi empleo en esta Compañía es de tipo \"a voluntad\" (es decir, de consentimiento mutuo). Por lo tanto, estoy de acuerdo en que tanto yo como la Compañía tenemos el derecho apropiado de dar por terminado mi empleo, con o sin motivo, en cualquier momento.",
+    "type": "control_text",
+    "order": "100",
+    "name": "ltpgtltspanStylefontweight331"
+   },
+   "332": {
+    "text": "Initials / Iniciales",
+    "type": "control_textbox",
+    "order": "101",
+    "name": "initials332"
+   },
+   "333": {
+    "text": "I have read and understood, and I agree to this entire section above, entitled AGREEMENT & RELEASE. / He leído y comprendido, y estoy de acuerdo con toda la sección anterior titulada ACUERDO Y LIBERACIÓN.",
+    "type": "control_signature",
+    "order": "102",
+    "name": "iHave"
+   },
+   "238": {
+    "text": "Rexius has requested that I take a drug/alcohol test under its Alcohol & Drug Policy as part of my application for employment. Accordingly, by my signature below, herby authorize Rexius, the Medical Review Officer and licensed laboratory selected by Rexius to perform a urinalysis on a urine specimen provided by me to test for drug use. I consent to this test and I also give my permission to the laboratory and Medical Review Officer to release the results of this drug test to Rexius. I agree that Rexius may use these results to determine my suitability for employment. If I am employed by Rexius I agree to any drug/alcohol testing the Company may require under its Alcohol and Drug Policy. If the laboratory finds the test invalid, and if the laboratory, Medical Review Officer or Rexius believe another test is appropriate, I agree to submit another specimen(s) for further testing. I understand that I will not be informed of the results of my pre-employment drug test unless I request it within 60 days of being notified of the disposition of my application. / Rexius ha solicitado que me someta a una prueba de drogas/alcohol según su Política de Alcohol y Drogas como parte de mi solicitud de empleo. En consecuencia, mediante mi firma a continuación, por la presente autorizo a Rexius, al Oficial de Revisión Médica y al laboratorio con licencia seleccionado por Rexius a realizar un análisis de orina en una muestra de orina proporcionada por mí para detectar el uso de drogas. Consiento en esta prueba y también doy mi permiso al laboratorio y al Oficial de Revisión Médica para divulgar los resultados de esta prueba de drogas a Rexius. Estoy de acuerdo en que Rexius puede utilizar estos resultados para determinar mi idoneidad para el empleo. Si soy empleado por Rexius, acepto someterme a cualquier prueba de drogas/alcohol que la Compañía pueda requerir según su Política de Alcohol y Drogas. Si el laboratorio encuentra que la prueba es inválida, y si el laboratorio, el Oficial de Revisión Médica o Rexius consideran que es apropiada otra prueba, acepto proporcionar otra(s) muestra(s) para pruebas adicionales. Entiendo que no se me informará de los resultados de mi prueba de drogas previa al empleo a menos que lo solicite en un plazo de 60 días a partir de la notificación sobre la decisión de mi solicitud.",
+    "type": "control_signature",
+    "order": "104",
+    "name": "rexiusHas238"
+   },
+   "66": {
+    "text": "Please list any currently valid and special motor vehicle, operator licenses or trade/craft certifications you hold./ Por favor, enumere cualquier vehículo de motor, licencia de operador o certificación comercial/vehiculo actualmente válida y especial que tenga.",
+    "type": "control_textarea",
+    "order": "106",
+    "name": "pleaseList66"
+   }
+  }
+ },
+ "232764918957171": {
+  "title": "CAS Employment Application 2026",
+  "submission_count_2026_10_23": 55,
+  "questions": {
+   "5": {
+    "text": "Rexius/CAS is an equal opportunity employer. Please complete this form fully, honestly and accurately. We appreciate your interest in employment with Rexius/CAS.",
+    "type": "control_text",
+    "order": "2",
+    "name": "ltpgtltspanStylecolor"
+   },
+   "375": {
+    "text": "What position are you applying for?",
+    "type": "control_textbox",
+    "order": "4",
+    "name": "whatPosition"
+   },
+   "376": {
+    "text": "How did you learn about this job position?",
+    "type": "control_checkbox",
+    "order": "5",
+    "options": {
+     "Indeed.com": "Indeed.com",
+     "Craigslist.com": "Craigslist.com",
+     "Rexius.com": "Rexius.com",
+     "Facebook": "Facebook",
+     "Instagram": "Instagram",
+     "Referral": "Referral"
+    },
+    "name": "howDid"
+   },
+   "377": {
+    "text": "Who referred you?",
+    "type": "control_textbox",
+    "order": "6",
+    "name": "whoReferred"
+   },
+   "272": {
+    "text": "Have you ever worked for CAS or its affiliates before?",
+    "type": "control_radio",
+    "order": "7",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou"
+   },
+   "273": {
+    "text": "If yes, please give dates of employment, location, and job title.",
+    "type": "control_textarea",
+    "order": "8",
+    "name": "ifYes273"
+   },
+   "274": {
+    "text": "Have you ever applied for work with CAS or its affiliates before?",
+    "type": "control_radio",
+    "order": "9",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou274"
+   },
+   "275": {
+    "text": "If yes, please give date, location, and job for which you applied.",
+    "type": "control_textarea",
+    "order": "10",
+    "name": "ifYes275"
+   },
+   "261": {
+    "text": "Available Start Date",
+    "type": "control_datetime",
+    "order": "12",
+    "name": "availableStart261"
+   },
+   "9": {
+    "text": "Name",
+    "type": "control_fullname",
+    "order": "13",
+    "name": "name"
+   },
+   "263": {
+    "text": "Address",
+    "type": "control_address",
+    "order": "14",
+    "name": "address"
+   },
+   "264": {
+    "text": "Phone Number",
+    "type": "control_phone",
+    "order": "15",
+    "name": "phoneNumber264"
+   },
+   "266": {
+    "text": "Phone Type",
+    "type": "control_radio",
+    "order": "16",
+    "options": {
+     "Home": "Home",
+     "Cell": "Cell"
+    },
+    "name": "phoneType"
+   },
+   "265": {
+    "text": "Alternate Phone Number",
+    "type": "control_phone",
+    "order": "17",
+    "name": "alternatePhone265"
+   },
+   "267": {
+    "text": "Phone Type",
+    "type": "control_radio",
+    "order": "18",
+    "options": {
+     "Home": "Home",
+     "Cell": "Cell"
+    },
+    "name": "phoneType267"
+   },
+   "22": {
+    "text": "Email Address",
+    "type": "control_email",
+    "order": "19",
+    "name": "emailAddress"
+   },
+   "21": {
+    "text": "Preferred Contact Method",
+    "type": "control_checkbox",
+    "order": "20",
+    "options": {
+     "Phone": "Phone",
+     "Email": "Email"
+    },
+    "name": "name21"
+   },
+   "311": {
+    "text": "Are you at least 18 years of Age?",
+    "type": "control_radio",
+    "order": "21",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "areYou"
+   },
+   "312": {
+    "text": "Can you, upon hiring, provide appropriate identification documenting and verifying your identity and your legal right to work in the USA?",
+    "type": "control_radio",
+    "order": "22",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "canYou"
+   },
+   "370": {
+    "text": "You selected to apply for a job which requires driving a company vehicle. Please fill out the information below.",
+    "type": "control_text",
+    "order": "23",
+    "name": "input370"
+   },
+   "30": {
+    "text": "Driver License number",
+    "type": "control_textbox",
+    "order": "24",
+    "name": "driverLicense30"
+   },
+   "31": {
+    "text": "Expiration Date",
+    "type": "control_datetime",
+    "order": "25",
+    "name": "expirationDate31"
+   },
+   "35": {
+    "text": "Class or Type of License",
+    "type": "control_textbox",
+    "order": "26",
+    "name": "classOr35"
+   },
+   "368": {
+    "text": "I, the undersigned, hereby authorize Rexius Forest By-Products, Inc. to procure a Motor Vehicle Record (MVR) report. I understand that this report may include information about my driving record, including but not limited to traffic citations, accidents, driving offenses, and other related data. I acknowledge that Rexius may rely on this report to make decisions about my application, employment, or other related considerations.\r\nI understand that I have rights under the Fair Credit Reporting Act (FCRA), including the right to know if adverse action has been taken based on the information in the MVR report, and the right to verify the accuracy and completeness of any information provided by the consumer reporting agency.\r\nI acknowledge that this authorization will remain in effect until I revoke it in writing, and I agree that a copy of this authorization is as valid as the original.\r\nBy signing below, I affirm my understanding and consent to the above terms.",
+    "type": "control_text",
+    "order": "27",
+    "name": "input368"
+   },
+   "369": {
+    "text": "Signature",
+    "type": "control_signature",
+    "order": "28",
+    "name": "signature"
+   },
+   "66": {
+    "text": "Please list any currently valid and special motor vehicle, operator licenses or trade/craft certifications you hold.",
+    "type": "control_textarea",
+    "order": "29",
+    "name": "pleaseList66"
+   },
+   "344": {
+    "text": "Please check your highest level of education:",
+    "type": "control_radio",
+    "order": "31",
+    "options": {
+     "None": "None",
+     "GED": "GED",
+     "High School Diploma": "High School Diploma",
+     "Certification(s)": "Certification(s)",
+     "Associates Degree": "Associates Degree",
+     "Bachelor's Degree": "Bachelor's Degree",
+     "Graduate Degree": "Graduate Degree"
+    },
+    "name": "pleaseCheck"
+   },
+   "362": {
+    "text": "Please list your complete job history in order of occurance. Begin with your current or most recent job (if unemployed). ",
+    "type": "control_text",
+    "order": "33",
+    "name": "input362"
+   },
+   "323": {
+    "text": "If presently employed, may we contact your current employer to verify employment?",
+    "type": "control_radio",
+    "order": "34",
+    "options": {
+     "Yes": "Yes",
+     "No": "No",
+     "Unemployed/NA": "Unemployed/NA"
+    },
+    "name": "ifPresently"
+   },
+   "371": {
+    "text": "If you have not yet had a job or are a student. Please check the box below.",
+    "type": "control_radio",
+    "order": "35",
+    "options": {
+     "Yes": "Yes"
+    },
+    "name": "ifYou"
+   },
+   "372": {
+    "text": "If you have not yet had a job or are a student. Please list any relevant skills or experiences.",
+    "type": "control_textarea",
+    "order": "36",
+    "name": "ifYou372"
+   },
+   "72": {
+    "text": "1. Name of Employer",
+    "type": "control_textbox",
+    "order": "37",
+    "name": "1Name"
+   },
+   "280": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "38",
+    "name": "location"
+   },
+   "75": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "39",
+    "name": "phoneNumber"
+   },
+   "76": {
+    "text": "Your Job Title / Responsibility",
+    "type": "control_textbox",
+    "order": "40",
+    "name": "yourJob"
+   },
+   "363": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "41",
+    "name": "input363"
+   },
+   "348": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "42",
+    "name": "startDate"
+   },
+   "378": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "43",
+    "name": "endDate"
+   },
+   "80": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "44",
+    "name": "supervisorsName80"
+   },
+   "81": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "45",
+    "name": "supervisorsTitletitulo81"
+   },
+   "352": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "46",
+    "name": "reasonFor352"
+   },
+   "276": {
+    "text": "You may comment on any other special qualifications you have related to this job or this company. ",
+    "type": "control_textarea",
+    "order": "47",
+    "name": "youMay276"
+   },
+   "356": {
+    "text": "Have more job experience to enter? Check the box below.",
+    "type": "control_radio",
+    "order": "48",
+    "options": {
+     "Yes, I have more job experience to enter.": "Yes, I have more job experience to enter."
+    },
+    "name": "haveMore"
+   },
+   "83": {
+    "text": "2. Name of Employer",
+    "type": "control_textbox",
+    "order": "49",
+    "name": "2Name"
+   },
+   "85": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "50",
+    "name": "location85"
+   },
+   "86": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "51",
+    "name": "phoneNumber86"
+   },
+   "87": {
+    "text": "Your Job Title /Responsibility",
+    "type": "control_textbox",
+    "order": "52",
+    "name": "yourJob87"
+   },
+   "364": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "53",
+    "name": "ltpgtltstronggtdatesOf"
+   },
+   "349": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "54",
+    "name": "startAnd349"
+   },
+   "379": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "55",
+    "name": "endDate379"
+   },
+   "92": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "56",
+    "name": "supervisorsName"
+   },
+   "93": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "57",
+    "name": "supervisorsTitletitulo93"
+   },
+   "94": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "58",
+    "name": "reasonFor"
+   },
+   "358": {
+    "text": "Have more job experience to enter? Check the box below.",
+    "type": "control_radio",
+    "order": "59",
+    "options": {
+     "Yes, I have more job history to enter.": "Yes, I have more job history to enter."
+    },
+    "name": "haveMore358"
+   },
+   "95": {
+    "text": "3. Name of Employer",
+    "type": "control_textbox",
+    "order": "61",
+    "name": "3Name"
+   },
+   "287": {
+    "text": "Location",
+    "type": "control_textbox",
+    "order": "62",
+    "name": "locationUbicacion287"
+   },
+   "98": {
+    "text": "Phone number",
+    "type": "control_phone",
+    "order": "63",
+    "name": "phoneNumber98"
+   },
+   "99": {
+    "text": "Your Job Title / Responsibility",
+    "type": "control_textbox",
+    "order": "64",
+    "name": "yourJob99"
+   },
+   "365": {
+    "text": "Dates of employment:",
+    "type": "control_text",
+    "order": "65",
+    "name": "ltpgtltstronggtdatesOf365"
+   },
+   "350": {
+    "text": "Start Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "66",
+    "name": "startDate350"
+   },
+   "380": {
+    "text": "End Date (MM/YEAR)",
+    "type": "control_textbox",
+    "order": "67",
+    "name": "endDate380"
+   },
+   "105": {
+    "text": "Supervisor’s Name",
+    "type": "control_textbox",
+    "order": "68",
+    "name": "supervisorsName105"
+   },
+   "106": {
+    "text": "Supervisor’s Title",
+    "type": "control_textbox",
+    "order": "69",
+    "name": "supervisorsTitletitulo106"
+   },
+   "107": {
+    "text": "Reason for leaving (please be specific)",
+    "type": "control_textbox",
+    "order": "70",
+    "name": "reasonFor107"
+   },
+   "381": {
+    "text": "If you have a resume you may upload it here:",
+    "type": "control_fileupload",
+    "order": "71",
+    "name": "ifYou381"
+   },
+   "148": {
+    "text": "Please check ALL that apply to or describe your physical capabilities",
+    "type": "control_checkbox",
+    "order": "73",
+    "options": {
+     "I can stand 8-10 hours per day": "I can stand 8-10 hours per day",
+     "I can sit 8-10 hours per day": "I can sit 8-10 hours per day",
+     "I can walk 8-10 hours per day": "I can walk 8-10 hours per day",
+     "I can bend or reach 8-10 hours per day": "I can bend or reach 8-10 hours per day",
+     "I can twist or lift or reach 8-10 hours per day": "I can twist or lift or reach 8-10 hours per day"
+    },
+    "name": "name148"
+   },
+   "296": {
+    "text": "Please check only one from the options below",
+    "type": "control_radio",
+    "order": "74",
+    "options": {
+     "I can lift, push, or pull up to 10 lbs on a regular basis": "I can lift, push, or pull up to 10 lbs on a regular basis",
+     "I can lift, push, or pull up to 20 lbs on a regular basis": "I can lift, push, or pull up to 20 lbs on a regular basis",
+     "I can lift, push, or pull up to 30 lbs on a regular basis": "I can lift, push, or pull up to 30 lbs on a regular basis",
+     "I can lift, push, or pull up to 40 lbs on a regular basis": "I can lift, push, or pull up to 40 lbs on a regular basis",
+     "I can lift, push, or pull more than 50 lbs on a regular basis": "I can lift, push, or pull more than 50 lbs on a regular basis"
+    },
+    "name": "pleaseCheckonly296"
+   },
+   "313": {
+    "text": "1. Regarding the job for which you have applied, are you familiar with this job and do you understand the basic physical requirements needed to perform it?",
+    "type": "control_radio",
+    "order": "76",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "regardingThejob313"
+   },
+   "314": {
+    "text": "2. If yes, are you physically able to perform this job safely and without a significant risk of substantial harm to yourself or to others?",
+    "type": "control_radio",
+    "order": "77",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "2If"
+   },
+   "373": {
+    "text": "*You may answer “Yes” to question #2 above if you can perform all essential functions of the job with or without reasonable accommodation. The Company will provide reasonable accommodation to a person with a disability. However, you still are not required to identify yourself as a disabled person on this Application Form.",
+    "type": "control_text",
+    "order": "79",
+    "name": "input373"
+   },
+   "195": {
+    "text": "If you can perform the essential tasks of the job ONLY with an accommodation, then please respond to this question: How would you perform the tasks, and with what accommodations(s)?",
+    "type": "control_textbox",
+    "order": "80",
+    "name": "ifYou195"
+   },
+   "316": {
+    "text": "Have you ever been counseled, warned or disciplined for an unsafe work practice or other safety violation in the past year? ( Note: A “Yes” answer may not necessarily bar you from employment here.)",
+    "type": "control_radio",
+    "order": "82",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou316"
+   },
+   "318": {
+    "text": "If YES, please explain.",
+    "type": "control_textarea",
+    "order": "83",
+    "name": "ifYesplease"
+   },
+   "319": {
+    "text": "Have you ever had a “near miss” on the job where you nearly missed being injured or injuring someone else in the past year? ( Note: A “Yes” answer may not necessarily bar you from employment here.)",
+    "type": "control_radio",
+    "order": "84",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "haveYou319"
+   },
+   "320": {
+    "text": "If YES, please explain.",
+    "type": "control_textarea",
+    "order": "85",
+    "name": "ifYesplease320"
+   },
+   "217": {
+    "text": "PLEASE READ THE ENTIRE FOLLOWING SECTION HERE AND ON THE NEXT PAGE BEFORE SIGNING.\nThen please sign this form at the bottom of the next page. Also, please initial each section in the center column indicating you have read that section.",
+    "type": "control_text",
+    "order": "87",
+    "name": "ltpgtltspanStylefontweight217"
+   },
+   "219": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI certify that the information I have provided on this Application Form and on my Resume (if any) is true to the best of my knowledge.\nRegarding this application, I understand that if the Company determines that I have made any false statements, answers or any misrepresentation or any omission of significant information, the Company is entitled to reject my Application, or if hired, to terminate my employment.\n ",
+    "type": "control_text",
+    "order": "89",
+    "name": "ltpgtltspanStylefontweight219"
+   },
+   "324": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "90",
+    "name": "initials"
+   },
+   "325": {
+    "text": "Term, Condition, Expectation and/or Agreement\r\nIn the event I undergo a medical examination or evaluation as a part of the job placement process of the Company I agree to supply only information which is true to the best of my knowledge.\r\nRegarding this examination or evaluation, I understand that if the Company determines that I have made any false oral or written statements or answers or any misrepresentation or any omission of significant information to the Company or to the physician or to his or her representative, the Company is entitled to terminate my conditional or actual employment at any time.",
+    "type": "control_text",
+    "order": "91",
+    "name": "ltpgtltspanStylefontweight"
+   },
+   "326": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "92",
+    "name": "initials326"
+   },
+   "327": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI authorize any person, school, current employer, past employer, physician or organization with knowledge of me or my work to provide the Company or its agent or representative with any information or opinion about me in response to an inquiry by the Company.\nI release any such person, employer, physician or organization from any legal liability in making such statements or furnishing any and all information to the Company or to its representative or agent.",
+    "type": "control_text",
+    "order": "93",
+    "name": "ltpgtltspanStylefontweight327"
+   },
+   "328": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "94",
+    "name": "initials328"
+   },
+   "329": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI authorize the Company or its agent or representative to check references regarding my employment and investigate any of the statements or answers provided by me on this Application or made to a physician or his or her representative (in the event of a medical examination or evaluation). The only exception to this authorization is where I have specifically requested in writing on this Application Form on the date below that no such inquiry be made.",
+    "type": "control_text",
+    "order": "95",
+    "name": "ltpgtltspanStylefontweight329"
+   },
+   "330": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "96",
+    "name": "initials330"
+   },
+   "331": {
+    "text": "Term, Condition, Expectation and/or Agreement\nI understand that my employment at this Company is on an “at will” (that is, mutual consent) basis. Therefore I agree that either I or the Company has the proper right to terminate my employment with or without cause at any time.",
+    "type": "control_text",
+    "order": "97",
+    "name": "ltpgtltspanStylefontweight331"
+   },
+   "332": {
+    "text": "Initials",
+    "type": "control_textbox",
+    "order": "98",
+    "name": "initials332"
+   },
+   "322": {
+    "text": "Rexius believes that use of drugs or alcohol in the workplace is an unsafe work practice and creates increased risk to the consumer, fellow employees, customers and the public. Rexius is a Drug-Free and Alcohol-Free workplace. Use of illegal substances or abuse of controlled substances may result in disciplinary action or termination of employment.If employed, do you agree to abide by the Rexius Drug-Free and Alcohol-Free workplace standards?",
+    "type": "control_radio",
+    "order": "99",
+    "options": {
+     "Yes": "Yes",
+     "No": "No"
+    },
+    "name": "rexiusBelieves322"
+   },
+   "333": {
+    "text": "I have read and understood, and I agree to this entire section above, entitled AGREEMENT & RELEASE.",
+    "type": "control_signature",
+    "order": "100",
+    "name": "iHave"
+   },
+   "238": {
+    "text": "Rexius/CAS has requested that I take a drug/alcohol test under its Alcohol & Drug Policy as part of my application for employment. Accordingly, by my signature below, herby authorize Rexius/CAS, the Medical Review Officer and licensed laboratory selected by Rexius/CAS to perform a urinalysis on a urine specimen provided by me to test for drug use. I consent to this test and I also give my permission to the laboratory and Medical Review Officer to release the results of this drug test to Rexius/CAS. I agree that Rexius/CAS may use these results to determine my suitability for employment. If I am employed by Rexius I agree to any drug/alcohol testing the Company may require under its Alcohol and Drug Policy. If the laboratory finds the test invalid, and if the laboratory, Medical Review Officer or Rexius believe another test is appropriate, I agree to submit another specimen(s) for further testing. I understand that I will not be informed of the results of my pre-employment drug test unless I request it within 60 days of being notified of the disposition of my application. ",
+    "type": "control_signature",
+    "order": "102",
+    "name": "rexiusHas238"
+   }
+  }
+ }
+}

@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rexius applicants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5f7f3; --panel: #ffffff; --ink: #172019; --mute: #5f6b63; --faint: #8d978f;
+    --line: #d9dfd8; --line-strong: #b9c3ba; --accent: #2f6b3f; --accent-ink: #ffffff; --accent-soft: #e2eee4;
+    --hover: #eef2ec; --select: #e3ece3; --warn-bg: #fbeedd; --warn-ink: #7a4b12; --bad: #a33b2a;
+    --s-new: #d88a2b; --s-rev: #6b7f8f; --s-sent: #3f74a8; --s-int: #7c5fb3; --s-hired: #2f6b3f; --s-no: #9a9f9a; --s-x: #8a6d5a;
+    --radius: 6px; --shadow: 0 10px 30px rgba(23, 32, 25, 0.12);
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #121714; --panel: #1a211c; --ink: #e7ece7; --mute: #a3ada5; --faint: #747f77;
+      --line: #2b352e; --line-strong: #3f4b42; --accent: #7fc392; --accent-ink: #0f1a12; --accent-soft: #223328;
+      --hover: #202a24; --select: #243127; --warn-bg: #3a2d16; --warn-ink: #f1c98a; --bad: #e08a7a;
+      --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #121714; --panel: #1a211c; --ink: #e7ece7; --mute: #a3ada5; --faint: #747f77;
+    --line: #2b352e; --line-strong: #3f4b42; --accent: #7fc392; --accent-ink: #0f1a12; --accent-soft: #223328;
+    --hover: #202a24; --select: #243127; --warn-bg: #3a2d16; --warn-ink: #f1c98a; --bad: #e08a7a;
+    --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  *, *::before, *::after { box-sizing: inherit; }
+  body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font: 14px/1.45 "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "tnum" 1; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--paper); z-index: 10; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; opacity: .55; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .app { display: flex; flex-direction: column; min-height: 100%; }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 20px 24px 12px; flex-wrap: wrap; }
+  .top h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 2px; }
+  .meta { color: var(--mute); font-size: 13px; min-height: 18px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 7px 12px; font-weight: 500; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn.small { padding: 4px 9px; font-size: 13px; }
+
+  .notice { margin: 0 24px 10px; padding: 10px 14px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+  .notice[hidden] { display: none; }
+  .notice .btn { border-color: currentColor; background: transparent; color: inherit; }
+
+  .pipeline { padding: 0 24px 14px; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin-bottom: 8px; }
+  .bar span { display: block; height: 100%; transition: width .25s ease; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 13px; }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .chip b { font-weight: 600; }
+  .chip.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .chip.off { opacity: .5; }
+
+  .layout { display: grid; grid-template-columns: 236px 1fr; flex: 1; min-height: 0; border-top: 1px solid var(--line); }
+  .filters { border-right: 1px solid var(--line); padding: 16px 18px 24px; background: var(--panel); }
+  .filters h2 { font-size: 13px; font-weight: 600; margin: 14px 0 6px; color: var(--mute); }
+  .filters h2:first-child { margin-top: 0; }
+  .filters input[type="search"], .filters input[type="date"], .filters select { width: 100%; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); }
+  .check { display: flex; align-items: center; gap: 7px; padding: 3px 0; cursor: pointer; }
+  .check input { margin: 0; }
+  .check .n { margin-left: auto; color: var(--faint); font-size: 12px; }
+  .opt-list { max-height: 190px; overflow: auto; padding-right: 4px; }
+  .daterange { display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .filters .clear { margin-top: 16px; width: 100%; }
+  .filters-toggle { display: none; }
+
+  .list { min-width: 0; padding: 0 0 40px; }
+  .list-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 24px; color: var(--mute); font-size: 13px; gap: 12px; flex-wrap: wrap; }
+  .list-head select { padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-weight: 600; color: var(--mute); font-size: 12.5px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--paper); z-index: 2; white-space: nowrap; }
+  th button { background: none; border: 0; padding: 0; font: inherit; color: inherit; font-weight: 600; }
+  th button.sorted { color: var(--ink); }
+  th:first-child, td:first-child { padding-left: 24px; }
+  th:last-child, td:last-child { padding-right: 24px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--hover); }
+  tbody tr.selected { background: var(--select); }
+  td.name { font-weight: 600; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  td.name small { display: block; font-weight: 400; color: var(--mute); font-size: 12px; }
+  td.date { white-space: nowrap; color: var(--mute); }
+  td.pos { max-width: 260px; }
+  .tag { display: inline-block; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 11.5px; color: var(--mute); margin-left: 6px; vertical-align: 1px; }
+  .dup { display: inline-block; margin-left: 6px; font-size: 11.5px; color: var(--warn-ink); background: var(--warn-bg); padding: 1px 6px; border-radius: 4px; }
+  .status-select { padding: 4px 26px 4px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); font-size: 13px; appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--mute) 50%), linear-gradient(135deg, var(--mute) 50%, transparent 50%); background-position: calc(100% - 13px) 50%, calc(100% - 9px) 50%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
+  .sdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: -0.5px; }
+  td.att a { text-decoration: none; }
+  .empty { padding: 48px 24px; color: var(--mute); text-align: center; }
+  .more { display: block; margin: 16px auto 0; }
+  .skel { color: var(--faint); padding: 24px; }
+
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 20; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+  .drawer[hidden] { display: none; }
+  .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 22px 12px; border-bottom: 1px solid var(--line); gap: 12px; }
+  .drawer-head h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  .drawer-head .sub { color: var(--mute); font-size: 13px; margin-top: 2px; }
+  .drawer-body { overflow: auto; padding: 8px 22px 32px; flex: 1; }
+  .sec { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .sec:last-child { border-bottom: 0; }
+  .sec h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--mute); }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 5px 12px; font-size: 13.5px; }
+  .kv dt { color: var(--mute); }
+  .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .links a { display: inline-block; margin: 0 10px 6px 0; }
+  .review { display: grid; gap: 10px; }
+  .review label { display: grid; gap: 4px; font-size: 13px; color: var(--mute); }
+  .review select, .review input, .review textarea { padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); width: 100%; }
+  .review textarea { min-height: 84px; resize: vertical; }
+  .history { font-size: 12.5px; color: var(--mute); margin: 4px 0 0; padding-left: 0; list-style: none; }
+  .history li { padding: 2px 0; }
+  .answers { display: grid; gap: 10px; }
+  .answers .q { font-size: 12.5px; color: var(--mute); }
+  .answers .a { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .dups a { display: block; }
+  .saving { font-size: 12px; color: var(--faint); min-height: 16px; }
+  .close { background: none; border: 1px solid var(--line-strong); border-radius: var(--radius); width: 32px; height: 32px; font-size: 18px; line-height: 1; flex: none; }
+
+  .modal { position: fixed; inset: 0; background: rgba(10, 15, 12, .45); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal[hidden] { display: none; }
+  .modal .box { background: var(--panel); border-radius: 10px; padding: 22px; width: min(480px, 100%); box-shadow: var(--shadow); }
+  .modal h2 { margin: 0 0 6px; font-size: 18px; }
+  .modal p { color: var(--mute); margin: 0 0 12px; font-size: 13.5px; }
+  .modal textarea { width: 100%; min-height: 160px; padding: 9px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); resize: vertical; }
+  .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+  @media (max-width: 860px) {
+    .top { padding: 16px 16px 10px; }
+    .notice, .pipeline { margin-left: 16px; margin-right: 16px; padding-left: 0; padding-right: 0; }
+    .layout { grid-template-columns: 1fr; }
+    .filters { display: none; border-right: 0; border-bottom: 1px solid var(--line); }
+    .filters.open { display: block; }
+    .filters-toggle { display: inline-block; }
+    .list-head { padding: 10px 16px; }
+    th:first-child, td:first-child { padding-left: 16px; }
+    th:last-child, td:last-child { padding-right: 16px; }
+    .col-loc, .col-src { display: none; }
+    td.pos { max-width: 160px; }
+    .kv { grid-template-columns: 1fr; gap: 2px 0; }
+    .kv dt { margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Rexius applicants</h1>
+      <div class="meta" id="meta">Connecting…</div>
+    </div>
+    <div class="actions">
+      <button class="btn filters-toggle" id="toggleFilters">Filters</button>
+      <button class="btn" id="stagesBtn">Stages</button>
+      <button class="btn" id="exportBtn" disabled>Export CSV</button>
+      <button class="btn primary" id="refreshBtn" disabled>Refresh from Jotform</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="btn small" id="noticeBtn" hidden></button></div>
+
+  <section class="pipeline" id="pipeline" aria-label="Pipeline"></section>
+
+  <div class="layout">
+    <aside class="filters" id="filters">
+      <h2>Search</h2>
+      <input type="search" id="q" placeholder="Name, email, phone, position…" autocomplete="off">
+      <h2>Form</h2>
+      <div id="f-form"></div>
+      <h2>Location</h2>
+      <div class="opt-list" id="f-loc"></div>
+      <h2>Position</h2>
+      <div class="opt-list" id="f-pos"></div>
+      <h2>Heard about us from</h2>
+      <div class="opt-list" id="f-src"></div>
+      <h2>Applied between</h2>
+      <div class="daterange"><input type="date" id="from" aria-label="From"><input type="date" id="to" aria-label="To"></div>
+      <h2>Other</h2>
+      <label class="check"><input type="checkbox" id="resumeOnly"> Has a resume</label>
+      <label class="check"><input type="checkbox" id="dupOnly"> Applied more than once</label>
+      <button class="btn clear" id="clearBtn">Clear filters</button>
+    </aside>
+
+    <main class="list">
+      <div class="list-head">
+        <span id="count"></span>
+        <label>Sort <select id="sort">
+          <option value="date:desc">Newest first</option>
+          <option value="date:asc">Oldest first</option>
+          <option value="name:asc">Name A–Z</option>
+          <option value="status:asc">Status</option>
+          <option value="position:asc">Position</option>
+        </select></label>
+      </div>
+      <div id="tableWrap" style="overflow-x:auto">
+        <table id="table" hidden>
+          <thead><tr>
+            <th>Applicant</th><th>Applied</th><th class="col-loc">Location</th><th>Position</th><th class="col-src">Source</th><th>Status</th><th>Files</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="skel" id="skel">Loading applications…</div>
+      <div class="empty" id="empty" hidden></div>
+      <button class="btn more" id="moreBtn" hidden></button>
+    </main>
+  </div>
+</div>
+
+<aside class="drawer" id="drawer" hidden aria-label="Applicant details">
+  <div class="drawer-head">
+    <div><h2 id="dName"></h2><div class="sub" id="dSub"></div></div>
+    <button class="close" id="dClose" aria-label="Close">×</button>
+  </div>
+  <div class="drawer-body" id="dBody"></div>
+</aside>
+
+<div class="modal" id="stagesModal" hidden>
+  <div class="box">
+    <h2>Pipeline stages</h2>
+    <p>One stage per line, in order. The first stage is where new applications land. Renaming a stage doesn’t move applicants already in it — they keep the old name until you change them.</p>
+    <textarea id="stagesText"></textarea>
+    <div class="row"><button class="btn" id="stagesCancel">Cancel</button><button class="btn primary" id="stagesSave">Save stages</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Form configuration (question ids come from Jotform) ----------
+  var FORMS = {
+    "260115636145148": { label: "English", fields: { name: "9", email: "22", phone: "264", altPhone: "265", address: "263", location: "342", positions: ["340", "341", "343"], source: "268", sourceOther: "384", referredBy: "355", start: "261", education: "344", files: ["387", "393"], portfolioLink: "394", workedBefore: "272", appliedBefore: "274", contact: "21" }, bilingual: false },
+    "232824275836160": { label: "Spanish", fields: { name: "9", email: "22", phone: "264", altPhone: "265", address: "263", location: "342", positions: ["340", "341", "343"], source: "268", referredBy: "355", start: "261", education: "344", files: [], workedBefore: "272", appliedBefore: "274", contact: "21" }, bilingual: true },
+    "232764918957171": { label: "CAS", fields: { name: "9", email: "22", phone: "264", altPhone: "265", address: "263", location: null, positions: ["375"], source: "376", referredBy: "377", start: "261", education: "344", files: ["381"], workedBefore: "272", appliedBefore: "274", contact: "21" }, bilingual: false, defaultLocation: "CAS" }
+  };
+  var FORM_IDS = Object.keys(FORMS);
+  var PAGE_CAP = 1000;
+  var DEFAULT_STAGES = ["New", "Reviewed", "Sent to manager", "Interview", "Hired", "Not selected"];
+  var STAGE_COLORS = ["var(--s-new)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)", "var(--s-hired)", "var(--s-no)", "var(--s-x)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)"];
+  var SKIP_TYPES = { control_text: 1, control_head: 1, control_button: 1, control_divider: 1, control_pagebreak: 1, control_collapse: 1 };
+
+  // ---------- State ----------
+  var mcp = null, db = null, downloads = null;
+  var subs = [];              // normalized applications
+  var formMeta = {};          // formId -> questions map
+  var tracker = {};           // submission id -> review record
+  var stages = DEFAULT_STAGES.slice();
+  var dupIndex = {};          // key -> [ids]
+  var filters = { q: "", forms: {}, locs: {}, pos: {}, src: {}, statuses: {}, from: "", to: "", resumeOnly: false, dupOnly: false };
+  var sort = { key: "date", dir: "desc" };
+  var selectedId = null;
+  var shown = 250;
+  var lastLoaded = null;
+  var loading = false;
+  var writeChain = {};
+  var notesTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  // ---------- Helpers ----------
+  function answer(sub, qid) { var a = sub.submission_answers && sub.submission_answers[qid]; return a ? a.answer : undefined; }
+  function toText(v) {
+    if (v == null) return "";
+    if (Array.isArray(v)) return v.map(toText).filter(Boolean).join(", ");
+    if (typeof v === "object") {
+      if (v.full) return v.full;
+      if (v.first !== undefined || v.last !== undefined) return [v.first, v.middle, v.last].map(function (s) { return (s || "").trim(); }).filter(Boolean).join(" ");
+      if (v.datetime) return String(v.datetime).slice(0, 10);
+      if (v.addr_line1 !== undefined) return [v.addr_line1, v.addr_line2, v.city, v.state, v.postal].map(function (s) { return (s || "").trim(); }).filter(Boolean).join(", ");
+      return Object.keys(v).map(function (k) { return typeof v[k] === "string" ? v[k] : ""; }).filter(Boolean).join(" ");
+    }
+    return String(v);
+  }
+  function firstLang(s) { s = (s || "").trim(); var i = s.indexOf("/"); if (i > 0) s = s.slice(0, i).trim(); return s; }
+  function stripSlash(s) { return (s || "").trim().replace(/\/+$/, "").trim(); }
+  function normLocation(s, bilingual) { s = bilingual ? firstLang(s) : stripSlash(s); if (/^eugene[-\/ ]?springfield$/i.test(s)) return "Eugene/Springfield"; return s; }
+  function digits(s) { return (s || "").replace(/\D+/g, ""); }
+  var MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  function parseWhen(s) {
+    var m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})(?: (\d{1,2}):(\d{2}) (AM|PM))?/.exec(s || "");
+    if (!m) { var d = new Date(s); return isNaN(d) ? null : d; }
+    var h = m[4] ? parseInt(m[4], 10) % 12 : 0; if (m[6] === "PM") h += 12;
+    return new Date(parseInt(m[3], 10), MONTHS[m[1]] || 0, parseInt(m[2], 10), h, m[5] ? parseInt(m[5], 10) : 0);
+  }
+  function ymd(d) { if (!d) return ""; return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function fmtDate(d) { if (!d) return "—"; return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }); }
+  function fmtDateTime(d) { if (!d) return "—"; return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
+  function relTime(d) { var s = Math.round((Date.now() - d.getTime()) / 1000); if (s < 60) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago"; if (s < 86400) return Math.round(s / 3600) + " h ago"; return fmtDate(d); }
+  function isFileUrl(s) { return typeof s === "string" && /^https?:\/\//.test(s) && /\/uploads\//.test(s) && !/_signature_\d+\.png/.test(s); }
+  function fileName(u) { try { var p = decodeURIComponent(u.split("?")[0]); return p.slice(p.lastIndexOf("/") + 1) || "file"; } catch (e) { return "file"; } }
+  function stageColor(name) { var i = stages.indexOf(name); if (i < 0) return "var(--s-x)"; return STAGE_COLORS[i % STAGE_COLORS.length]; }
+  function statusOf(id) { var t = tracker[id]; return (t && t.status) || stages[0] || "New"; }
+
+  // ---------- Normalization ----------
+  function normalize(sub, formId) {
+    var cfg = FORMS[formId], f = cfg.fields, bi = cfg.bilingual;
+    var when = parseWhen(sub.subtitle);
+    var name = toText(answer(sub, f.name)) || sub.title || "(no name)";
+    var email = (toText(answer(sub, f.email)) || "").trim().toLowerCase();
+    var phone = toText(answer(sub, f.phone)) || "";
+    var location = f.location ? normLocation(toText(answer(sub, f.location)), bi) : (cfg.defaultLocation || "");
+    var positions = [];
+    (f.positions || []).forEach(function (q) { var v = stripSlash(toText(answer(sub, q))); if (v) positions.push(v); });
+    var position = positions.join("; ");
+    var srcRaw = answer(sub, f.source);
+    var source = Array.isArray(srcRaw) ? srcRaw.map(function (s) { return bi ? firstLang(s) : stripSlash(s); }).filter(Boolean).join(", ") : (bi ? firstLang(toText(srcRaw)) : stripSlash(toText(srcRaw)));
+    if (!source && f.sourceOther) source = stripSlash(toText(answer(sub, f.sourceOther)));
+    var referredBy = toText(answer(sub, f.referredBy));
+    var files = [];
+    (f.files || []).forEach(function (q) { var v = answer(sub, q); (Array.isArray(v) ? v : [v]).forEach(function (u) { if (isFileUrl(u)) files.push(u); }); });
+    // Catch uploads in any other question too (forms change over time)
+    Object.keys(sub.submission_answers || {}).forEach(function (q) { if ((f.files || []).indexOf(q) >= 0) return; var v = answer(sub, q); (Array.isArray(v) ? v : [v]).forEach(function (u) { if (isFileUrl(u) && files.indexOf(u) < 0) files.push(u); }); });
+    var portfolioLink = f.portfolioLink ? toText(answer(sub, f.portfolioLink)).trim() : "";
+    return {
+      id: sub.id, formId: formId, form: cfg.label, url: sub.url, when: when, dateKey: ymd(when), name: name, nameKey: name.toLowerCase(),
+      email: email, phone: phone, phoneKey: digits(phone).slice(-10), altPhone: toText(answer(sub, f.altPhone)),
+      address: toText(answer(sub, f.address)), location: location, position: position, source: source, referredBy: referredBy,
+      start: toText(answer(sub, f.start)), education: bi ? firstLang(toText(answer(sub, f.education))) : toText(answer(sub, f.education)),
+      contact: bi ? firstLang(toText(answer(sub, f.contact))) : toText(answer(sub, f.contact)),
+      workedBefore: firstLang(toText(answer(sub, f.workedBefore))), appliedBefore: firstLang(toText(answer(sub, f.appliedBefore))),
+      files: files, portfolioLink: portfolioLink, raw: sub,
+      search: [name, email, phone, position, location, source, referredBy].join(" ").toLowerCase()
+    };
+  }
+  function buildDupIndex() {
+    dupIndex = {};
+    subs.forEach(function (s) {
+      var keys = [];
+      if (s.email) keys.push("e:" + s.email);
+      if (s.phoneKey && s.phoneKey.length >= 7) keys.push("p:" + s.phoneKey);
+      s.dupKeys = keys;
+      keys.forEach(function (k) { (dupIndex[k] = dupIndex[k] || []).push(s.id); });
+    });
+    var byId = {}; subs.forEach(function (s) { byId[s.id] = s; });
+    subs.forEach(function (s) {
+      var others = {};
+      s.dupKeys.forEach(function (k) { dupIndex[k].forEach(function (id) { if (id !== s.id) others[id] = true; }); });
+      s.dups = Object.keys(others).map(function (id) { return byId[id]; }).filter(Boolean).sort(function (a, b) { return (b.when || 0) - (a.when || 0); });
+    });
+  }
+
+  // ---------- Notices ----------
+  function notice(text, btnLabel, onClick) {
+    $("noticeText").textContent = text;
+    var b = $("noticeBtn");
+    if (btnLabel) { b.textContent = btnLabel; b.hidden = false; b.onclick = onClick; } else { b.hidden = true; b.onclick = null; }
+    $("notice").hidden = false;
+  }
+  function clearNotice() { $("notice").hidden = true; }
+  function describeMcpError(e) {
+    var code = e && e.code;
+    switch (code) {
+      case "needs_reauth": return { text: "Your Jotform connection has lapsed. Reconnect Jotform in claude.ai Settings → Connectors, then refresh.", retry: false };
+      case "server_not_connected": return { text: "Jotform isn’t connected for your account. Add Jotform in claude.ai Settings → Connectors, then refresh.", retry: false };
+      case "selection_required": return { text: "You have more than one Jotform connector. Choose one when claude.ai asks, then refresh.", retry: false };
+      case "not_in_manifest": case "blocked_by_policy": return { text: "This page isn’t allowed to use your Jotform connector. Allow it from the artifact’s Permissions menu, then refresh.", retry: false };
+      case "approval_required": return { text: "Jotform access needs your approval. Allow it when claude.ai asks.", retry: true };
+      case "server_unavailable": case "rate_limited": return { text: "Jotform didn’t answer in time. Try again in a moment.", retry: true };
+      case "not_granted": case "capability_disabled": case "capability_removed": return { text: "Connectors aren’t available in this view. Open the page in claude.ai to load applications.", retry: false };
+      case "tool_error": return { text: "Jotform reported an error while listing submissions: " + ((e && e.message) || "unknown error"), retry: true };
+      default: return { text: "Couldn’t load from Jotform (" + (code || "error") + "). " + ((e && e.message) || ""), retry: true };
+    }
+  }
+
+  // ---------- Fetching ----------
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function callList(formId, dateTo, fresh) {
+    var input = { filter: { date_filter: dateTo ? ["2015-01-01", dateTo] : [], is_filtered_by_rules: false }, form_ids: [formId], limit: PAGE_CAP, user_query: "List all submissions" };
+    var opts = fresh ? { cache: { refresh: true } } : { cache: { staleTime: 10 * 60 * 1000 } };
+    try {
+      return await mcp.callTool("Jotform", "list_submissions", input, opts);
+    } catch (e) {
+      if (e && e.retryable) { await sleep(800 + Math.random() * 1200); return await mcp.callTool("Jotform", "list_submissions", input, opts); }
+      throw e;
+    }
+  }
+  async function fetchForm(formId, fresh, onProgress) {
+    var all = [], seen = {}, dateTo = null, guard = 0, meta = null;
+    while (guard++ < 12) {
+      var res = await callList(formId, dateTo, fresh);
+      var groups = (res && res._meta && res._meta.submissions) || [];
+      var g = groups[0];
+      if (!g) break;
+      if (!meta && g.form_meta) meta = g.form_meta;
+      var list = g.submissions || [];
+      var earliest = null;
+      list.forEach(function (s) {
+        if (!seen[s.id]) { seen[s.id] = true; all.push(s); }
+        var d = parseWhen(s.subtitle); if (d && (!earliest || d < earliest)) earliest = d;
+      });
+      onProgress(all.length);
+      if (list.length < PAGE_CAP || !earliest) break;
+      var next = ymd(earliest);
+      if (next === dateTo) break;
+      dateTo = next;
+    }
+    return { submissions: all, meta: meta };
+  }
+  async function loadAll(fresh) {
+    if (loading || !mcp) return;
+    loading = true;
+    $("refreshBtn").disabled = true; $("refreshBtn").textContent = "Loading…";
+    clearNotice();
+    var counts = {}, failed = [];
+    function progress() { var n = 0; Object.keys(counts).forEach(function (k) { n += counts[k]; }); $("meta").textContent = "Loading applications… " + n.toLocaleString() + " so far"; }
+    var results = {};
+    for (var i = 0; i < FORM_IDS.length; i++) {
+      var fid = FORM_IDS[i];
+      try {
+        results[fid] = await fetchForm(fid, fresh, function (n) { counts[fid] = n; progress(); });
+      } catch (e) {
+        failed.push({ fid: fid, err: e });
+        if (e && (e.code === "needs_reauth" || e.code === "server_not_connected" || e.code === "not_in_manifest" || e.code === "not_granted" || e.code === "approval_required" || e.code === "blocked_by_policy")) break;
+      }
+    }
+    var next = [];
+    Object.keys(results).forEach(function (fid) {
+      var r = results[fid];
+      if (r.meta && r.meta.questions) formMeta[fid] = r.meta.questions;
+      r.submissions.forEach(function (s) { next.push(normalize(s, fid)); });
+    });
+    if (next.length || !subs.length) {
+      // keep anything from a form that failed this time if we had it before
+      if (failed.length && subs.length) { failed.forEach(function (f) { subs.forEach(function (s) { if (s.formId === f.fid) next.push(s); }); }); }
+      subs = next;
+      buildDupIndex();
+      lastLoaded = new Date();
+    }
+    if (failed.length) {
+      var d = describeMcpError(failed[0].err);
+      var which = failed.map(function (f) { return FORMS[f.fid].label; }).join(", ");
+      notice((failed.length < FORM_IDS.length ? "Couldn’t load the " + which + " form. " : "") + d.text, d.retry ? "Try again" : null, function () { loadAll(true); });
+    }
+    loading = false;
+    $("refreshBtn").disabled = false; $("refreshBtn").textContent = "Refresh from Jotform";
+    $("exportBtn").disabled = !subs.length;
+    $("skel").hidden = true;
+    buildFilterOptions();
+    render();
+    updateMeta();
+  }
+  function updateMeta() {
+    if (!subs.length) { $("meta").textContent = lastLoaded ? "No applications found." : $("meta").textContent; return; }
+    var perForm = FORM_IDS.map(function (fid) { var n = subs.filter(function (s) { return s.formId === fid; }).length; return n.toLocaleString() + " " + FORMS[fid].label; }).join(", ");
+    $("meta").textContent = subs.length.toLocaleString() + " applications (" + perForm + ") · updated " + (lastLoaded ? relTime(lastLoaded) : "—");
+  }
+
+  // ---------- Tracker (artifact database) ----------
+  async function loadTracker() {
+    if (!db) return;
+    try {
+      var sdoc = await db.doc("settings/pipeline").get();
+      if (sdoc.exists && sdoc.data() && Array.isArray(sdoc.data().stages) && sdoc.data().stages.length) stages = sdoc.data().stages.map(String);
+    } catch (e) { /* defaults stand */ }
+    try {
+      var last = "", guard = 0;
+      while (guard++ < 40) {
+        var snap = await db.collection("apps").where("sid", ">", last).orderBy("sid", "asc").limit(1000).get();
+        snap.docs.forEach(function (d) { var data = d.data(); if (data) tracker[d.id] = data; });
+        if (snap.size < 1000) break;
+        last = String(snap.docs[snap.size - 1].data().sid);
+      }
+    } catch (e) {
+      notice("Couldn’t load saved statuses and notes (" + ((e && e.code) || "error") + "). Changes you make now may not be saved.");
+    }
+  }
+  function saveRecord(sid, patch) {
+    var cur = tracker[sid] || { sid: sid, status: stages[0] || "New", assignee: "", notes: "", history: [] };
+    var next = {}; Object.keys(cur).forEach(function (k) { next[k] = cur[k]; }); Object.keys(patch).forEach(function (k) { next[k] = patch[k]; });
+    next.sid = sid; next.updatedAt = new Date().toISOString();
+    tracker[sid] = next;
+    if (!db) { notice("Not signed in — statuses and notes can’t be saved in this view."); return; }
+    var chain = writeChain[sid] || Promise.resolve();
+    writeChain[sid] = chain.then(function () { setSaving("Saving…"); return db.doc("apps/" + sid).set(next); })
+      .then(function () { setSaving("Saved"); })
+      .catch(function (e) { setSaving(""); notice("Couldn’t save changes (" + ((e && e.code) || "error") + "). " + ((e && e.message) || "")); });
+  }
+  function setStatus(sid, status) {
+    var cur = tracker[sid];
+    var prev = cur ? cur.status : null;
+    if (prev === status) return;
+    var history = (cur && Array.isArray(cur.history) ? cur.history : []).slice(-49);
+    history.push({ at: new Date().toISOString(), status: status });
+    saveRecord(sid, { status: status, history: history });
+    render(); if (selectedId === sid) renderDrawer();
+  }
+  function setSaving(t) { var e = document.getElementById("savingNote"); if (e) e.textContent = t; }
+
+  // ---------- Filters ----------
+  function uniqCounts(key) {
+    var m = {};
+    subs.forEach(function (s) { var v = s[key] || "(blank)"; m[v] = (m[v] || 0) + 1; });
+    return Object.keys(m).sort(function (a, b) { return m[b] - m[a] || a.localeCompare(b); }).map(function (k) { return { v: k, n: m[k] }; });
+  }
+  function checkList(container, items, store, labelOf) {
+    container.innerHTML = "";
+    items.forEach(function (it) {
+      var lab = el("label", "check");
+      var cb = el("input"); cb.type = "checkbox"; cb.checked = !!store[it.v];
+      cb.addEventListener("change", function () { if (cb.checked) store[it.v] = true; else delete store[it.v]; shown = 250; render(); });
+      lab.appendChild(cb); lab.appendChild(el("span", null, labelOf ? labelOf(it.v) : it.v)); lab.appendChild(el("span", "n", String(it.n)));
+      container.appendChild(lab);
+    });
+  }
+  function buildFilterOptions() {
+    checkList($("f-form"), FORM_IDS.map(function (fid) { return { v: fid, n: subs.filter(function (s) { return s.formId === fid; }).length }; }), filters.forms, function (fid) { return FORMS[fid].label; });
+    checkList($("f-loc"), uniqCounts("location"), filters.locs);
+    checkList($("f-pos"), uniqCounts("position").slice(0, 40), filters.pos);
+    checkList($("f-src"), uniqCounts("source").slice(0, 25), filters.src);
+  }
+  function hasAny(o) { for (var k in o) if (o.hasOwnProperty(k)) return true; return false; }
+  function applyFilters() {
+    var q = filters.q.trim().toLowerCase();
+    var fF = hasAny(filters.forms), fL = hasAny(filters.locs), fP = hasAny(filters.pos), fS = hasAny(filters.src), fSt = hasAny(filters.statuses);
+    return subs.filter(function (s) {
+      if (q && s.search.indexOf(q) < 0) return false;
+      if (fF && !filters.forms[s.formId]) return false;
+      if (fL && !filters.locs[s.location || "(blank)"]) return false;
+      if (fP && !filters.pos[s.position || "(blank)"]) return false;
+      if (fS && !filters.src[s.source || "(blank)"]) return false;
+      if (fSt && !filters.statuses[statusOf(s.id)]) return false;
+      if (filters.from && s.dateKey < filters.from) return false;
+      if (filters.to && s.dateKey > filters.to) return false;
+      if (filters.resumeOnly && !s.files.length) return false;
+      if (filters.dupOnly && !(s.dups && s.dups.length)) return false;
+      return true;
+    });
+  }
+  function sortRows(rows) {
+    var k = sort.key, dir = sort.dir === "asc" ? 1 : -1;
+    rows.sort(function (a, b) {
+      var r = 0;
+      if (k === "date") r = ((a.when || 0) - (b.when || 0));
+      else if (k === "name") r = a.nameKey.localeCompare(b.nameKey);
+      else if (k === "status") { r = stages.indexOf(statusOf(a.id)) - stages.indexOf(statusOf(b.id)); if (!r) r = (b.when || 0) - (a.when || 0); }
+      else if (k === "position") { r = (a.position || "zz").localeCompare(b.position || "zz"); if (!r) r = (b.when || 0) - (a.when || 0); }
+      return r * dir;
+    });
+    return rows;
+  }
+
+  // ---------- Rendering ----------
+  function renderPipeline(visible) {
+    var p = $("pipeline"); p.innerHTML = "";
+    if (!subs.length) return;
+    var counts = {}; stages.forEach(function (s) { counts[s] = 0; });
+    var other = 0;
+    subs.forEach(function (s) { var st = statusOf(s.id); if (counts.hasOwnProperty(st)) counts[st]++; else other++; });
+    var bar = el("div", "bar");
+    stages.forEach(function (s) { var sp = el("span"); sp.style.width = (100 * counts[s] / subs.length) + "%"; sp.style.background = stageColor(s); sp.title = s + ": " + counts[s]; bar.appendChild(sp); });
+    p.appendChild(bar);
+    var chips = el("div", "chips");
+    var any = hasAny(filters.statuses);
+    stages.forEach(function (s) {
+      var c = el("button", "chip" + (filters.statuses[s] ? " on" : (any ? " off" : "")));
+      var d = el("span", "dot"); d.style.background = stageColor(s); c.appendChild(d);
+      c.appendChild(el("span", null, s + " ")); c.appendChild(el("b", null, String(counts[s])));
+      c.setAttribute("aria-pressed", filters.statuses[s] ? "true" : "false");
+      c.addEventListener("click", function () { if (filters.statuses[s]) delete filters.statuses[s]; else filters.statuses[s] = true; shown = 250; render(); });
+      chips.appendChild(c);
+    });
+    if (other) chips.appendChild(el("span", "chip", other + " in a stage that no longer exists"));
+    p.appendChild(chips);
+  }
+  function statusSelect(sid) {
+    var sel = el("select", "status-select");
+    var cur = statusOf(sid);
+    var list = stages.slice(); if (list.indexOf(cur) < 0) list.push(cur);
+    list.forEach(function (s) { var o = el("option", null, s); o.value = s; if (s === cur) o.selected = true; sel.appendChild(o); });
+    sel.style.borderColor = stageColor(cur);
+    sel.addEventListener("click", function (e) { e.stopPropagation(); });
+    sel.addEventListener("change", function (e) { e.stopPropagation(); setStatus(sid, sel.value); });
+    return sel;
+  }
+  function render() {
+    var rows = sortRows(applyFilters());
+    renderPipeline(rows);
+    var tbody = $("rows"); tbody.innerHTML = "";
+    var filtered = rows.length !== subs.length;
+    $("count").textContent = subs.length ? (filtered ? rows.length.toLocaleString() + " of " + subs.length.toLocaleString() + " applications match" : rows.length.toLocaleString() + " applications") : "";
+    $("table").hidden = !rows.length;
+    $("empty").hidden = !!rows.length || !subs.length;
+    $("empty").textContent = filters.q || filtered ? "No applications match these filters. Clear a filter or widen the date range." : "No applications yet.";
+    var frag = document.createDocumentFragment();
+    rows.slice(0, shown).forEach(function (s) {
+      var tr = el("tr", s.id === selectedId ? "selected" : "");
+      tr.dataset.id = s.id;
+      var tdN = el("td", "name");
+      tdN.appendChild(document.createTextNode(s.name));
+      if (s.dups && s.dups.length) { var dup = el("span", "dup", "×" + (s.dups.length + 1)); dup.title = "Applied " + (s.dups.length + 1) + " times"; tdN.appendChild(dup); }
+      var small = el("small", null, s.email || s.phone || ""); tdN.appendChild(small);
+      tr.appendChild(tdN);
+      var tdD = el("td", "date", fmtDate(s.when)); tdD.title = fmtDateTime(s.when); tr.appendChild(tdD);
+      tr.appendChild(el("td", "col-loc", s.location || "—"));
+      var tdP = el("td", "pos"); tdP.appendChild(document.createTextNode(s.position || "—")); tdP.appendChild(el("span", "tag", s.form)); tr.appendChild(tdP);
+      tr.appendChild(el("td", "col-src", s.source || "—"));
+      var tdS = el("td"); tdS.appendChild(statusSelect(s.id)); tr.appendChild(tdS);
+      var tdA = el("td", "att");
+      s.files.forEach(function (u, i) { var a = el("a", null, i === 0 ? "📄" : "📎"); a.href = u; a.target = "_blank"; a.rel = "noopener"; a.title = fileName(u); a.addEventListener("click", function (e) { e.stopPropagation(); }); tdA.appendChild(a); });
+      tr.appendChild(tdA);
+      tr.addEventListener("click", function () { openDrawer(s.id); });
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+    var more = $("moreBtn");
+    if (rows.length > shown) { more.hidden = false; more.textContent = "Show " + Math.min(250, rows.length - shown) + " more (" + (rows.length - shown) + " remaining)"; } else more.hidden = true;
+  }
+
+  // ---------- Drawer ----------
+  function byId(id) { for (var i = 0; i < subs.length; i++) if (subs[i].id === id) return subs[i]; return null; }
+  function openDrawer(id) {
+    selectedId = id;
+    $("drawer").hidden = false;
+    renderDrawer();
+    document.querySelectorAll("#rows tr").forEach(function (tr) { tr.classList.toggle("selected", tr.dataset.id === id); });
+  }
+  function closeDrawer() { selectedId = null; $("drawer").hidden = true; document.querySelectorAll("#rows tr.selected").forEach(function (tr) { tr.classList.remove("selected"); }); }
+  function kv(dl, k, v, link) {
+    if (!v) return;
+    dl.appendChild(el("dt", null, k));
+    var dd = el("dd");
+    if (link) { var a = el("a", null, v); a.href = link; if (/^https?:/.test(link)) { a.target = "_blank"; a.rel = "noopener"; } dd.appendChild(a); } else dd.textContent = v;
+    dl.appendChild(dd);
+  }
+  function renderDrawer() {
+    var s = byId(selectedId); if (!s) return;
+    var rec = tracker[s.id] || {};
+    $("dName").textContent = s.name;
+    $("dSub").textContent = "Applied " + fmtDateTime(s.when) + " · " + s.form + " form";
+    var body = $("dBody"); body.innerHTML = "";
+
+    // Review
+    var sec = el("div", "sec"); sec.appendChild(el("h3", null, "Review"));
+    var rv = el("div", "review");
+    var l1 = el("label", null, "Status"); l1.appendChild(statusSelect(s.id)); rv.appendChild(l1);
+    var l2 = el("label", null, "Sent to / hiring manager"); var inp = el("input"); inp.type = "text"; inp.value = rec.assignee || ""; inp.placeholder = "Name of the manager you passed this to";
+    inp.addEventListener("change", function () { saveRecord(s.id, { assignee: inp.value.trim() }); }); l2.appendChild(inp); rv.appendChild(l2);
+    var l3 = el("label", null, "Notes"); var ta = el("textarea"); ta.value = rec.notes || ""; ta.placeholder = "Interview impressions, follow-ups, anything worth remembering";
+    ta.addEventListener("input", function () { clearTimeout(notesTimer); notesTimer = setTimeout(function () { if ((tracker[s.id] || {}).notes !== ta.value) saveRecord(s.id, { notes: ta.value }); }, 900); });
+    ta.addEventListener("blur", function () { clearTimeout(notesTimer); if ((tracker[s.id] || {}).notes !== ta.value) saveRecord(s.id, { notes: ta.value }); });
+    l3.appendChild(ta); rv.appendChild(l3);
+    var sv = el("div", "saving"); sv.id = "savingNote"; rv.appendChild(sv);
+    if (Array.isArray(rec.history) && rec.history.length) {
+      var ul = el("ul", "history");
+      rec.history.slice().reverse().forEach(function (h) { var d = new Date(h.at); ul.appendChild(el("li", null, (isNaN(d) ? "" : fmtDateTime(d) + " — ") + h.status)); });
+      rv.appendChild(ul);
+    }
+    sec.appendChild(rv); body.appendChild(sec);
+
+    // Contact
+    sec = el("div", "sec"); sec.appendChild(el("h3", null, "Contact"));
+    var dl = el("dl", "kv");
+    kv(dl, "Email", s.email, s.email ? "mailto:" + s.email : null);
+    kv(dl, "Phone", s.phone, s.phone ? "tel:" + digits(s.phone) : null);
+    kv(dl, "Alternate phone", s.altPhone, s.altPhone ? "tel:" + digits(s.altPhone) : null);
+    kv(dl, "Prefers", s.contact);
+    kv(dl, "Address", s.address);
+    sec.appendChild(dl); body.appendChild(sec);
+
+    // Application
+    sec = el("div", "sec"); sec.appendChild(el("h3", null, "Application"));
+    dl = el("dl", "kv");
+    kv(dl, "Location", s.location); kv(dl, "Position", s.position); kv(dl, "Heard from", s.source); kv(dl, "Referred by", s.referredBy);
+    kv(dl, "Can start", s.start); kv(dl, "Education", s.education); kv(dl, "Worked here before", s.workedBefore); kv(dl, "Applied before", s.appliedBefore);
+    sec.appendChild(dl); body.appendChild(sec);
+
+    // Files
+    sec = el("div", "sec"); sec.appendChild(el("h3", null, "Files and links"));
+    var links = el("div", "links");
+    s.files.forEach(function (u) { var a = el("a", null, "📄 " + fileName(u)); a.href = u; a.target = "_blank"; a.rel = "noopener"; links.appendChild(a); });
+    if (s.portfolioLink) { var pl = el("a", null, "Portfolio link"); pl.href = /^https?:/.test(s.portfolioLink) ? s.portfolioLink : "https://" + s.portfolioLink; pl.target = "_blank"; pl.rel = "noopener"; links.appendChild(pl); }
+    var jl = el("a", null, "Open in Jotform inbox"); jl.href = s.url; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl);
+    if (!s.files.length) links.insertBefore(el("div", "meta", "No resume uploaded."), links.firstChild);
+    sec.appendChild(links); body.appendChild(sec);
+
+    // Duplicates
+    if (s.dups && s.dups.length) {
+      sec = el("div", "sec"); sec.appendChild(el("h3", null, "Also applied (same email or phone)"));
+      var dd = el("div", "dups");
+      s.dups.forEach(function (o) { var a = el("a", null, fmtDate(o.when) + " — " + (o.position || "no position") + " (" + o.form + ", " + statusOf(o.id) + ")"); a.href = "#"; a.addEventListener("click", function (e) { e.preventDefault(); openDrawer(o.id); }); dd.appendChild(a); });
+      sec.appendChild(dd); body.appendChild(sec);
+    }
+
+    // Every answer
+    sec = el("div", "sec"); sec.appendChild(el("h3", null, "Full application"));
+    var qs = formMeta[s.formId] || {};
+    var ans = s.raw.submission_answers || {};
+    var ids = Object.keys(ans).filter(function (q) { return q !== "created_at"; });
+    ids.sort(function (a, b) { var oa = qs[a] ? parseInt(qs[a].order, 10) : 9999, ob = qs[b] ? parseInt(qs[b].order, 10) : 9999; return oa - ob; });
+    var wrap = el("div", "answers"), n = 0;
+    ids.forEach(function (q) {
+      var meta = qs[q]; var type = meta ? meta.type : "";
+      if (SKIP_TYPES[type]) return;
+      var v = ans[q].answer;
+      var txt;
+      if (type === "control_signature") txt = v ? "Signed" : "";
+      else if (type === "control_fileupload") txt = (Array.isArray(v) ? v : [v]).filter(Boolean).map(fileName).join(", ");
+      else txt = toText(v);
+      if (!txt) return;
+      var label = meta ? (s.formId === "232824275836160" ? firstLang(meta.text) : meta.text) : "Question " + q;
+      label = label.replace(/\s+/g, " ").trim(); if (label.length > 140) label = label.slice(0, 137) + "…";
+      var box = el("div"); box.appendChild(el("div", "q", label)); box.appendChild(el("div", "a", txt)); wrap.appendChild(box); n++;
+    });
+    if (!n) wrap.appendChild(el("div", "meta", "No answers to show."));
+    sec.appendChild(wrap); body.appendChild(sec);
+    body.scrollTop = 0;
+  }
+
+  // ---------- Export ----------
+  function csvCell(v) { v = v == null ? "" : String(v); return /[",\n\r]/.test(v) ? "\"" + v.replace(/"/g, "\"\"") + "\"" : v; }
+  async function exportCsv() {
+    if (!downloads) { notice("Downloads aren’t available in this view. Open the page in claude.ai to export."); return; }
+    var rows = sortRows(applyFilters());
+    var head = ["Name", "Email", "Phone", "Applied", "Form", "Location", "Position", "Heard from", "Referred by", "Status", "Sent to", "Notes", "Resume", "Jotform link"];
+    var lines = [head.join(",")];
+    rows.forEach(function (s) {
+      var r = tracker[s.id] || {};
+      lines.push([s.name, s.email, s.phone, s.dateKey, s.form, s.location, s.position, s.source, s.referredBy, statusOf(s.id), r.assignee || "", r.notes || "", s.files.join(" "), s.url].map(csvCell).join(","));
+    });
+    try {
+      await downloads.save({ filename: "rexius-applicants-" + ymd(new Date()) + ".csv", data: "\uFEFF" + lines.join("\r\n") });
+    } catch (e) {
+      if (e && e.code === "declined") return;
+      notice("Couldn’t export: " + ((e && e.message) || (e && e.code) || "unknown error"));
+    }
+  }
+
+  // ---------- Stages modal ----------
+  function openStages() { $("stagesText").value = stages.join("\n"); $("stagesModal").hidden = false; $("stagesText").focus(); }
+  async function saveStages() {
+    var next = $("stagesText").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    var seen = {}; next = next.filter(function (s) { if (seen[s.toLowerCase()]) return false; seen[s.toLowerCase()] = true; return true; });
+    if (!next.length) return;
+    stages = next;
+    $("stagesModal").hidden = true;
+    render(); if (selectedId) renderDrawer();
+    if (db) { try { await db.doc("settings/pipeline").set({ stages: stages, updatedAt: new Date().toISOString() }); } catch (e) { notice("Couldn’t save the stage list (" + ((e && e.code) || "error") + ")."); } }
+  }
+
+  // ---------- Wiring ----------
+  $("q").addEventListener("input", function () { filters.q = this.value; shown = 250; render(); });
+  $("from").addEventListener("change", function () { filters.from = this.value; render(); });
+  $("to").addEventListener("change", function () { filters.to = this.value; render(); });
+  $("resumeOnly").addEventListener("change", function () { filters.resumeOnly = this.checked; render(); });
+  $("dupOnly").addEventListener("change", function () { filters.dupOnly = this.checked; render(); });
+  $("sort").addEventListener("change", function () { var p = this.value.split(":"); sort = { key: p[0], dir: p[1] }; render(); });
+  $("clearBtn").addEventListener("click", function () {
+    filters = { q: "", forms: {}, locs: {}, pos: {}, src: {}, statuses: {}, from: "", to: "", resumeOnly: false, dupOnly: false };
+    $("q").value = ""; $("from").value = ""; $("to").value = ""; $("resumeOnly").checked = false; $("dupOnly").checked = false;
+    buildFilterOptions(); shown = 250; render();
+  });
+  $("moreBtn").addEventListener("click", function () { shown += 250; render(); });
+  $("toggleFilters").addEventListener("click", function () { $("filters").classList.toggle("open"); });
+  $("dClose").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { if (!$("stagesModal").hidden) $("stagesModal").hidden = true; else if (!$("drawer").hidden) closeDrawer(); } });
+  $("refreshBtn").addEventListener("click", function () { loadAll(true); });
+  $("exportBtn").addEventListener("click", exportCsv);
+  $("stagesBtn").addEventListener("click", openStages);
+  $("stagesCancel").addEventListener("click", function () { $("stagesModal").hidden = true; });
+  $("stagesSave").addEventListener("click", saveStages);
+  $("stagesModal").addEventListener("click", function (e) { if (e.target === this) this.hidden = true; });
+
+  // ---------- Boot ----------
+  async function boot() {
+    if (!(window.claude && window.claude.use)) {
+      $("meta").textContent = "Open this page in claude.ai to load applications.";
+      $("skel").textContent = "This page needs to run inside claude.ai to reach your Jotform connector.";
+      return;
+    }
+    var results = await Promise.all([window.claude.use("db"), window.claude.use("mcp"), window.claude.use("downloads")]);
+    db = results[0]; mcp = results[1]; downloads = results[2];
+    if (!downloads) $("exportBtn").title = "Exports aren’t available in this view";
+    await loadTracker();
+    if (!mcp) {
+      $("meta").textContent = "Connectors aren’t available in this view.";
+      $("skel").textContent = "Open this page in claude.ai, where it can use your Jotform connector.";
+      return;
+    }
+    $("meta").textContent = "Loading applications from Jotform… allow access if claude.ai asks.";
+    await loadAll(false);
+  }
+  boot();
+  setInterval(updateMeta, 60000);
+})();
+</script>
+</body>
+</html>

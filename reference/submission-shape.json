@@ -1,0 +1,129 @@
+{
+ "id": "<string>",
+ "title": "<string>",
+ "url": "<string>",
+ "subtitle": "<string>",
+ "submission_answers": {
+  "9": {
+   "answer": {
+    "first": "<string>",
+    "middle": "<string>",
+    "last": "<string>"
+   }
+  },
+  "21": {
+   "answer": [
+    "<string>"
+   ]
+  },
+  "22": {
+   "answer": "<string>"
+  },
+  "72": {
+   "answer": "<string>"
+  },
+  "238": {
+   "answer": "<string>"
+  },
+  "261": {
+   "answer": {
+    "month": "<string>",
+    "day": "<string>",
+    "year": "<string>",
+    "datetime": "<string>"
+   }
+  },
+  "263": {
+   "answer": {
+    "addr_line1": "<string>",
+    "addr_line2": "<string>",
+    "city": "<string>",
+    "state": "<string>",
+    "postal": "<string>"
+   }
+  },
+  "264": {
+   "answer": {
+    "full": "<string>"
+   }
+  },
+  "266": {
+   "answer": "<string>"
+  },
+  "268": {
+   "answer": [
+    "<string>"
+   ]
+  },
+  "272": {
+   "answer": "<string>"
+  },
+  "274": {
+   "answer": "<string>"
+  },
+  "311": {
+   "answer": "<string>"
+  },
+  "312": {
+   "answer": "<string>"
+  },
+  "313": {
+   "answer": "<string>"
+  },
+  "322": {
+   "answer": "<string>"
+  },
+  "323": {
+   "answer": "<string>"
+  },
+  "324": {
+   "answer": "<string>"
+  },
+  "326": {
+   "answer": "<string>"
+  },
+  "328": {
+   "answer": "<string>"
+  },
+  "330": {
+   "answer": "<string>"
+  },
+  "332": {
+   "answer": "<string>"
+  },
+  "333": {
+   "answer": "<string>"
+  },
+  "340": {
+   "answer": "<string>"
+  },
+  "342": {
+   "answer": "<string>"
+  },
+  "344": {
+   "answer": "<string>"
+  },
+  "352": {
+   "answer": "<string>"
+  },
+  "385": {
+   "answer": [
+    "<string>"
+   ]
+  },
+  "386": {
+   "answer": "<string>"
+  },
+  "387": {
+   "answer": [
+    "<string>"
+   ]
+  },
+  "393": {
+   "answer": []
+  },
+  "created_at": {
+   "answer": "<string>"
+  }
+ }
+}
