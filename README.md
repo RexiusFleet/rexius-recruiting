@@ -456,16 +456,23 @@ Two secrets give full read and write access to everything, ignoring every policy
 
 Anyone with a seat in the Rexius organization on Supabase can open the Table Editor and read
 every row of every schema, and Owners and Administrators can copy the service-role key. This is
-the widest exposure in the design and it is a people decision, not a code one. Before real
-applicant data is loaded into the hosted project:
+the widest exposure in the design and it is a people decision, not a code one.
 
-- Review Organization → Team. Remove or downgrade anyone who does not need to read applicant
-  records; prefer Rexius accounts for members who do.
-- If contractors on the other apps sharing this project should not see recruiting data, the
-  clean fix is a Supabase project of its own for recruiting: the migrations re-run there with
-  `npm run db:migrate`, the frontend changes two lines in `web/config.js`, and the "shared
-  project" row in CLAUDE.md section 2 is updated. Decide this before Phase 8 invites users.
-- Turn on multi-factor authentication for every dashboard member (Account → Security).
+**Decision (2026-10-26):** everyone with a seat in the Rexius Supabase organization is a Rexius
+employee authorized to view application data, so organization-wide dashboard access is
+acceptable. The conditions that keep it acceptable:
+
+- Nothing in CLAUDE.md section 5's "never stored" list is ever imported or typed in (no SSNs,
+  bank details, dates of birth, government IDs, wages, signed offer letters, licence numbers,
+  signatures, initials). Every import path enforces this and the tests assert it.
+- The organization's member list stays Rexius-only and is reviewed when someone joins or leaves
+  (Organization → Team). A departing member's seat is removed the same day, and the
+  service-role key is rotated if they were an Owner or Administrator.
+- Multi-factor authentication is on for every dashboard member (Account → Security).
+
+If any of those stop being true, the fallback is a Supabase project of its own for recruiting:
+the migrations re-run there with `npm run db:migrate`, the frontend changes two lines in
+`web/config.js`, and the "shared project" row in CLAUDE.md section 2 is updated.
 
 ### Development data on a developer's machine
 
