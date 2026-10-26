@@ -30,6 +30,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 | Resumes are copied into Supabase Storage with signed URLs | Managers must not need Jotform logins |
 | Static HTML/JS frontend; run locally during development; GitHub Pages when others need it | No build server required |
 | Status, notes, offers, positions etc. live only in Supabase; Jotform stays the source of record for the raw submission | One place to change things |
+| Paper applications that arrive outside Jotform are typed into the tracker by admin or hr (`applications.origin = 'manual'`) with a scan attached under `manual/<application id>/` in the bucket; they are not re-entered into Jotform | The occasional walk-in or mailed form should sit in the same pipeline, duplicate check and reports as everything else; a Jotform re-entry would forge a submission |
 
 ## 3. Working conventions
 
@@ -113,6 +114,7 @@ These apply to the webhook, the backfill, and every later import.
 - **Dropped at import:** driver licence number/expiry/class (30, 31, 35), signature images (238, 333, 369), initials (324–332). Anyone who needs them opens the submission in Jotform via the stored `jotform_url`.
 - **Role-restricted:** offers and offer history, notes, and the raw cleaned `answers` JSON are HR and Admin only. Managers see a curated summary (contact, position, availability, experience, resume).
 - **Resumes:** copied into the `recruiting-files` bucket; served to signed-in users through short-lived signed URLs; never public.
+- **Scans of paper applications:** stored under `manual/<application id>/` in the same bucket as images only (nothing is read out of them into a column), with the same read rule as resumes (any user with a profile, via signed URL); only admin and hr can upload, and nothing under `manual/` can be replaced or deleted from the browser. A paper form may show an SSN, licence number, date of birth or signature, so staff black those out before uploading; the form and the README say so. The typed fields are the same ones the import keeps, plus one free-text `answers.manual_notes` that managers see.
 - **Retention:** keep everything for now (repeat applicants matter in a seasonal business). A purge rule is an open question for HR.
 
 ## 6. Data model (schema `recruiting`)
@@ -121,8 +123,8 @@ These apply to the webhook, the backfill, and every later import.
 | --- | --- | --- |
 | `profiles` | One row per app user | `user_id` (FK auth.users), `role` enum (admin, hr, manager), `name`, `location` (nullable), `created_at` |
 | `forms` | The Jotform forms and their question maps | `id`, `jotform_form_id`, `label`, `language`, `questions` jsonb, `field_map` jsonb, `updated_at` |
-| `applications` | One row per submission | `id`, `jotform_submission_id` (unique), `form_id`, `submitted_at`, `name`, `email`, `email_norm`, `phone`, `phone_norm`, `location`, `position_text`, `position_id` (nullable FK), `source`, `source_detail`, `referred_by`, `available_start`, `answers` jsonb (cleaned), `jotform_url`, `imported_at` |
-| `application_files` | Resumes and portfolios | `id`, `application_id`, `storage_path`, `original_name`, `kind` (resume, portfolio, other), `jotform_url` |
+| `applications` | One row per application: a Jotform submission, or a paper application typed in by staff | `id`, `origin` (jotform, manual; default jotform), `jotform_submission_id` (nullable, unique where not null; required for jotform rows, forbidden for manual), `form_id` (nullable; same rule), `submitted_at` (for manual rows: the date the paper was received), `name`, `email`, `email_norm`, `phone`, `phone_norm`, `location`, `position_text`, `position_id` (nullable FK), `source`, `source_detail`, `referred_by`, `available_start`, `answers` jsonb (cleaned; manual rows hold only `manual_notes`), `jotform_url` (null for manual), `entered_by`, `entered_at` (manual rows; stamped by trigger from the session), `imported_at` |
+| `application_files` | Resumes, portfolios and scans of paper applications | `id`, `application_id`, `storage_path`, `original_name`, `kind` (resume, portfolio, scan, other), `jotform_url` |
 | `application_status` | Current review state, one per application | `application_id` (PK), `stage_id`, `assigned_to` (text), `notes`, `tags` text[], `updated_by`, `updated_at` |
 | `status_history` | Every stage change | `id`, `application_id`, `from_stage_id`, `to_stage_id`, `changed_by`, `changed_at` |
 | `stages` | Pipeline, admin-editable | `id`, `name`, `sort_order`, `is_terminal`, `is_hired` |
@@ -163,6 +165,8 @@ Each phase is one session and one pull request.
 | 7 Positions, channels, documents, reports | Positions UI, postings and spend entry, dropdown-drift check, offers, referrals, document library, Reports page over the views | Channel spend figures; documents to upload | not started |
 | 8 Hosting and invites | GitHub Pages, redirect URLs registered, HR and managers invited | Decide who gets which role | not started |
 | 9 Claude features (later) | Edge Function calling the Anthropic API: role overviews with sources, salary reference research, applicant summaries, posting drafts | Set `ANTHROPIC_API_KEY` as a Supabase secret | later |
+
+Outside the phase table: **manual application entry** (PR 8, branch `claude/manual-applications`, 2026-10-26) adds the "Add application" form for paper applications with scans, migrations `20261030000100` to `20261030000300`, and 21 policy checks. Its view migration appends after Phase 7's `furthest_stage_id`, so on the hosted project Phase 7's migrations go first. README "What the manual-entry change created" has the details.
 
 ## 9. Open questions (ask only when a phase needs the answer)
 
