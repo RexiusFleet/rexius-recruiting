@@ -25,7 +25,7 @@ GitHub Pages later.
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack | 3 |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
-| `web/` | The tracker frontend: `index.html`, `styles.css`, `app.js`, `config.js` (project URL and publishable key only). No build step | 6 |
+| `web/` | The tracker frontend: `index.html`, `styles.css`, `app.js`, `config.js` (project URL and publishable key only). No build step. Includes the Add application form for paper applications | 6 |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
@@ -118,6 +118,61 @@ through Supabase Auth, session persisted in the browser. After sign-in the app r
 
 Verified in the browser against the local stack with all four `*@local.test` users, including
 phone width (the filter rail collapses behind a Filters button; the table scrolls sideways).
+
+## What the manual-entry change created
+
+Paper applications that arrive outside Jotform (handed in at a yard, mailed in) can now be typed
+into the tracker by admin and hr, with a scan of the paper attached. Three migrations:
+
+- `20261030000100_file_kind_scan.sql`: adds `scan` to the `file_kind` enum, in its own file because
+  a new enum value cannot be used in the transaction that adds it.
+- `20261030000200_manual_applications.sql`: `applications.origin` (enum `application_origin`:
+  `jotform`, the default every existing row keeps, or `manual`), `entered_by` and `entered_at`
+  (stamped by a before-insert trigger from the session, null for Jotform rows),
+  `jotform_submission_id` and `form_id` nullable with check constraints (a Jotform row must have
+  both, a manual row neither and no `jotform_url`), the submission-id uniqueness moved to a partial
+  unique index, and one storage policy letting admin and hr upload objects under the `manual/`
+  prefix of bucket `recruiting-files`. No update or delete policy, so a scan cannot be replaced or
+  removed from the browser; the backfill and webhook are unaffected (they insert and update by row
+  id, never with an `on conflict`).
+- `20261030000300_manager_view_manual.sql`: `applications_for_managers` left-joins `forms` so manual
+  rows appear, and appends `origin`, `entered_by`, `entered_at` and `manual_notes` (the one key of
+  `answers` a manual entry writes). It keeps the `furthest_stage_id` column Phase 7's
+  `20261029000200` appends, so apply Phase 7's migrations first; on a database without Phase 7
+  the view simply gains that column here.
+
+Apply with `npm run db:migrate` (or `npm run db:print` and the SQL editor, step 4). Nothing else
+changes on the hosted project: the policy is on `storage.objects`, the bucket already exists.
+
+`web/`: an **Add application** button for admin and hr opens a form with name (required), email,
+phone, city and state, location (the three locations plus CAS), position (the open positions for
+that location, or typed), source (the English form's options), referred by, available start,
+language, notes and skills (stored in `answers.manual_notes`; managers see it), received date
+(defaults to today, becomes `submitted_at`), one or more scans (PDF or image) and an optional
+resume. Files go to `manual/<application id>/<file>` with `application_files` rows of kind `scan`
+or `resume`; `has_resume` is set when a resume was attached. Email and phone are normalised the
+same way as in the backfill (`scripts/backfill/lib/clean.mjs`), so the duplicate badge and the
+"Also applied" list group a paper application with the same person's Jotform submissions, and the
+form warns while typing when the email or phone is already on file. Manual rows carry a **Manual**
+tag in the table and drawer (in place of the form tag), the drawer says who typed them in and
+when, the scan opens through the same 5-minute signed URLs as resumes for staff and managers, the
+Form filter and the header count have a "Manual" entry, and the CSV export gains `Origin` and
+`Entered by` columns. The Phase 7 positions, reports and report views read `applications` without
+joining `forms`, so manual rows count there like any other application; a source breakdown shows
+them under whatever source was chosen.
+
+Verified in the browser against the local stack as hr (created an application with a scan and a
+resume, both opened), as manager (saw the row, the Manual tag, the notes and the scan; could not
+upload or insert) and as admin (typed position, no files, duplicate warning on a known phone).
+`scripts/test-policies.sql` has 21 new checks for the column defaults, the check constraints, a
+manager being unable to insert an application, hr inserting a manual row with the trigger creating
+its status and history rows, the view carrying the row, and `authenticated` writing under `manual/`
+only; 87 PASS in all.
+
+**Before uploading a scan, black out any Social Security number, driver licence number, date of
+birth or signature on the paper copy.** The scan is stored as an image only (nothing is read out of
+it), but it is still a file anyone with a profile can open, and CLAUDE.md section 5 says those
+values are never stored anywhere in this app.
 
 ## Manual steps in Supabase (do these in order)
 
@@ -436,7 +491,7 @@ on the developer's machine.
 | Profile row | A login without a `recruiting.profiles` row sees nothing | Every policy calls `recruiting.current_role()`, which returns null without a profile. `scripts/test-policies.sql` checks this for every table and the curated view |
 | Role | Managers never see notes, tags, raw answers, offers, referrals, contacts or history | Managers have no select policy on those tables; they read `applications_for_managers`, which does not contain those columns |
 | Row-level security | Decides per row, on every query, for every table | Enabled in the same migration that creates each table; the test script asserts no table in `recruiting` has it off |
-| Files | Resumes and portfolios are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows |
+| Files | Resumes, portfolios and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
 | Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain |
 
