@@ -105,7 +105,7 @@ select pg_temp.check('manager: reads the curated view', (select count(*) from re
 select pg_temp.check('manager: view has stage and education', (select count(*) from recruiting.applications_for_managers where stage_name is not null and education is not null) = 5);
 select pg_temp.check('manager: view has employment history', (select jsonb_array_length(employment_history) from recruiting.applications_for_managers where name = 'Priya Natarajan') = 1);
 select pg_temp.check('manager: reads stages', (select count(*) from recruiting.stages) = 8);
-select pg_temp.check('manager: reads positions', (select count(*) from recruiting.positions) = 17);
+select pg_temp.check('manager: reads positions (17 seeded open + 10 past roles from Phase 7)', (select count(*) from recruiting.positions) = 27);
 select pg_temp.check('manager: reads postings', (select count(*) from recruiting.postings) = 1);
 select pg_temp.check('manager: reads forms', (select count(*) from recruiting.forms) = 3);
 select pg_temp.check('manager: reads profiles', (select count(*) from recruiting.profiles) = 3);
@@ -242,4 +242,169 @@ select pg_temp.check('schema: every recruiting table has RLS on',
   (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'recruiting' and c.relkind = 'r' and not c.relrowsecurity) = 0);
 select pg_temp.check('schema: anon has no privileges on any recruiting table',
   (select count(*) from information_schema.role_table_grants where table_schema = 'recruiting' and grantee = 'anon') = 0);
+rollback;
+
+-- ----- Phase 7: position aliases, matching, re-link ----------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hr: reads the seeded aliases', (select count(*) from recruiting.position_aliases) = 9);
+select pg_temp.check('match: exact label at location', recruiting.match_position('Blower Truck Crew Member', 'Lake Oswego') is not null);
+select pg_temp.check('match: case-insensitive alias', recruiting.match_position('blower truck DRIVER', 'Lake Oswego') = (select id from recruiting.positions where title = 'Blower Truck Operator' and location = 'Lake Oswego'));
+select pg_temp.check('match: same text, other location, no match', recruiting.match_position('Blower Truck Driver', 'Central Oregon') is null);
+select pg_temp.check('match: Any and blank never match', recruiting.match_position('Any', 'Lake Oswego') is null and recruiting.match_position('', 'Lake Oswego') is null and recruiting.match_position(null, 'Lake Oswego') is null);
+select pg_temp.check('hr: relink runs and finds nothing to change on the seed', recruiting.relink_applications() = 0);
+insert into recruiting.position_aliases (position_id, alias, location)
+  select id, 'Maint crew (test alias)', 'Eugene/Springfield' from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can add an alias', (select count(*) from recruiting.position_aliases) = 10);
+savepoint sp;
+do $$ begin
+  insert into recruiting.position_aliases (position_id, alias, location)
+    select id, 'maint CREW (TEST alias)', 'Eugene/Springfield' from recruiting.positions where title = 'Flatbed Truck Driver' limit 1;
+  raise notice 'UNEXPECTED: duplicate alias accepted';
+exception when unique_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('alias: unique per location ignoring case', (select count(*) from recruiting.position_aliases) = 10);
+rollback;
+
+begin;
+set local role service_role;
+-- The importer leaves position_id null when the label is unknown; the insert trigger tries aliases.
+insert into recruiting.applications (jotform_submission_id, form_id, submitted_at, name, location, position_text, answers)
+  select '6000000000000000098', id, now(), 'Alias Test Person', 'Lake Oswego', 'Landscape Material Blower Truck Crew Member', '{}' from recruiting.forms where jotform_form_id = '232824275836160';
+select pg_temp.check('service_role: insert trigger links a Spanish label through its alias',
+  (select p.title from recruiting.applications a join recruiting.positions p on p.id = a.position_id where a.jotform_submission_id = '6000000000000000098') = 'Blower Truck Crew Member');
+insert into recruiting.applications (jotform_submission_id, form_id, submitted_at, name, location, position_text, answers)
+  select '6000000000000000097', id, now(), 'Unmatched Test Person', 'Eugene/Springfield', 'Zamboni Driver', '{}' from recruiting.forms where jotform_form_id = '260115636145148';
+select pg_temp.check('service_role: unknown text stays unmatched', (select position_id from recruiting.applications where jotform_submission_id = '6000000000000000097') is null);
+reset role;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+insert into recruiting.position_aliases (position_id, alias, location)
+  select id, 'zamboni driver', 'Eugene/Springfield' from recruiting.positions where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: adding an alias links the waiting application at once',
+  (select p.title from recruiting.applications a join recruiting.positions p on p.id = a.position_id where a.jotform_submission_id = '6000000000000000097') = 'Flatbed Truck Driver');
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: reads aliases', (select count(*) from recruiting.position_aliases) = 9);
+savepoint sp;
+do $$ begin
+  insert into recruiting.position_aliases (position_id, alias, location) select id, 'x', 'Lake Oswego' from recruiting.positions limit 1;
+  raise notice 'UNEXPECTED: manager inserted an alias';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('manager: cannot add an alias', (select count(*) from recruiting.position_aliases) = 9);
+savepoint sp2;
+do $$ begin
+  perform recruiting.relink_applications();
+  raise notice 'UNEXPECTED: manager ran relink';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+select pg_temp.check('manager: relink_applications is refused', true);
+select pg_temp.check('manager: curated view carries furthest_stage_id',
+  (select s.name from recruiting.applications_for_managers v join recruiting.stages s on s.id = v.furthest_stage_id where v.name = 'Priya Natarajan') = 'Interview');
+rollback;
+
+begin;
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: zero aliases', (select count(*) from recruiting.position_aliases) = 0);
+rollback;
+
+-- ----- Phase 7: report views -----------------------------------------------------------------
+begin;
+select pg_temp.check('schema: eight report_* views, all security_barrier',
+  (select count(*) from pg_views v join pg_class c on c.relname = v.viewname join pg_namespace n on n.oid = c.relnamespace and n.nspname = v.schemaname
+   where v.schemaname = 'recruiting' and v.viewname like 'report\_%' and c.reloptions::text like '%security_barrier=true%') = 8);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hr: source/stage report counts every seeded application', (select sum(applications) from recruiting.report_applications_by_source_stage) = 5);
+select pg_temp.check('hr: time in stage has a row per stage', (select count(*) from recruiting.report_time_in_stage) = 8);
+select pg_temp.check('hr: spend by channel by month shows the seeded month', (select spend from recruiting.report_spend_by_channel_month where channel = 'indeed') = 240.00);
+select pg_temp.check('hr: funnel counts Priya as reaching Interview',
+  (select applications from recruiting.report_position_funnel f join recruiting.positions p on p.id = f.position_id where p.title = 'Irrigation Service Technician' and f.stage_name = 'Interview' and f.source = 'Rexius.com') = 1);
+select pg_temp.check('hr: funnel never lists Not selected or Withdrawn', (select count(*) from recruiting.report_position_funnel f join recruiting.stages s on s.id = f.stage_id where s.is_terminal and not s.is_hired) = 0);
+select pg_temp.check('hr: cost by channel has one row per channel', (select count(*) from recruiting.report_cost_by_channel) = 6);
+select pg_temp.check('hr: cost per applicant on indeed = 240 / 2', (select cost_per_applicant from recruiting.report_cost_by_channel where channel = 'indeed') = 120.00);
+select pg_temp.check('hr: offer acceptance is empty on the seed', (select count(*) from recruiting.report_offer_acceptance) = 0);
+select pg_temp.check('hr: time to fill lists every position', (select count(*) from recruiting.report_time_to_fill) = 27);
+select pg_temp.check('hr: seasonality totals the seed', (select sum(applications) from recruiting.report_seasonality) = 5);
+select pg_temp.check('hr: no report column carries notes, answers or pay',
+  (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name like 'report\_%' and column_name in ('notes', 'answers', 'pay_min', 'pay_max', 'tags', 'email', 'phone')) = 0);
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+do $$
+declare v record; n bigint; total bigint := 0;
+begin
+  for v in select viewname from pg_views where schemaname = 'recruiting' and viewname like 'report\_%' loop
+    execute format('select count(*) from recruiting.%I', v.viewname) into n;
+    total := total + n;
+  end loop;
+  if total <> 0 then raise exception 'manager saw % report rows', total; end if;
+end $$;
+select pg_temp.check('manager: every report view returns zero rows', true);
+rollback;
+
+begin;
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: zero report rows', (select count(*) from recruiting.report_seasonality) + (select count(*) from recruiting.report_cost_by_channel) = 0);
+rollback;
+
+-- ----- Phase 7: storage rules for documents/ -------------------------------------------------
+begin;
+-- Two documents: one managers may read, one HR-only; objects written as service_role to stand
+-- in for uploads. A third object has no documents row at all.
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+insert into recruiting.documents (id, title, kind, storage_path, min_role) values
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'Crew description', 'description', 'documents/aaaaaaaa-0000-0000-0000-000000000001/desc.pdf', 'manager'),
+  ('aaaaaaaa-0000-0000-0000-000000000002', 'Interview guide', 'interview_guide', 'documents/aaaaaaaa-0000-0000-0000-000000000002/guide.pdf', 'hr');
+set local role service_role;
+insert into storage.objects (bucket_id, name, metadata) values
+  ('recruiting-files', 'documents/aaaaaaaa-0000-0000-0000-000000000001/desc.pdf', '{"size":1}'),
+  ('recruiting-files', 'documents/aaaaaaaa-0000-0000-0000-000000000002/guide.pdf', '{"size":1}'),
+  ('recruiting-files', 'documents/orphan/nobody-can-see.pdf', '{"size":1}'),
+  ('recruiting-files', 'applications/260115636145148/6000000000000000001/resume.pdf', '{"size":1}');
+reset role;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('storage: manager sees the manager-level document object only',
+  (select string_agg(name, ',') from storage.objects where bucket_id = 'recruiting-files' and name like 'documents/%') = 'documents/aaaaaaaa-0000-0000-0000-000000000001/desc.pdf');
+select pg_temp.check('storage: manager still sees resumes', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'applications/%') = 1);
+savepoint sp;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'documents/x/manager.pdf', '{}');
+  raise notice 'UNEXPECTED: manager uploaded a document';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('storage: manager cannot upload under documents/', (select count(*) from storage.objects where name = 'documents/x/manager.pdf') = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('storage: hr sees both document objects, not the orphan',
+  (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'documents/%') = 2);
+insert into recruiting.documents (id, title, kind, storage_path, min_role) values
+  ('bbbbbbbb-0000-0000-0000-000000000003', 'HR upload', 'template', 'documents/bbbbbbbb-0000-0000-0000-000000000003/new.pdf', 'hr');
+insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'documents/bbbbbbbb-0000-0000-0000-000000000003/new.pdf', '{"size":1}');
+select pg_temp.check('storage: hr can upload under documents/ and read it back', (select count(*) from storage.objects where name = 'documents/bbbbbbbb-0000-0000-0000-000000000003/new.pdf') = 1);
+savepoint sp2;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'applications/x/hr-upload.pdf', '{}');
+  raise notice 'UNEXPECTED: hr uploaded under applications/';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+select pg_temp.check('storage: hr still cannot upload under applications/', (select count(*) from storage.objects where name = 'applications/x/hr-upload.pdf') = 0);
+update storage.objects set metadata = '{"size":2}' where name = 'documents/aaaaaaaa-0000-0000-0000-000000000002/guide.pdf';
+select pg_temp.check('storage: hr can replace a document object', (select metadata ->> 'size' from storage.objects where name = 'documents/aaaaaaaa-0000-0000-0000-000000000002/guide.pdf') = '2');
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+select pg_temp.check('storage: even an admin cannot see a documents/ object with no documents row',
+  (select count(*) from storage.objects where name = 'documents/orphan/nobody-can-see.pdf') = 0);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('storage: no profile sees no document objects', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
 rollback;

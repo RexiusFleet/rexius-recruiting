@@ -37,20 +37,28 @@
 <div class="app" id="appView" hidden>
   <header class="top">
     <div>
-      <h1>Rexius applicants</h1>
+      <h1 id="pageTitle">Rexius applicants</h1>
       <div class="meta" id="meta">Loading…</div>
     </div>
     <div class="actions">
       <span class="who" id="who"></span>
-      <button class="btn filters-toggle" id="toggleFilters" type="button">Filters</button>
-      <button class="btn" id="exportBtn" type="button" disabled>Export CSV</button>
-      <button class="btn" id="refreshBtn" type="button" disabled>Refresh</button>
+      <button class="btn filters-toggle apps-only" id="toggleFilters" type="button">Filters</button>
+      <button class="btn apps-only" id="exportBtn" type="button" disabled>Export CSV</button>
+      <button class="btn apps-only" id="refreshBtn" type="button" disabled>Refresh</button>
       <button class="btn" id="signOutBtn" type="button">Sign out</button>
     </div>
   </header>
 
+  <nav class="nav" id="nav" aria-label="Pages">
+    <a href="#/applications" data-page="applications">Applications</a>
+    <a href="#/positions" data-page="positions">Positions</a>
+    <a href="#/documents" data-page="documents">Documents</a>
+    <a href="#/reports" data-page="reports" class="staff-only">Reports</a>
+  </nav>
+
   <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="btn small" id="noticeBtn" type="button" hidden></button></div>
 
+  <div class="page" id="page-applications">
   <section class="pipeline" id="pipeline" aria-label="Pipeline"></section>
 
   <div class="layout">
@@ -97,6 +105,85 @@
       <button class="btn more" id="moreBtn" type="button" hidden></button>
     </main>
   </div>
+  </div>
+
+  <!-- Positions -->
+  <div class="page pad" id="page-positions" hidden>
+    <div class="toolbar">
+      <input type="search" id="posQ" placeholder="Title, department, manager…" autocomplete="off" aria-label="Search positions">
+      <select id="posStatus" aria-label="Status">
+        <option value="open">Open</option>
+        <option value="draft">Draft</option>
+        <option value="closed">Closed</option>
+        <option value="">All statuses</option>
+      </select>
+      <select id="posLoc" aria-label="Location"><option value="">All locations</option></select>
+      <span class="grow"></span>
+      <button class="btn staff-only" id="posRelinkBtn" type="button">Re-link applications</button>
+      <button class="btn primary staff-only" id="posAddBtn" type="button">Add position</button>
+    </div>
+    <div class="drift" id="posDrift" hidden></div>
+    <div class="tablewrap">
+      <table id="posTable">
+        <thead><tr>
+          <th>Title</th><th>Location</th><th>Status</th><th class="col-dept">Department</th><th class="col-mgr">Hiring manager</th><th class="col-pay">Pay</th><th class="col-open">Opened</th><th class="num">Applicants</th><th class="col-funnel">Funnel</th>
+        </tr></thead>
+        <tbody id="posRows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="posEmpty" hidden></div>
+    <section class="unmatched" id="posUnmatched">
+      <h2>Applications with no matched position</h2>
+      <p class="meta" id="posMatchRate"></p>
+      <div class="tablewrap">
+        <table id="unmatchedTable" hidden>
+          <thead><tr><th>Position as entered</th><th>Location</th><th class="num">Applications</th><th class="staff-only">Link to position</th></tr></thead>
+          <tbody id="unmatchedRows"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="unmatchedHint"></p>
+    </section>
+  </div>
+
+  <!-- Documents -->
+  <div class="page pad" id="page-documents" hidden>
+    <div class="toolbar">
+      <input type="search" id="docQ" placeholder="Title, position…" autocomplete="off" aria-label="Search documents">
+      <select id="docKind" aria-label="Kind">
+        <option value="">All kinds</option>
+        <option value="description">Job descriptions</option>
+        <option value="interview_guide">Interview guides</option>
+        <option value="template">Templates</option>
+        <option value="other">Other</option>
+      </select>
+      <span class="grow"></span>
+      <button class="btn primary staff-only" id="docAddBtn" type="button">Add document</button>
+    </div>
+    <div class="tablewrap">
+      <table id="docTable">
+        <thead><tr>
+          <th>Title</th><th>Kind</th><th class="col-pos">Position</th><th class="col-role">Visible to</th><th class="num">Version</th><th class="col-upd">Updated</th><th>Type</th>
+        </tr></thead>
+        <tbody id="docRows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="docEmpty" hidden></div>
+  </div>
+
+  <!-- Reports -->
+  <div class="page" id="page-reports" hidden>
+    <div class="reports">
+      <aside class="report-list" id="reportList"></aside>
+      <section class="report" id="reportBody">
+        <div class="report-head">
+          <div><h2 id="reportTitle"></h2><p class="meta" id="reportDesc"></p></div>
+          <button class="btn small" id="reportCsv" type="button" disabled>Export CSV</button>
+        </div>
+        <div class="tablewrap" id="reportTable"></div>
+        <div class="hint" id="reportNote"></div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <aside class="drawer" id="drawer" hidden aria-label="Applicant details">
@@ -110,5 +197,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="positions.js"></script>
+<script src="documents.js"></script>
+<script src="reports.js"></script>
 </body>
 </html>
