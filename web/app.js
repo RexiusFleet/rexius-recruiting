@@ -196,7 +196,7 @@
       files: files,
       curated: {
         education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before),
-        employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason) }; })
+        employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason), responsibilities: toText(e.responsibilities) }; })
       }
     });
   }
@@ -438,7 +438,7 @@
     var get = function (key) { var q = fm[key]; return q && typeof q === "string" ? answers[q] : undefined; };
     var txt = function (key, lang) { var t = toText(get(key)); return lang && es ? firstLang(t) : t; };
     var employers = (fm.employers || []).map(function (e) {
-      return { employer: toText(answers[e.name]), location: toText(answers[e.location]), title: toText(answers[e.title]), start: toText(answers[e.start]), end: toText(answers[e.end]), reason: toText(answers[e.reason]) };
+      return { employer: toText(answers[e.name]), location: toText(answers[e.location]), title: toText(answers[e.title]), start: toText(answers[e.start]), end: toText(answers[e.end]), reason: toText(answers[e.reason]), responsibilities: toText(answers[e.responsibilities]) };
     }).filter(function (e) { return e.employer || e.title; });
     return {
       altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), address: txt("address"), contactMethod: txt("contact_method", true),
@@ -564,6 +564,7 @@
       j.appendChild(el("div", null, [e.title, e.employer].filter(Boolean).join(" at ")));
       var when = [e.start, e.end || "present"].filter(Boolean).join(" – ");
       j.appendChild(el("div", "meta", [e.location, when].filter(Boolean).join(" · ")));
+      if (e.responsibilities) j.appendChild(el("div", "resp", e.responsibilities));
       if (e.reason) j.appendChild(el("div", "meta", "Left: " + e.reason));
       wrap.appendChild(j);
     });

@@ -382,7 +382,7 @@ own copy as a function secret.
 
 The tracker is complete and verified locally; it works against the hosted project once:
 
-1. Migration `20261028000100_manager_view_files.sql` is applied (`npm run db:migrate`, or
+1. Migrations `20261028000100` and `20261028000200` are applied (`npm run db:migrate`, or
    `npm run db:print` and the SQL Editor as in step 4).
 2. Schema `recruiting` is exposed in the Data API (step 5).
 3. The page's URL is registered under Authentication → URL Configuration (step 6; GitHub Pages
