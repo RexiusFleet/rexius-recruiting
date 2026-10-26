@@ -2,7 +2,7 @@
 
 This file is the brief for building the Rexius Recruiter app. Commit it as `CLAUDE.md` in the root of the `rexius-recruiting` repository so Claude Code reads it at the start of every session. The `reference/` folder beside it holds the question maps for the three Jotform forms, the shape of a Jotform submission, and the working prototype of the tracker frontend.
 
-Last updated: 2026-10-25 (Phase 6). Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
+Last updated: 2026-10-26 (Phase 7). Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
 
 ## 1. What we are building
 
@@ -128,6 +128,7 @@ These apply to the webhook, the backfill, and every later import.
 | `stages` | Pipeline, admin-editable | `id`, `name`, `sort_order`, `is_terminal`, `is_hired` |
 | `contacts` | Candidate communication log | `id`, `application_id`, `kind` (email, call, text, in_person), `direction`, `template_key` (nullable), `summary`, `by`, `at` |
 | `manager_feedback` | Manager response on a hand-off | `id`, `application_id`, `manager_user_id`, `verdict` (interested, pass, undecided), `note`, `at` |
+| `position_aliases` | Other texts that mean a position at a location (Spanish labels, old labels, CAS free text); `match_position()` and the insert trigger use them | `id`, `position_id`, `alias`, `location`, `note`, `created_by`, `created_at`; unique on lower(alias)+location |
 | `positions` | Open and past roles | `id`, `title`, `location`, `department`, `hiring_manager`, `pay_min`, `pay_max`, `pay_unit`, `status` (draft, open, closed), `opened_at`, `closed_at`, `filled_by_application_id` (nullable), `description_doc_id` (nullable), `jotform_option_label` |
 | `postings` | Where a position was advertised | `id`, `position_id`, `channel` (rexius_com, indeed, craigslist, google_ads, referral, other), `url`, `utm_source`, `utm_campaign`, `posted_at`, `ended_at` |
 | `channel_spend` | Hand-entered figures per period | `id`, `posting_id`, `period_start`, `period_end`, `spend`, `views`, `applies`, `notes` |
@@ -159,8 +160,8 @@ Each phase is one session and one pull request.
 | 3 Schema and roles | Migrations for every table, enums, RLS, helper functions, stages seeded, positions seeded from `docs/positions-seed.csv`, SQL to make the first admin | Fill `docs/positions-seed.csv` (title, location, department, hiring manager, pay range, posting URLs) | done |
 | 4 Backfill | `scripts/backfill/` importing all existing submissions with cleanup rules and resume copy to storage; idempotent on `jotform_submission_id`; migration for the private `recruiting-files` bucket | Put `JOTFORM_API_KEY`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the gitignored `.env` (README step 10); never paste them in chat | done |
 | 5 Webhook | Edge Function `recruiting-jotform-webhook` with a shared-secret check, same cleaning as backfill | Add the function URL to each of the three forms (Jotform settings → Integrations → Webhooks); set the shared secret | not started |
-| 6 Frontend and login | `web/` tracker with login, roles, pipeline, filters, drawer, contact log, CSV export; migration adding `files` to the manager view | — | in review (verified against the local stack; hosted cutover in Phase 8) |
-| 7 Positions, channels, documents, reports | Positions UI, postings and spend entry, dropdown-drift check, offers, referrals, document library, Reports page over the views | Channel spend figures; documents to upload | not started |
+| 6 Frontend and login | `web/` tracker with login, roles, pipeline, filters, drawer, contact log, CSV export; migration adding `files` to the manager view | — | done (hosted cutover in Phase 8) |
+| 7 Positions, channels, documents, reports | Positions UI, postings and spend entry, dropdown-drift check, position aliases and re-link, offers, referrals, document library, Reports page over the `report_*` views | Channel spend figures; documents to upload | in review (verified against the local stack; hosted cutover in Phase 8) |
 | 8 Hosting and invites | GitHub Pages, redirect URLs registered, HR and managers invited | Decide who gets which role | not started |
 | 9 Claude features (later) | Edge Function calling the Anthropic API: role overviews with sources, salary reference research, applicant summaries, posting drafts | Set `ANTHROPIC_API_KEY` as a Supabase secret | later |
 

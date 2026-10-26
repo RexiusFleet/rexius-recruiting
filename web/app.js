@@ -1,10 +1,14 @@
-/* Rexius Recruiter tracker (Phase 6).
+/* Rexius Recruiter tracker (Phase 6; Phase 7 adds pages and the shared RR API).
  * Plain JS on supabase-js v2. Everything lives in schema `recruiting`; row-level security
  * decides what each role may read and write, so this file only has to pick the right source:
  *   admin / hr  -> applications (+ application_status, application_files, forms, positions)
  *   manager     -> applications_for_managers (curated view; no notes, tags, offers, contacts,
  *                  raw answers) and their own manager_feedback rows
  *   no profile  -> the "no access" screen
+ * This file owns sign-in, the Applications page and the drawer. positions.js, documents.js and
+ * reports.js register the other pages through window.RR (bottom of this file) and get the
+ * client, helpers and loaded reference data from it. Pages are picked by the URL hash:
+ * #/applications, #/positions[/id], #/documents[/id], #/reports[/key].
  */
 (function () {
   "use strict";
@@ -27,8 +31,11 @@
   var session = null, profile = null, role = null, staff = false;
   var stages = [], stageById = {};
   var forms = [], formById = {}, formByLabel = {};
-  var positionById = {};
+  var positions = [], positionById = {};
   var profileNames = {};      // user_id -> name, for history and feedback
+  var pages = {};             // page name -> { show(param), hide() }, registered by the page scripts
+  var currentPage = null;
+  var drawerKind = null;      // "app" (applicant) or "custom" (a page's own drawer)
   var apps = [], appById = {};
   var filters = emptyFilters();
   var sort = { key: "date", dir: "desc" };
@@ -93,8 +100,32 @@
   // ---------- Views ----------
   function show(view) {
     ["loginView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
-    if (view !== "appView") closeDrawer();
+    if (view !== "appView") { hideDrawer(); currentPage = null; }
   }
+
+  // ---------- Pages and routing ----------
+  // #/<page>[/<param>]. Unknown pages and pages the role may not use fall back to applications.
+  function parseHash() {
+    var h = location.hash.replace(/^#\/?/, "");
+    var i = h.indexOf("/");
+    return { name: (i < 0 ? h : h.slice(0, i)) || "applications", param: i < 0 ? "" : decodeURIComponent(h.slice(i + 1)) };
+  }
+  function route() {
+    if ($("appView").hidden) return;
+    var r = parseHash();
+    if (!pages[r.name] || (r.name === "reports" && !staff)) { if (location.hash && location.hash !== "#/applications") { location.hash = "#/applications"; return; } r = { name: "applications", param: "" }; }
+    if (currentPage && currentPage !== r.name) { hideDrawer(); if (pages[currentPage].hide) pages[currentPage].hide(); }
+    var changed = currentPage !== r.name;
+    currentPage = r.name;
+    document.body.dataset.page = r.name;
+    document.querySelectorAll(".page").forEach(function (p) { p.hidden = p.id !== "page-" + r.name; });
+    document.querySelectorAll("#nav a").forEach(function (a) { a.classList.toggle("on", a.dataset.page === r.name); a.setAttribute("aria-current", a.dataset.page === r.name ? "page" : "false"); });
+    pages[r.name].show(r.param, changed);
+  }
+  // Routes at once; the hashchange event that follows re-runs route() as a no-op.
+  function go(hash) { if (location.hash !== hash) location.hash = hash; route(); }
+  function registerPage(name, handlers) { pages[name] = handlers; }
+  function setHeader(title, meta) { $("pageTitle").textContent = title; if (meta != null) $("meta").textContent = meta; }
 
   // ---------- Auth ----------
   async function signIn(email, password) {
@@ -113,6 +144,8 @@
   function resetData() {
     apps = []; appById = {}; selectedId = null; filters = emptyFilters(); shown = SHOW_STEP; lastLoaded = null;
     $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…";
+    // The next sign-in may be a different role: every page drops what it cached.
+    Object.keys(pages).forEach(function (n) { if (pages[n].reset) pages[n].reset(); });
   }
 
   async function onSession(s) {
@@ -126,6 +159,7 @@
     document.body.dataset.role = role;
     show("appView");
     await loadRefs();
+    route();
     await loadApps();
   }
 
@@ -134,7 +168,7 @@
     var r = await Promise.all([
       sb.from("stages").select("id, name, sort_order, is_terminal, is_hired").order("sort_order"),
       sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map"),
-      sb.from("positions").select("id, title, location, status"),
+      sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, created_at, updated_at").order("location").order("title"),
       sb.from("profiles").select("user_id, name, role")
     ]);
     var failed = r.filter(function (x) { return x.error; });
@@ -143,13 +177,13 @@
     stages.forEach(function (s, i) { s.index = i; stageById[s.id] = s; });
     forms = r[1].data || []; formById = {}; formByLabel = {};
     forms.forEach(function (f) { f.short = shortFormLabel(f); formById[f.id] = f; formByLabel[f.label] = f; });
-    positionById = {}; (r[2].data || []).forEach(function (p) { positionById[p.id] = p; });
+    positions = r[2].data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
     profileNames = {}; (r[3].data || []).forEach(function (p) { profileNames[p.user_id] = p.name; });
   }
 
   // ---------- Applications ----------
   var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, " +
-    "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at), application_files(id, storage_path, original_name, kind)";
+    "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at), application_files(id, storage_path, original_name, kind), status_history(to_stage_id)";
 
   async function fetchAll(table, columns) {
     var out = [], from = 0;
@@ -157,7 +191,7 @@
       var res = await sb.from(table).select(columns).order("submitted_at", { ascending: false }).order("id").range(from, from + PAGE - 1);
       if (res.error) throw res.error;
       out = out.concat(res.data || []);
-      $("meta").textContent = "Loading applications… " + out.length.toLocaleString() + " so far";
+      if (currentPage === "applications") $("meta").textContent = "Loading applications… " + out.length.toLocaleString() + " so far";
       if (!res.data || res.data.length < PAGE) break;
       from += PAGE;
     }
@@ -170,6 +204,9 @@
     var when = new Date(row.submitted_at);
     var files = (row.application_files || []).slice().sort(function (a, b) { return (a.kind || "").localeCompare(b.kind || ""); });
     var pos = positionById[row.position_id];
+    // Furthest pipeline stage ever reached (Not selected / Withdrawn are not progress): drives funnels.
+    var furthest = 0;
+    (row.status_history || []).forEach(function (h) { var s = stageById[h.to_stage_id]; if (s && (!s.is_terminal || s.is_hired) && s.sort_order > furthest) furthest = s.sort_order; });
     return finish({
       id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "",
       emailNorm: row.email_norm || "", phoneNorm: row.phone_norm || "", city: row.city, state: row.state,
@@ -178,6 +215,7 @@
       hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: row.form_id, form: f ? f.short : "", formLabel: f ? f.label : "",
       jotformUrl: row.jotform_url || "", submissionId: row.jotform_submission_id,
       stageId: st.stage_id, assignedTo: st.assigned_to || "", notes: st.notes || "", tags: st.tags || [], stageSince: st.stage_since ? new Date(st.stage_since) : null,
+      furthestSort: furthest,
       files: files
     });
   }
@@ -193,6 +231,7 @@
       hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: f ? f.id : null, form: f ? f.short : row.form_label, formLabel: row.form_label,
       jotformUrl: "", submissionId: null,
       stageId: row.stage_id, assignedTo: row.assigned_to || "", notes: "", tags: [], stageSince: row.stage_since ? new Date(row.stage_since) : null,
+      furthestSort: stageById[row.furthest_stage_id] ? stageById[row.furthest_stage_id].sort_order : 0,
       files: files,
       curated: {
         education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before),
@@ -238,12 +277,22 @@
     $("refreshBtn").disabled = false; $("refreshBtn").textContent = "Refresh";
     $("exportBtn").disabled = !apps.length;
     $("skel").hidden = true;
+    if (currentPage === "applications") $("meta").textContent = appsMeta();
     buildFilterOptions();
     render();
     updateMeta();
-    if (selectedId && appById[selectedId]) renderDrawer(); else closeDrawer();
+    if (drawerKind === "app") { if (selectedId && appById[selectedId]) renderDrawer(); else closeDrawer(); }
+    if (currentPage && currentPage !== "applications" && pages[currentPage].appsChanged) pages[currentPage].appsChanged();
+  }
+  function appsMeta() {
+    if (!apps.length) return lastLoaded ? "No applications found." : "Loading…";
+    var perForm = {};
+    apps.forEach(function (a) { perForm[a.form] = (perForm[a.form] || 0) + 1; });
+    var parts = Object.keys(perForm).sort(function (a, b) { return perForm[b] - perForm[a]; }).map(function (k) { return perForm[k].toLocaleString() + " " + k; }).join(", ");
+    return apps.length.toLocaleString() + " applications (" + parts + ") · updated " + (lastLoaded ? relTime(lastLoaded) : "—");
   }
   function updateMeta() {
+    if (currentPage !== "applications") return;
     if (!apps.length) { $("meta").textContent = lastLoaded ? "No applications found." : $("meta").textContent; return; }
     var perForm = {};
     apps.forEach(function (a) { perForm[a.form] = (perForm[a.form] || 0) + 1; });
@@ -416,12 +465,35 @@
 
   // ---------- Drawer ----------
   function openDrawer(id) {
-    selectedId = id;
+    selectedId = id; drawerKind = "app";
     $("drawer").hidden = false;
     renderDrawer();
     document.querySelectorAll("#rows tr").forEach(function (tr) { tr.classList.toggle("selected", tr.dataset.id === id); });
   }
-  function closeDrawer() { selectedId = null; $("drawer").hidden = true; document.querySelectorAll("#rows tr.selected").forEach(function (tr) { tr.classList.remove("selected"); }); }
+  // A page's own drawer (position, document): same panel, the page fills the body.
+  function showDrawer(title, sub, build) {
+    selectedId = null; drawerKind = "custom";
+    $("dName").textContent = title; $("dSub").textContent = sub || "";
+    var body = $("dBody"); body.innerHTML = "";
+    build(body); body.scrollTop = 0;
+    $("drawer").hidden = false;
+  }
+  // hideDrawer: just hide (page switches, sign-out). closeDrawer: the user closed it, so the
+  // page that owns a custom drawer gets to tidy up (clear its selection, reset the hash).
+  function hideDrawer() {
+    selectedId = null; drawerKind = null; $("drawer").hidden = true;
+    document.querySelectorAll("tr.selected").forEach(function (tr) { tr.classList.remove("selected"); });
+  }
+  function closeDrawer() {
+    var wasCustom = drawerKind === "custom";
+    hideDrawer();
+    if (wasCustom && currentPage && pages[currentPage].drawerClosed) pages[currentPage].drawerClosed();
+  }
+  // Open an applicant from another page: switch to Applications and show the drawer.
+  function openApplicant(id) {
+    if (currentPage !== "applications") go("#/applications");
+    if (appById[id]) openDrawer(id);
+  }
   function kv(dl, k, v, link) {
     if (!v) return;
     dl.appendChild(el("dt", null, k));
@@ -522,6 +594,11 @@
     }
 
     if (staff) {
+      // Offers (never a wage) and referral bonus tracking
+      sec = section(body, "Offers"); sec.id = "offersSec";
+      sec.appendChild(el("div", "hint", "Loading…"));
+      sec = section(body, "Referral"); sec.id = "referralSec";
+      sec.appendChild(el("div", "hint", "Loading…"));
       // Contact log
       sec = section(body, "Contact log"); sec.id = "contactSec";
       var log = el("ul", "log"); log.id = "contactList"; log.appendChild(el("li", "hint", "Loading…")); sec.appendChild(log);
@@ -577,7 +654,9 @@
       sb.from("applications").select("answers").eq("id", id).single(),
       sb.from("status_history").select("id, from_stage_id, to_stage_id, changed_by, changed_at").eq("application_id", id).order("changed_at", { ascending: false }),
       sb.from("contacts").select("id, kind, direction, summary, by_name, at").eq("application_id", id).order("at", { ascending: false }),
-      sb.from("manager_feedback").select("id, manager_user_id, verdict, note, at").eq("application_id", id).order("at", { ascending: false })
+      sb.from("manager_feedback").select("id, manager_user_id, verdict, note, at").eq("application_id", id).order("at", { ascending: false }),
+      sb.from("offers").select(OFFER_COLS).eq("application_id", id).order("offered_at", { ascending: false }),
+      sb.from("referrals").select("id, application_id, referrer_name, referrer_employee, hired, bonus_paid_at, notes").eq("application_id", id).maybeSingle()
     ]);
     if (selectedId !== id) return; // user moved on
     var answers = (r[0].data && r[0].data.answers) || {};
@@ -587,7 +666,132 @@
     renderHistory(r[1].data || [], r[1].error);
     renderContacts(r[2].data || [], r[2].error);
     renderFeedbackList(r[3].data || [], r[3].error);
+    renderOffers(a, r[4].data || [], r[4].error);
+    renderReferral(a, r[5].data || null, r[5].error);
     renderAnswers(a, answers);
+  }
+
+  // ---------- Offers (staff). No pay field exists and none may be added (CLAUDE.md section 5). ----------
+  var OFFER_COLS = "id, position_id, offered_at, outcome, responded_at, notes, created_by, created_at";
+  var OUTCOME_LABEL = { pending: "Pending", accepted: "Accepted", declined: "Declined", withdrawn: "Withdrawn" };
+  function positionSelect(selectedId, allowNone) {
+    var sel = el("select");
+    if (allowNone) { var o0 = el("option", null, "No position"); o0.value = ""; sel.appendChild(o0); }
+    var groups = {};
+    positions.forEach(function (p) { (groups[p.location] = groups[p.location] || []).push(p); });
+    Object.keys(groups).sort().forEach(function (loc) {
+      var og = el("optgroup"); og.label = loc;
+      groups[loc].forEach(function (p) { var o = el("option", null, p.title + (p.status !== "open" ? " (" + p.status + ")" : "")); o.value = p.id; if (p.id === selectedId) o.selected = true; og.appendChild(o); });
+      sel.appendChild(og);
+    });
+    return sel;
+  }
+  async function reloadOffers(a) {
+    var r = await sb.from("offers").select(OFFER_COLS).eq("application_id", a.id).order("offered_at", { ascending: false });
+    if (selectedId === a.id) renderOffers(a, r.data || [], r.error);
+  }
+  function renderOffers(a, rows, error) {
+    var sec = $("offersSec"); if (!sec) return;
+    sec.querySelectorAll(".hint, .log, .review").forEach(function (n) { n.remove(); });
+    if (error) { sec.appendChild(el("div", "hint", "Could not load offers: " + errText(error))); return; }
+    if (!rows.length) sec.appendChild(el("div", "hint", "No offer recorded. Offers never store a wage; put pay in the position's advertised range."));
+    else {
+      var ul = el("ul", "log");
+      rows.forEach(function (o) {
+        var li = el("li");
+        var p = positionById[o.position_id];
+        li.appendChild(el("div", "when", "Offered " + fmtDay(o.offered_at) + (p ? " · " + p.title + ", " + p.location : "") + (o.created_by && profileNames[o.created_by] ? " · by " + profileNames[o.created_by] : "")));
+        var row = el("div", "row");
+        var outcome = el("select", "small");
+        Object.keys(OUTCOME_LABEL).forEach(function (k) { var opt = el("option", null, OUTCOME_LABEL[k]); opt.value = k; if (o.outcome === k) opt.selected = true; outcome.appendChild(opt); });
+        var resp = el("input"); resp.type = "date"; resp.value = o.responded_at || ""; resp.title = "Responded on";
+        var save = async function () {
+          var patch = { outcome: outcome.value, responded_at: resp.value || null };
+          if (patch.outcome !== "pending" && !patch.responded_at) { patch.responded_at = ymd(new Date()); resp.value = patch.responded_at; }
+          var r = await sb.from("offers").update(patch).eq("id", o.id);
+          if (r.error) { notice("Could not save the offer: " + errText(r.error)); return; }
+          o.outcome = patch.outcome; o.responded_at = patch.responded_at;
+        };
+        outcome.addEventListener("change", save); resp.addEventListener("change", save);
+        row.appendChild(outcome); row.appendChild(resp);
+        var del = el("button", "link", "Remove"); del.type = "button";
+        del.addEventListener("click", async function () {
+          if (!confirm("Remove this offer record?")) return;
+          var r = await sb.from("offers").delete().eq("id", o.id);
+          if (r.error) { notice("Could not remove the offer: " + errText(r.error)); return; }
+          reloadOffers(a);
+        });
+        row.appendChild(del);
+        li.appendChild(row);
+        if (o.notes) li.appendChild(el("div", "meta", o.notes));
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+    }
+    var form = el("form", "review");
+    var r1 = el("div", "row");
+    var ld = el("label", null, "Offered on"); var dt = el("input"); dt.type = "date"; dt.value = ymd(new Date()); dt.required = true; ld.appendChild(dt); r1.appendChild(ld);
+    var lp = el("label", null, "Position"); var ps = positionSelect(a.positionId, true); lp.appendChild(ps); r1.appendChild(lp);
+    form.appendChild(r1);
+    var r2 = el("div", "row");
+    var lo = el("label", null, "Outcome"); var oc = el("select"); Object.keys(OUTCOME_LABEL).forEach(function (k) { var opt = el("option", null, OUTCOME_LABEL[k]); opt.value = k; oc.appendChild(opt); }); lo.appendChild(oc); r2.appendChild(lo);
+    var lr = el("label", null, "Responded on"); var rd = el("input"); rd.type = "date"; lr.appendChild(rd); r2.appendChild(lr);
+    form.appendChild(r2);
+    var ln = el("label", null, "Notes (no pay figures)"); var nt = el("textarea"); nt.style.minHeight = "48px"; nt.placeholder = "Start date discussed, conditions, who made the offer"; ln.appendChild(nt); form.appendChild(ln);
+    var btn = el("button", "btn small", "Record offer"); btn.type = "submit"; form.appendChild(btn);
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault(); btn.disabled = true;
+      var payload = { application_id: a.id, position_id: ps.value || null, offered_at: dt.value, outcome: oc.value, responded_at: rd.value || null, notes: nt.value.trim() || null, created_by: session.user.id };
+      if (payload.outcome !== "pending" && !payload.responded_at) payload.responded_at = ymd(new Date());
+      var r = await sb.from("offers").insert(payload);
+      btn.disabled = false;
+      if (r.error) { notice("Could not record the offer: " + errText(r.error)); return; }
+      reloadOffers(a);
+    });
+    sec.appendChild(form);
+  }
+
+  // ---------- Referral (staff): one row per application ----------
+  function renderReferral(a, row, error) {
+    var sec = $("referralSec"); if (!sec) return;
+    sec.querySelectorAll(".hint, .review").forEach(function (n) { n.remove(); });
+    if (error) { sec.appendChild(el("div", "hint", "Could not load the referral: " + errText(error))); return; }
+    if (!row && !a.referredBy && a.source.toLowerCase().indexOf("refer") < 0) {
+      var hint = el("div", "hint", "Not a referral. ");
+      var add = el("button", "link", "Record one anyway"); add.type = "button"; add.addEventListener("click", function () { renderReferralForm(a, null, sec, hint); }); hint.appendChild(add);
+      sec.appendChild(hint); return;
+    }
+    renderReferralForm(a, row, sec, null);
+  }
+  function renderReferralForm(a, row, sec, replace) {
+    if (replace) replace.remove();
+    var form = el("form", "review");
+    var r1 = el("div", "row");
+    var l1 = el("label", null, "Referred by (as written)"); var name = el("input"); name.type = "text"; name.required = true; name.value = row ? row.referrer_name : (a.referredBy || ""); l1.appendChild(name); r1.appendChild(l1);
+    var l2 = el("label", null, "Matched employee"); var emp = el("input"); emp.type = "text"; emp.placeholder = "Employee name as on payroll"; emp.value = row ? (row.referrer_employee || "") : ""; l2.appendChild(emp); r1.appendChild(l2);
+    form.appendChild(r1);
+    var r2 = el("div", "row");
+    var l3 = el("label", "check"); var hired = el("input"); hired.type = "checkbox"; hired.checked = !!(row && row.hired); l3.appendChild(hired); l3.appendChild(document.createTextNode(" Hired")); r2.appendChild(l3);
+    var l4 = el("label", null, "Bonus paid on"); var paid = el("input"); paid.type = "date"; paid.value = row ? (row.bonus_paid_at || "") : ""; l4.appendChild(paid); r2.appendChild(l4);
+    form.appendChild(r2);
+    var l5 = el("label", null, "Notes"); var nt = el("textarea"); nt.style.minHeight = "40px"; nt.value = row ? (row.notes || "") : ""; l5.appendChild(nt); form.appendChild(l5);
+    var btns = el("div", "row");
+    var btn = el("button", "btn small", row ? "Save referral" : "Record referral"); btn.type = "submit"; btns.appendChild(btn);
+    var st = el("span", "saving"); btns.appendChild(st);
+    if (row) { var del = el("button", "link", "Remove"); del.type = "button"; del.addEventListener("click", async function () { if (!confirm("Remove the referral record?")) return; var r = await sb.from("referrals").delete().eq("id", row.id); if (r.error) { notice("Could not remove: " + errText(r.error)); return; } renderReferral(a, null, null); }); btns.appendChild(del); }
+    form.appendChild(btns);
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (paid.value && !hired.checked) { st.textContent = "Tick Hired before recording a bonus payment."; return; }
+      btn.disabled = true; st.textContent = "Saving…";
+      var payload = { application_id: a.id, referrer_name: name.value.trim(), referrer_employee: emp.value.trim() || null, hired: hired.checked, bonus_paid_at: paid.value || null, notes: nt.value.trim() || null };
+      var r = row ? await sb.from("referrals").update(payload).eq("id", row.id).select().single() : await sb.from("referrals").insert(payload).select().single();
+      btn.disabled = false;
+      if (r.error) { st.textContent = ""; notice("Could not save the referral: " + errText(r.error)); return; }
+      row = r.data; btn.textContent = "Save referral"; st.textContent = "Saved";
+      if (!form.querySelector("button.link")) { var del2 = el("button", "link", "Remove"); del2.type = "button"; del2.addEventListener("click", async function () { if (!confirm("Remove the referral record?")) return; var rr = await sb.from("referrals").delete().eq("id", row.id); if (rr.error) { notice("Could not remove: " + errText(rr.error)); return; } renderReferral(a, null, null); }); btns.appendChild(del2); }
+    });
+    sec.appendChild(form);
   }
   function renderHistory(rows, error) {
     var ul = $("historyList"); if (!ul) return; ul.innerHTML = "";
@@ -704,6 +908,15 @@
 
   // ---------- Export ----------
   function csvCell(v) { v = v == null ? "" : String(v); return /[",\n\r]/.test(v) ? "\"" + v.replace(/"/g, "\"\"") + "\"" : v; }
+  function downloadCsv(name, head, rows) {
+    var lines = [head.map(csvCell).join(",")];
+    rows.forEach(function (r) { lines.push(r.map(csvCell).join(",")); });
+    var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = el("a"); link.href = url; link.download = name + "-" + ymd(new Date()) + ".csv";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
   function exportCsv() {
     var rows = sortRows(applyFilters());
     var head = ["Name", "Email", "Phone", "City", "State", "Applied", "Form", "Location", "Position", "Matched opening", "Heard from", "Referred by", "Can start", "Status", "In stage since", "Sent to", "Resume", "Files"];
@@ -744,6 +957,30 @@
   $("refreshBtn").addEventListener("click", loadApps);
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);
+  window.addEventListener("hashchange", route);
+  registerPage("applications", {
+    show: function () { setHeader("Rexius applicants", appsMeta()); },
+    hide: function () {}
+  });
+
+  // ---------- Shared API for the page scripts (positions.js, documents.js, reports.js) ----------
+  window.RR = {
+    sb: sb, $: $, el: el, BUCKET: BUCKET, SIGNED_URL_SECONDS: SIGNED_URL_SECONDS,
+    fmtDate: fmtDate, fmtDay: fmtDay, fmtDateTime: fmtDateTime, ymd: ymd, relTime: relTime, errText: errText, fileName: fileName,
+    notice: notice, clearNotice: clearNotice, downloadCsv: downloadCsv, csvCell: csvCell,
+    registerPage: registerPage, go: go, setHeader: setHeader, showDrawer: showDrawer, closeDrawer: closeDrawer, openApplicant: openApplicant,
+    section: section, kv: kv, stageColor: stageColor, stageName: stageName, positionSelect: positionSelect,
+    state: function () { return { session: session, profile: profile, role: role, staff: staff, stages: stages, stageById: stageById, forms: forms, formById: formById, positions: positions, positionById: positionById, profileNames: profileNames, apps: apps, appById: appById, lastLoaded: lastLoaded }; },
+    // Re-read positions (after an edit on the Positions page) and refresh the applications' matched titles.
+    reloadPositions: async function () {
+      var r = await sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, created_at, updated_at").order("location").order("title");
+      if (r.error) { notice("Could not reload positions: " + errText(r.error)); return positions; }
+      positions = r.data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
+      apps.forEach(function (a) { var p = positionById[a.positionId]; a.positionTitle = p ? p.title : ""; });
+      return positions;
+    },
+    reloadApps: loadApps
+  };
 
   // ---------- Boot ----------
   // getSession() restores a persisted session from localStorage; onAuthStateChange covers sign-in,
