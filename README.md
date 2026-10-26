@@ -23,9 +23,9 @@ GitHub Pages later.
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
-| `scripts/test-policies.sql` | Policy checks as every role against the local stack | 3 |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack (126 checks after Phase 7 and manual entry) | 3+ |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
-| `web/` | The tracker frontend: `index.html`, `styles.css`, `app.js`, `config.js` (project URL and publishable key only). No build step. Includes the Add application form for paper applications | 6 |
+| `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `config.js` (project URL and publishable key only). No build step | 6, 7 |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
@@ -119,6 +119,70 @@ through Supabase Auth, session persisted in the browser. After sign-in the app r
 Verified in the browser against the local stack with all four `*@local.test` users, including
 phone width (the filter rail collapses behind a Filters button; the table scrolls sideways).
 
+## What Phase 7 created
+
+Four migrations, all in schema `recruiting` (plus policies on `storage.objects` for this app's
+bucket only):
+
+- `20261029000100_position_aliases_and_matching.sql`: table `position_aliases` (text + location
+  → position; unique per location ignoring case; anyone with a profile reads, staff write);
+  `match_position(text, location)` (exact dropdown label, then title, then alias, all
+  case-insensitive, open positions first); `relink_applications(p_all)` (sets `position_id` on
+  applications that have none; staff only, returns the number changed); a `before insert`
+  trigger on `applications` that runs the same matching so the webhook and backfill get aliases
+  for free; an `after insert` trigger on `position_aliases` that links waiting applications the
+  moment an alias is added. It also seeds ten **closed** positions for roles that appeared ten or
+  more times in the backfilled data with no positions row (Retail Yard Associate, Marketing and
+  Content Creator, CDL B Truck Driver, …; they were on the dropdowns before
+  `docs/positions-seed.csv` was written) and nine aliases for Spanish-form labels that clearly
+  name an existing position. On the local data that took the match rate from 543 to 1,221 of
+  1,609 applications; most of the rest answered "Any".
+- `20261029000200_manager_view_furthest_stage.sql`: `applications_for_managers` gains
+  `furthest_stage_id` (the furthest non-terminal stage, or Hired, the application ever reached),
+  so managers see the same funnel as staff without reading `status_history`.
+- `20261029000300_documents_storage_policies.sql`: Storage rules for the document library.
+  Objects under `documents/` in bucket `recruiting-files` are readable only when a
+  `recruiting.documents` row points at them *and* the caller may read that row (so `min_role`
+  applies to the file as well as the metadata); staff may upload, replace and delete under
+  `documents/`; the resume prefix stays `service_role`-only. The Phase 4 read policy is
+  re-created with the extra condition.
+- `20261029000400_report_views.sql`: `source_channel(text)` (form answer → posting channel) and
+  eight views, `report_applications_by_source_stage`, `report_time_in_stage`,
+  `report_spend_by_channel_month`, `report_position_funnel`, `report_cost_by_channel`,
+  `report_offer_acceptance`, `report_time_to_fill`, `report_seasonality`. Every one filters on
+  `recruiting.is_staff()` inside the view, so managers and users without a profile get no rows.
+  None carries notes, raw answers, pay or contact details; they are counts, sums and dates.
+
+`web/`: four pages behind the header tabs (Applications, Positions, Documents, Reports; Reports
+is hidden from managers and `#/reports` falls back to Applications for them):
+
+- **Positions** (`positions.js`): list with status and location filters, applicants per position
+  and a funnel (Applied → Reviewed → Sent → Interview → Offer → Hired, counting the furthest stage
+  reached); a drift box comparing open positions with the English form's three position dropdowns
+  in both directions ("dropdown still lists a closed role", "open role not on the form", plus
+  "dropdown lists a role with no position" with an Add button); match rate and a list of
+  still-unmatched position texts with a "Link" control that saves an alias and links the
+  applications immediately, or "New position"; a "Re-link applications" button. The drawer edits
+  every column (title, location, department, hiring manager, advertised pay range and unit,
+  status, opened and closed dates, form label, filled-by application, description document),
+  lists aliases (add/remove), postings (channel, URL, UTM source and campaign, posted and ended
+  dates, notes) with spend rows per period (spend, views, applies) under each, and the linked
+  applicants. Managers get the same page read-only without spend.
+- **Documents** (`documents.js`): the library. Each document is an uploaded file (stored at
+  `documents/<id>/<file name>` in the private bucket, opened through a 5-minute signed URL) or
+  inline text (templates, shown with a Copy button). Staff add, edit, replace the file (version
+  goes up, the old object is removed) and delete; everyone sees the documents their role allows.
+- **Reports** (`reports.js`): one table per view with a bar on the column that matters and a CSV
+  export of what is shown. Pivots (source × stage, month × channel, position × stage, source ×
+  stage with percentages, month × location) are built in the browser from the long-format views.
+  Reports re-read the view every time they are opened.
+- **Applications drawer** (staff): an Offers section (offered on, position, outcome, responded on,
+  notes; outcome and date editable inline; never a wage, there is no field for one) and a
+  Referral section (referrer as written, matched employee, hired, bonus paid on, notes), on top of
+  the Phase 6 contents.
+
+Verified in the browser against the local stack as admin, hr and manager, and with
+`scripts/test-policies.sql` (105 checks, all PASS after `db reset`).
 ## What the manual-entry change created
 
 Paper applications that arrive outside Jotform (handed in at a yard, mailed in) can now be typed
@@ -167,7 +231,7 @@ upload or insert) and as admin (typed position, no files, duplicate warning on a
 `scripts/test-policies.sql` has 21 new checks for the column defaults, the check constraints, a
 manager being unable to insert an application, hr inserting a manual row with the trigger creating
 its status and history rows, the view carrying the row, and `authenticated` writing under `manual/`
-only; 87 PASS in all.
+only; 126 PASS in all with Phase 7's checks.
 
 **Before uploading a scan, black out any Social Security number, driver licence number, date of
 birth or signature on the paper copy.** The scan is stored as an image only (nothing is read out of
@@ -437,13 +501,36 @@ own copy as a function secret.
 
 The tracker is complete and verified locally; it works against the hosted project once:
 
-1. Migrations `20261028000100` and `20261028000200` are applied (`npm run db:migrate`, or
-   `npm run db:print` and the SQL Editor as in step 4).
+1. Migrations `20261028000100` through `20261029000400` are applied (`npm run db:migrate`, or
+   `npm run db:print` and the SQL Editor as in step 4). The Phase 7 ones can run before or after
+   the backfill: the insert trigger links new rows as they arrive, and "Re-link applications" on
+   the Positions page (or `select recruiting.relink_applications();`) catches up rows imported
+   earlier.
 2. Schema `recruiting` is exposed in the Data API (step 5).
 3. The page's URL is registered under Authentication → URL Configuration (step 6; GitHub Pages
    adds its own URL in Phase 8).
 4. `web/config.js` holds the hosted URL and publishable key instead of the local ones.
 5. Each user has an auth account and a `profiles` row (step 7).
+
+### 12. Phase 7 data to enter by hand
+
+Nothing in Phase 7 is imported; these are typed in through the app by admin or hr:
+
+- **Positions**: department, hiring manager, advertised pay range, opened and closed dates for
+  the 17 seeded open roles, and dates for the ten closed roles the migration added from the data.
+  Check the drift box on the Positions page after changing the Jotform dropdowns.
+- **Aliases**: the Positions page lists every position text with no match. Link each to a
+  position (or add it as a new, usually closed, position). Texts that cannot be linked ("Any",
+  blank) are counted but not listed.
+- **Postings and spend**: for each open position, add where it is posted and, per month, the
+  spend, views and applies from Indeed, Craigslist and Google Ads reporting. The cost-per-applicant
+  and cost-per-hire report stays empty for a channel until spend is entered for it.
+- **Documents**: upload the current job descriptions and interview guides, set "Visible to"
+  (managers may see descriptions; keep interview guides at HR), and paste message templates as
+  text. Link each description to its position from the position's drawer.
+- **Offers and referrals**: record offers from the applicant drawer as they happen (the
+  acceptance and time-to-fill reports depend on them); tick Hired and enter the bonus date on
+  the referral when paid.
 
 ## Two repos, one project
 
@@ -491,9 +578,10 @@ on the developer's machine.
 | Profile row | A login without a `recruiting.profiles` row sees nothing | Every policy calls `recruiting.current_role()`, which returns null without a profile. `scripts/test-policies.sql` checks this for every table and the curated view |
 | Role | Managers never see notes, tags, raw answers, offers, referrals, contacts or history | Managers have no select policy on those tables; they read `applications_for_managers`, which does not contain those columns |
 | Row-level security | Decides per row, on every query, for every table | Enabled in the same migration that creates each table; the test script asserts no table in `recruiting` has it off |
-| Files | Resumes, portfolios and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
+| Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
+| Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
-| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain |
+| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above
 
@@ -551,8 +639,13 @@ from the local stack is ever synced to the hosted project except by an explicit 
 - **GitHub**: the repository is private and holds no applicant data and no secrets. The
   `reference/` files have blanked values and the seed data is invented. Keep it that way: never
   commit an export, a log with applicant rows, or a screenshot with real names.
-- **Browser downloads**: the CSV export is a plain file on whoever downloaded it. Treat it like
-  any spreadsheet of personal data.
+- **Browser downloads**: the CSV exports (applications, and each report) are plain files on
+  whoever downloaded them. Treat the applications export like any spreadsheet of personal data;
+  the report exports hold aggregates only.
+- **Library documents**: job descriptions, interview guides and templates are Rexius documents,
+  not applicant data. They live in the same private bucket under `documents/` and are reachable
+  only by the roles their `min_role` allows. Do not upload anything containing an individual's
+  pay or a signed offer letter.
 
 ### Checks to repeat
 
