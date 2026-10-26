@@ -420,6 +420,85 @@ list` and `db pull` are also not useful here. The local Docker stack is unaffect
 Change them in the dashboard, adding to what is there rather than replacing it, and never run
 `supabase config push` from this repo. `config.toml` drives only the local Docker stack.
 
+## Security: where applicant data is and who can reach it
+
+Applicant records are personal information. This section is the standing answer to "can anyone
+outside the app get at it?" and must be kept true as phases land. Checked against the hosted
+project on 2026-10-26, when it held no applicant data at all; the backfilled data existed only
+on the developer's machine.
+
+### Layers on the hosted project
+
+| Layer | What it guarantees | How it is enforced |
+| --- | --- | --- |
+| Public API key (`anon` / publishable) | Identifies the project; grants nothing | `anon` has no `usage` on schema `recruiting`, so every unauthenticated request fails at the schema before reaching a table. Verified with the curl check in step 5 |
+| Sign-in | Accounts exist only when an admin creates or invites them | Public signup is off (step 6). Email + password through Supabase Auth, confirmations on |
+| Profile row | A login without a `recruiting.profiles` row sees nothing | Every policy calls `recruiting.current_role()`, which returns null without a profile. `scripts/test-policies.sql` checks this for every table and the curated view |
+| Role | Managers never see notes, tags, raw answers, offers, referrals, contacts or history | Managers have no select policy on those tables; they read `applications_for_managers`, which does not contain those columns |
+| Row-level security | Decides per row, on every query, for every table | Enabled in the same migration that creates each table; the test script asserts no table in `recruiting` has it off |
+| Files | Resumes and portfolios are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows |
+| Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
+| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain |
+
+### Credentials that bypass all of the above
+
+Two secrets give full read and write access to everything, ignoring every policy: the
+**service-role key** (Project Settings → API Keys) and the **database password**. Rules:
+
+- They are never committed, never pasted into chat, never put in `web/`. The frontend ships only
+  the project URL and the publishable key, which are public by design.
+- The service-role key is used only by the backfill script and Edge Functions. On a developer's
+  machine it lives in the gitignored `.env`; on Supabase it lives in Edge Function secrets.
+- Rotate either one if a laptop holding `.env` is lost, or a person who had the key leaves.
+  Rotating the service-role key does not affect the frontend.
+
+### People with dashboard access
+
+Anyone with a seat in the Rexius organization on Supabase can open the Table Editor and read
+every row of every schema, and Owners and Administrators can copy the service-role key. This is
+the widest exposure in the design and it is a people decision, not a code one. Before real
+applicant data is loaded into the hosted project:
+
+- Review Organization → Team. Remove or downgrade anyone who does not need to read applicant
+  records; prefer Rexius accounts for members who do.
+- If contractors on the other apps sharing this project should not see recruiting data, the
+  clean fix is a Supabase project of its own for recruiting: the migrations re-run there with
+  `npm run db:migrate`, the frontend changes two lines in `web/config.js`, and the "shared
+  project" row in CLAUDE.md section 2 is updated. Decide this before Phase 8 invites users.
+- Turn on multi-factor authentication for every dashboard member (Account → Security).
+
+### Development data on a developer's machine
+
+During development the full applicant set is imported into the local Docker stack, not the
+hosted project. That copy:
+
+- listens on localhost only (`127.0.0.1:54321` API, `54322` database) with Docker's default
+  local password, and disappears from memory with `npx supabase stop`; the data stays in a
+  Docker volume until `npx supabase stop --no-backup`;
+- sits beside a gitignored `.env` holding the Jotform API key and, when the hosted import is
+  run, the service-role key.
+
+So a developer's machine must have full-disk encryption (FileVault) and a locked screen, and
+should run `npx supabase stop --no-backup` when the local data is no longer needed. Nothing
+from the local stack is ever synced to the hosted project except by an explicit backfill run.
+
+### Other places the data exists
+
+- **Jotform** remains the source of record and holds the complete submissions, including the
+  fields this app never imports. Its access is managed in Jotform, separately from this app.
+- **GitHub**: the repository is private and holds no applicant data and no secrets. The
+  `reference/` files have blanked values and the seed data is invented. Keep it that way: never
+  commit an export, a log with applicant rows, or a screenshot with real names.
+- **Browser downloads**: the CSV export is a plain file on whoever downloaded it. Treat it like
+  any spreadsheet of personal data.
+
+### Checks to repeat
+
+After any migration: `scripts/test-policies.sql` on the local stack, all `PASS`. After any
+hosted settings change: the curl check in step 5 must still say `permission denied for schema
+recruiting`. Before each phase ships: `git grep` the repo for email addresses and phone
+numbers and confirm only the invented ones appear.
+
 ## Conventions
 
 See `docs/database-conventions.md` for the rules every migration follows (schema, grants, RLS,
