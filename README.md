@@ -5,7 +5,10 @@ job application from three Jotform forms, tracks each one through the pipeline, 
 postings, and channel spend in one place, and reports on recruiting. `CLAUDE.md` is the full
 brief; this file is the operator's guide.
 
-Backend: Supabase project `am-projects` (shared with the inventory app; this app owns the
+Backend: one Supabase project shared with the inventory app, called `am-projects` throughout
+these docs. In the dashboard it is currently named **Apparel** (ref `hibjqcgitqtgmkurghlw`);
+the rename to am-projects waits on an organization Administrator and changes nothing that
+runs, since every tool here connects by ref, not by name. This app owns the
 Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally for now and on
 GitHub Pages later.
 
@@ -41,7 +44,7 @@ Migration `20261025000000_create_recruiting_schema_and_profiles.sql`:
 
 The migration was run through the Supabase CLI against a local Postgres 16 with the policies
 exercised as admin, HR, a user with no profile, `anon`, and `service_role`. It has not yet been
-applied to `am-projects`; that is step 4 below.
+applied to the hosted project; that is step 4 below.
 
 ## What Phase 3 created in the database
 
@@ -85,7 +88,8 @@ signature or initials answers. Running it against the hosted project is step 10 
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
-migration runner needs one `npm install`), and owner access to the `am-projects` project in the Supabase dashboard. Run every command from
+migration runner needs one `npm install`), and access to the `am-projects` project (currently named Apparel) in the Supabase dashboard; steps 1, 5 and 6
+need the Administrator or Owner role in the Supabase organization, the rest work as a Developer. Run every command from
 the root of this repo.
 
 Never paste a key, password, or token into chat, a file in this repo, or a commit. Everything

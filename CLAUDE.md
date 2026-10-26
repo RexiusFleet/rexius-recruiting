@@ -24,7 +24,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 | Standalone app on Supabase + GitHub, not a Claude artifact | Managers and HR need their own logins and roles |
 | Three roles: Admin, HR, Manager (view only); managers see all locations for now | Simple to reason about; location scoping is a later column + policy |
 | Email + password sign-in via Supabase Auth | May move to Google sign-in restricted to Rexius accounts later |
-| Supabase project is named `am-projects` and is shared with a second, unrelated app (apparel inventory tracker and department invoicer) | Separate by schema (`recruiting`, `inventory`), bucket, and function name; shared `auth.users`, one `profiles` table per app |
+| One Supabase project is shared with a second, unrelated app (apparel inventory tracker and department invoicer). It is currently named `Apparel` in the dashboard (ref `hibjqcgitqtgmkurghlw`, Rexius organization) and will be renamed `am-projects` once the user has the Administrator role; the name is only a dashboard label and nothing in either repo depends on it | Separate by schema (`recruiting`, `inventory`), bucket, and function name; shared `auth.users`, one `profiles` table per app |
 | Jotform intake by webhook (Edge Function) plus a one-time backfill via Jotform's REST API | Live data, no refresh button |
 | Driver licence numbers, signature images, and initials fields are never imported | Personal-information rules, section 5 |
 | Resumes are copied into Supabase Storage with signed URLs | Managers must not need Jotform logins |
@@ -33,7 +33,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 
 ## 3. Working conventions
 
-- Repo `rexius-recruiting` in Rexius' GitHub organization (not the user's personal GitHub account). Supabase project `am-projects`; the user has done no configuration in it beyond creating it, so every dashboard step must be spelled out. Layout: `supabase/migrations/`, `supabase/functions/recruiting-jotform-webhook/`, `scripts/backfill/`, `web/` (frontend), `docs/`, `reference/`.
+- Repo `rexius-recruiting` in Rexius' GitHub organization (not the user's personal GitHub account). Supabase project ref `hibjqcgitqtgmkurghlw`, currently named `Apparel` in the dashboard (to be renamed `am-projects`; this file says `am-projects` to mean that project). The user is a Developer, not an Administrator, in the Rexius Supabase organization until that is changed, so project settings (exposed schemas, auth URLs, secrets, database password) need an admin; the user has done no configuration beyond creating the project, so every dashboard step must be spelled out. Layout: `supabase/migrations/`, `supabase/functions/recruiting-jotform-webhook/`, `scripts/backfill/`, `web/` (frontend), `docs/`, `reference/`.
 - One pull request per phase (section 8). Each PR description says what the user must do manually afterwards (paste a secret, add a webhook URL, run a script).
 - Everything in the database lives in schema `recruiting`. Never create tables in `public`. The schema must be added to the exposed schemas in Supabase API settings; include that in the Phase 2 instructions.
 - The inventory app shares the Supabase project from a completely separate repository and never needs to know this one exists. Migrations are applied to the hosted project with `npm run db:migrate` (own history table `recruiting.schema_migrations`), never with `supabase db push` or `supabase config push`; the README explains why.
