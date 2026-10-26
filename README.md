@@ -182,7 +182,10 @@ is hidden from managers and `#/reports` falls back to Applications for them):
   the Phase 6 contents.
 
 Verified in the browser against the local stack as admin, hr and manager, and with
-`scripts/test-policies.sql` (105 checks, all PASS after `db reset`).
+`scripts/test-policies.sql` (105 checks, all PASS after `db reset`). The four migrations were
+applied to the hosted project on 2026-10-26 through the Management API SQL route (the database
+password being unavailable to a Developer) and are recorded in `recruiting.schema_migrations`
+there; the hosted project still holds no applicant data.
 
 ## Manual steps in Supabase (do these in order)
 
@@ -447,11 +450,10 @@ own copy as a function secret.
 
 The tracker is complete and verified locally; it works against the hosted project once:
 
-1. Migrations `20261028000100` through `20261029000400` are applied (`npm run db:migrate`, or
-   `npm run db:print` and the SQL Editor as in step 4). The Phase 7 ones can run before or after
-   the backfill: the insert trigger links new rows as they arrive, and "Re-link applications" on
-   the Positions page (or `select recruiting.relink_applications();`) catches up rows imported
-   earlier.
+1. Migrations `20261028000100` through `20261029000400` are applied (done, as of 2026-10-26).
+   After the hosted backfill, click "Re-link applications" on the Positions page (or run
+   `select recruiting.relink_applications();`) once; the insert trigger handles rows that arrive
+   later.
 2. Schema `recruiting` is exposed in the Data API (step 5).
 3. The page's URL is registered under Authentication → URL Configuration (step 6; GitHub Pages
    adds its own URL in Phase 8).
