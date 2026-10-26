@@ -25,7 +25,8 @@ GitHub Pages later.
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack | 3 |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
-| `web/` | The tracker frontend | 6 |
+| `web/` | The tracker frontend: `index.html`, `styles.css`, `app.js`, `config.js` (project URL and publishable key only). No build step | 6 |
+| `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
 
@@ -84,6 +85,39 @@ URLs for managers as well as staff. There is no write policy for browser session
 imported every submission from the three forms (about 1,600) with their resumes and portfolios,
 skipped nothing it had already imported on a second run, and stored none of the driver-licence,
 signature or initials answers. Running it against the hosted project is step 10 below.
+
+## What Phase 6 created
+
+Migration `20261028000100_manager_view_files.sql`: the curated view `applications_for_managers`
+gains a `files` column (storage path, original name and kind of each resume or portfolio). Managers
+have no select on `application_files`, so without it they could see that an applicant has a resume
+but not open it. Nothing else in the view changed.
+
+`web/`: the tracker. Plain HTML, CSS and JavaScript loading `@supabase/supabase-js` 2.118.0 from a
+pinned jsDelivr URL, with the client created on schema `recruiting`. Email and password sign-in
+through Supabase Auth, session persisted in the browser. After sign-in the app reads the user's
+`profiles` row and:
+
+- **admin / hr** get the full tracker over `applications` (joined to `application_status`,
+  `application_files`, `forms`, `positions`): pipeline strip with clickable stage counts, filters
+  (stage, form, location, position, source, date range, has resume, applied more than once, free
+  text over name/email/phone/position), dense table sorted by submitted date with "Show more"
+  paging at 250 rows, detail drawer with contact, application, education, skills and employment
+  history read from `answers` through the form's `field_map`, resumes and portfolios opened through
+  5-minute signed URLs from bucket `recruiting-files`, link to the Jotform submission, status change
+  inline (the trigger writes `status_history`, shown in the drawer), assignee, tags and notes
+  editing, duplicate badge and links when another application shares the email or phone, contact
+  log (list and add), manager feedback (read), every answer with its question label, CSV export
+  of the current filtered set with every column.
+- **manager** gets the same screen fed from `applications_for_managers`: status as a read-only
+  pill, no notes, tags, contact log, offers or raw answers, resumes through signed URLs, and a
+  "Your feedback" form writing their own `manager_feedback` row. CSV export has the curated
+  columns only.
+- **no profile** sees a "No access, ask an admin" page with a sign-out button; the only request the
+  app makes for them is the profile lookup, which returns nothing.
+
+Verified in the browser against the local stack with all four `*@local.test` users, including
+phone width (the filter rail collapses behind a Filters button; the table scrolls sideways).
 
 ## Manual steps in Supabase (do these in order)
 
@@ -260,12 +294,17 @@ account settings → API (a read-only key is enough for the backfill).
 
 ### 9. Local development (optional)
 
-The frontend is static, so for day-to-day work it is enough to point `web/` at the hosted
-project and serve it locally:
+The frontend is static. Serve `web/` from the repo root:
 
 ```sh
 npx serve web        # http://localhost:3000, which is why that URL is registered in step 6
 ```
+
+(or `python3 -m http.server 3000 --directory web`). `web/config.js` is committed with the local
+Docker stack's URL and publishable key, so out of the box the page talks to the local stack below;
+to work against the hosted project instead, swap in its URL and publishable key as the comment in
+that file explains, and do not commit that change until Phase 8. In the Claude desktop app,
+`.claude/launch.json` starts the same server for the in-app browser.
 
 A full local Supabase stack (`npx supabase start`) needs Docker Desktop running and gives you a
 throwaway copy of the project: API at `http://127.0.0.1:54321`, Studio at
@@ -282,7 +321,7 @@ creates four local sign-ins (password `localdev-password` for all):
 | `nobody@local.test` | none (auth user without a profile; must see nothing) |
 
 plus five invented applications in different stages, a referral, a contact, a posting and a
-month of spend. `scripts/test-policies.sql` exercises every policy as each of those users and as
+month of spend. Sign in to the tracker with each to see the three role views and the no-access page. `scripts/test-policies.sql` exercises every policy as each of those users and as
 `anon` and `service_role`; run it after any migration change:
 
 ```sh
@@ -338,6 +377,18 @@ Order matters: the bucket migration first, then the schema exposed (step 5), the
 
 Delete the service-role key from `.env` afterwards if you prefer; the webhook (Phase 5) gets its
 own copy as a function secret.
+
+### 11. Point the frontend at the hosted project (Phase 8 prerequisites)
+
+The tracker is complete and verified locally; it works against the hosted project once:
+
+1. Migration `20261028000100_manager_view_files.sql` is applied (`npm run db:migrate`, or
+   `npm run db:print` and the SQL Editor as in step 4).
+2. Schema `recruiting` is exposed in the Data API (step 5).
+3. The page's URL is registered under Authentication → URL Configuration (step 6; GitHub Pages
+   adds its own URL in Phase 8).
+4. `web/config.js` holds the hosted URL and publishable key instead of the local ones.
+5. Each user has an auth account and a `profiles` row (step 7).
 
 ## Two repos, one project
 
