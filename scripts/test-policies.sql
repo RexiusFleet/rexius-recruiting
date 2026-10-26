@@ -192,6 +192,43 @@ select pg_temp.check('service_role: insert creates history row',
   (select count(*) from recruiting.status_history h join recruiting.applications a on a.id = h.application_id where a.jotform_submission_id = '6000000000000000099') = 1);
 rollback;
 
+-- ----- storage: bucket recruiting-files (Phase 4) ----------------------------------------
+begin;
+select pg_temp.check('storage: bucket recruiting-files exists and is private',
+  (select count(*) from storage.buckets where id = 'recruiting-files' and public = false) = 1);
+set local role service_role;
+insert into storage.objects (bucket_id, name, owner_id, metadata)
+  values ('recruiting-files', 'applications/260115636145148/6000000000000000001/resume.pdf', null, '{"mimetype":"application/pdf","size":1}');
+select pg_temp.check('storage: service_role can write an object', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 1);
+reset role;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('storage: manager can see the object (signed URLs work)', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 1);
+savepoint sp;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'applications/x/sneaky.pdf', '{}');
+  raise notice 'UNEXPECTED: manager inserted an object';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('storage: manager cannot upload', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 1);
+-- (No delete check: storage.protect_delete() blocks every direct delete on storage.objects, so
+-- deletes go through the Storage API, where the missing delete policy applies.)
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('storage: hr can see the object', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 1);
+savepoint sp3;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'applications/x/hr.pdf', '{}');
+  raise notice 'UNEXPECTED: hr inserted an object';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp3;
+select pg_temp.check('storage: hr cannot upload (writes are service_role only)', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 1);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('storage: no profile sees no objects', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
+rollback;
+
 -- ----- trigger details (as postgres) -------------------------------------------------------
 begin;
 select pg_temp.check('seed: stage_since equals submitted_at for untouched applications',

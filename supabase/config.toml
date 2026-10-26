@@ -127,11 +127,10 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# Phase 4 adds the private `recruiting-files` bucket (resumes and portfolios) in a migration so it
-# exists on the hosted project too. Local-only bucket config can be added here when that lands:
-# [storage.buckets.recruiting-files]
-# public = false
-# file_size_limit = "25MiB"
+# The private `recruiting-files` bucket (resumes and portfolios) is created by migration
+# 20261027000100 so it exists on the hosted project too; it is deliberately not declared here,
+# which would create it a second way. Phase 4 needs storage-api running locally, so do not exclude
+# it from `npx supabase start`.
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]

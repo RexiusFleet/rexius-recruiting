@@ -9,8 +9,12 @@ must not drift from them without updating this file.
   Nothing is created in `public`, which belongs to the inventory app sharing the project.
 - `auth.users` is shared with the inventory app. Each app has its own `profiles` table in its own
   schema; a person can have a row in both.
-- Storage uses the bucket `recruiting-files` (Phase 4). Edge Functions are prefixed
-  `recruiting-`.
+- Storage uses the private bucket `recruiting-files`, created by migration (`insert into
+  storage.buckets … on conflict do update`) with policies on `storage.objects` named like table
+  policies (`"recruiting-files: app users can read files"`). Only a `select` policy exists for
+  `authenticated` (anyone with a profile, so signed URLs work for managers too); writes come from
+  `service_role` (backfill, webhook), which bypasses RLS. Nothing in the `storage` schema is
+  altered. Edge Functions are prefixed `recruiting-`.
 
 ## Grants
 
