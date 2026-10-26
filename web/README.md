@@ -1,7 +1,13 @@
 # web
 
-Placeholder. Phase 6 adds the tracker frontend here: plain HTML, CSS, and JavaScript loading
-`@supabase/supabase-js` from a pinned CDN URL, with the behaviour of
-`reference/prototype-tracker.html`. Serve locally with `npx serve web`; the client is created with
-`db: { schema: 'recruiting' }` so queries hit the app's schema. Only the project URL and the
-public key go in this folder.
+The tracker frontend (Phase 6). Plain HTML, CSS and JavaScript; no build step.
+
+| File | What it is |
+| --- | --- |
+| `index.html` | Sign-in, no-access and tracker views; loads `@supabase/supabase-js` 2.118.0 from a pinned jsDelivr URL |
+| `styles.css` | Tokens and layout from `reference/prototype-tracker.html`, light and dark |
+| `app.js` | Auth, role gate, data loading, pipeline, filters, table, drawer, writes, CSV export |
+| `config.js` | Supabase URL and publishable key. Committed with the local stack's values; the comment says how to swap in the hosted project's |
+
+Run from the repo root with `npx serve web` and open http://localhost:3000. The README at the root
+lists the local test users. Only the project URL and the public key belong in this folder.

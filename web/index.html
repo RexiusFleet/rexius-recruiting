@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rexius Recruiter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Sign in -->
+<section class="gate" id="loginView" hidden>
+  <form class="card" id="loginForm" autocomplete="on">
+    <h1>Rexius Recruiter</h1>
+    <p class="meta">Sign in with the email and password an admin set up for you.</p>
+    <label>Email <input type="email" id="loginEmail" name="email" autocomplete="username" required></label>
+    <label>Password <input type="password" id="loginPassword" name="password" autocomplete="current-password" required></label>
+    <div class="err" id="loginError" role="alert"></div>
+    <button class="btn primary" id="loginBtn" type="submit">Sign in</button>
+  </form>
+</section>
+
+<!-- Signed in, no profile -->
+<section class="gate" id="noAccessView" hidden>
+  <div class="card">
+    <h1>No access</h1>
+    <p>You are signed in as <b id="noAccessEmail"></b>, but this account has not been given a role in Rexius Recruiter.</p>
+    <p class="meta">Ask an admin to add you. Once they have, sign out and back in.</p>
+    <button class="btn" id="noAccessSignOut" type="button">Sign out</button>
+  </div>
+</section>
+
+<!-- Tracker -->
+<div class="app" id="appView" hidden>
+  <header class="top">
+    <div>
+      <h1>Rexius applicants</h1>
+      <div class="meta" id="meta">Loading…</div>
+    </div>
+    <div class="actions">
+      <span class="who" id="who"></span>
+      <button class="btn filters-toggle" id="toggleFilters" type="button">Filters</button>
+      <button class="btn" id="exportBtn" type="button" disabled>Export CSV</button>
+      <button class="btn" id="refreshBtn" type="button" disabled>Refresh</button>
+      <button class="btn" id="signOutBtn" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="btn small" id="noticeBtn" type="button" hidden></button></div>
+
+  <section class="pipeline" id="pipeline" aria-label="Pipeline"></section>
+
+  <div class="layout">
+    <aside class="filters" id="filters">
+      <h2>Search</h2>
+      <input type="search" id="q" placeholder="Name, email, phone, position…" autocomplete="off">
+      <h2>Form</h2>
+      <div id="f-form"></div>
+      <h2>Location</h2>
+      <div class="opt-list" id="f-loc"></div>
+      <h2>Position</h2>
+      <div class="opt-list" id="f-pos"></div>
+      <h2>Heard about us from</h2>
+      <div class="opt-list" id="f-src"></div>
+      <h2>Applied between</h2>
+      <div class="daterange"><input type="date" id="from" aria-label="From"><input type="date" id="to" aria-label="To"></div>
+      <h2>Other</h2>
+      <label class="check"><input type="checkbox" id="resumeOnly"> Has a resume</label>
+      <label class="check"><input type="checkbox" id="dupOnly"> Applied more than once</label>
+      <button class="btn clear" id="clearBtn" type="button">Clear filters</button>
+    </aside>
+
+    <main class="list">
+      <div class="list-head">
+        <span id="count"></span>
+        <label>Sort <select id="sort">
+          <option value="date:desc">Newest first</option>
+          <option value="date:asc">Oldest first</option>
+          <option value="name:asc">Name A–Z</option>
+          <option value="status:asc">Status</option>
+          <option value="position:asc">Position</option>
+        </select></label>
+      </div>
+      <div id="tableWrap" style="overflow-x:auto">
+        <table id="table" hidden>
+          <thead><tr>
+            <th>Applicant</th><th>Applied</th><th class="col-loc">Location</th><th>Position</th><th class="col-src">Source</th><th>Status</th><th>Files</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="skel" id="skel">Loading applications…</div>
+      <div class="empty" id="empty" hidden></div>
+      <button class="btn more" id="moreBtn" type="button" hidden></button>
+    </main>
+  </div>
+</div>
+
+<aside class="drawer" id="drawer" hidden aria-label="Applicant details">
+  <div class="drawer-head">
+    <div><h2 id="dName"></h2><div class="sub" id="dSub"></div></div>
+    <button class="close" id="dClose" aria-label="Close" type="button">×</button>
+  </div>
+  <div class="drawer-body" id="dBody"></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
