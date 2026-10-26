@@ -63,7 +63,33 @@ checksum and warns).
   pushed to the hosted project it is never edited; write a new one.
 - Tables plural, columns snake case, timestamps `timestamptz` ending in `_at`, foreign keys
   `<table singular>_id`.
-- Enums are `recruiting.<thing>` (`user_role`, later `stage`, `channel`, `offer_outcome`, …).
+- Enums are `recruiting.<thing>` (`user_role`, `position_status`, `posting_channel`, `file_kind`,
+  `contact_kind`, `contact_direction`, `offer_outcome`, `feedback_verdict`, `document_kind`).
+  Stages are a table, not an enum, because admins edit them.
+- Helper functions: `current_role()` (role or null), `is_staff()` (admin or hr),
+  `set_updated_at()` (trigger), `first_stage_id()`, `role_rank()`. Policies use the first two
+  only; a new helper needs a reason in its comment.
+
+## Triggers and views
+
+- Derived rows are written by triggers, not by the app or the importer: `application_status`
+  and the first `status_history` row on application insert; a `status_history` row and
+  `stage_since` on every stage change. Trigger functions are `security definer` with
+  `set search_path = ''`, and the tables they write get no insert grant for `authenticated`
+  where the app has no business writing them (`status_history`).
+- Curated views (`applications_for_managers`) run with the owner's privileges on purpose, so
+  managers can read through tables they have no policy on. The view's `where` clause is
+  therefore the access check and must call `recruiting.current_role()`. Mark such views
+  `security_barrier`. Never add a restricted column (notes, `answers`, offers, wages) to one.
+- Tables with `updated_at` get a `before update` trigger calling `set_updated_at()`.
+
+## Seed data
+
+- Reference data the app needs to function (stages, forms, positions) is seeded by a migration
+  with `on conflict do nothing` guards, so it reaches the hosted project with the schema.
+- Development data (test users, sample applications) lives only in `supabase/seed.sql`, which
+  the local stack loads on `db reset` and the hosted project never sees. Sample people and
+  employers are invented.
 
 ## Personal information
 
@@ -74,6 +100,8 @@ are private objects in Storage served through short-lived signed URLs.
 
 ## Local validation before pushing
 
-Before `npm run db:migrate` against the hosted project, apply the new migration to a local database (`npx supabase db
-reset` with Docker, or any Postgres 15–17 with stand-ins for the `auth` schema and the three
-roles) and exercise the policies as each role. Phase 2's migration was checked that way.
+Before `npm run db:migrate` against the hosted project, apply the new migration to the local
+stack (`npx supabase db reset` with Docker) and run `scripts/test-policies.sql` (command in the
+README); add checks for every new table or policy so each role is exercised. Where a feature is
+reachable through the Data API, also sign in locally as each `*@local.test` user and hit the
+endpoint. Phases 2 and 3 were checked that way.

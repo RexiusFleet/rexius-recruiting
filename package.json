@@ -9,7 +9,9 @@
   "scripts": {
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:status": "node scripts/db-migrate.mjs --status",
-    "serve": "npx serve web"
+    "serve": "npx serve web",
+    "db:make-admin": "node scripts/make-admin.mjs",
+    "db:print": "node scripts/db-migrate.mjs --print"
   },
   "devDependencies": {
     "pg": "8.23.1"
