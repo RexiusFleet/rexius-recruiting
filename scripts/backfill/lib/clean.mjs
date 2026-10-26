@@ -92,6 +92,8 @@ export function normalizeLocation(value) {
   return LOCATION_ALIASES.get(v.toLowerCase()) ?? v;
 }
 
+// normalizeEmail, normalizePhone and storageSafeName are mirrored in web/app.js for manual
+// entries (the frontend loads no modules); change both together.
 export function normalizeEmail(value) {
   if (typeof value !== "string") return null;
   const v = value.trim().toLowerCase();

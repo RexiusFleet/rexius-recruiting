@@ -43,6 +43,7 @@
     <div class="actions">
       <span class="who" id="who"></span>
       <button class="btn filters-toggle apps-only" id="toggleFilters" type="button">Filters</button>
+      <button class="btn primary apps-only" id="addBtn" type="button" hidden>Add application</button>
       <button class="btn apps-only" id="exportBtn" type="button" disabled>Export CSV</button>
       <button class="btn apps-only" id="refreshBtn" type="button" disabled>Refresh</button>
       <button class="btn" id="signOutBtn" type="button">Sign out</button>
@@ -193,6 +194,49 @@
   </div>
   <div class="drawer-body" id="dBody"></div>
 </aside>
+
+<!-- Manual entry (admin and hr): a paper application that did not come through Jotform -->
+<div class="modal" id="addModal" hidden role="dialog" aria-modal="true" aria-labelledby="addTitle">
+  <form class="card modal-card" id="addForm" autocomplete="off">
+    <div class="modal-head">
+      <div>
+        <h2 id="addTitle">Add a paper application</h2>
+        <p class="meta">For applications handed in or mailed in outside Jotform. Type what the form says and attach the scan. Black out any Social Security or driver licence number on the scan before uploading; this app never stores them.</p>
+      </div>
+      <button class="close" id="addClose" aria-label="Close" type="button">×</button>
+    </div>
+    <div class="form-grid">
+      <label class="span2">Applicant name <input type="text" id="mName" required maxlength="200" placeholder="First and last name"></label>
+      <label>Email <input type="email" id="mEmail" maxlength="200"><span class="dup-hint" id="mEmailDup"></span></label>
+      <label>Phone <input type="tel" id="mPhone" maxlength="40" placeholder="(541) 555-0100"><span class="dup-hint" id="mPhoneDup"></span></label>
+      <label>City <input type="text" id="mCity" maxlength="100"></label>
+      <label>State <input type="text" id="mState" maxlength="2" value="OR" style="text-transform:uppercase"></label>
+      <label>Location <select id="mLocation">
+        <option>Eugene/Springfield</option><option>Central Oregon</option><option>Lake Oswego</option><option>CAS</option>
+      </select></label>
+      <label>Position <select id="mPosition"></select></label>
+      <label class="span2" id="mPositionOtherWrap" hidden>Position as written <input type="text" id="mPositionOther" maxlength="200" placeholder="What the applicant wrote"></label>
+      <label>Heard about the job from <select id="mSource">
+        <option value="">Not given</option>
+        <option>Indeed.com</option><option>Rexius.com</option><option>Google</option><option>Facebook</option><option>Craigslist.com</option>
+        <option>I am a Previous Employee</option><option>Walk In</option><option>Other</option>
+      </select></label>
+      <label>Referred by <input type="text" id="mReferredBy" maxlength="200"></label>
+      <label class="span2" id="mSourceDetailWrap" hidden>Where exactly <input type="text" id="mSourceDetail" maxlength="200"></label>
+      <label>Can start <input type="date" id="mStart"></label>
+      <label>Language of the form <select id="mLanguage"><option value="en">English</option><option value="es">Spanish</option></select></label>
+      <label>Received on <input type="date" id="mReceived" required></label>
+      <label class="span2">Notes and skills from the form <textarea id="mNotes" maxlength="4000" placeholder="Experience, skills, availability, anything written on the form worth keeping. Managers see this."></textarea></label>
+      <label class="span2">Scan of the application (PDF or image, one or more) <input type="file" id="mScan" accept="application/pdf,image/*" multiple></label>
+      <label class="span2">Resume, if one came with it <input type="file" id="mResume" accept="application/pdf,image/*,.doc,.docx"></label>
+    </div>
+    <div class="err" id="addError" role="alert"></div>
+    <div class="modal-actions">
+      <button class="btn" id="addCancel" type="button">Cancel</button>
+      <button class="btn primary" id="addSave" type="submit">Save application</button>
+    </div>
+  </form>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>

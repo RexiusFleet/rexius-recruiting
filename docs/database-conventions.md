@@ -11,9 +11,11 @@ must not drift from them without updating this file.
   schema; a person can have a row in both.
 - Storage uses the private bucket `recruiting-files`, created by migration (`insert into
   storage.buckets … on conflict do update`) with policies on `storage.objects` named like table
-  policies (`"recruiting-files: app users can read files"`). Only a `select` policy exists for
-  `authenticated` (anyone with a profile, so signed URLs work for managers too); writes come from
-  `service_role` (backfill, webhook), which bypasses RLS. Nothing in the `storage` schema is
+  policies (`"recruiting-files: app users can read files"`). `authenticated` has a `select` policy
+  (anyone with a profile, so signed URLs work for managers too) and an `insert` policy limited to
+  admin and hr and to the `manual/` prefix (scans of paper applications); everything else is
+  written by `service_role` (backfill, webhook), which bypasses RLS. A new prefix gets its own
+  policies that name the prefix, never a bucket-wide write. Nothing in the `storage` schema is
   altered. Edge Functions are prefixed `recruiting-`.
 
 ## Grants
@@ -100,7 +102,8 @@ checksum and warns).
 CLAUDE.md section 5 is binding. In the database that means: no column anywhere for Social
 Security numbers, bank details, dates of birth, government IDs, wages, or signed offer letters;
 driver licence, signature, and initials answers are dropped before `answers` is written; resumes
-are private objects in Storage served through short-lived signed URLs.
+and scans of paper applications are private objects in Storage served through short-lived signed
+URLs. A scan is stored as an image only, and staff black out those fields before uploading it.
 
 ## Local validation before pushing
 

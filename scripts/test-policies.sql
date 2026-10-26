@@ -229,6 +229,120 @@ select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
 select pg_temp.check('storage: no profile sees no objects', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
 rollback;
 
+-- ----- manual applications (origin, entered_by, scans under manual/) ----------------------
+begin;
+select pg_temp.check('manual: seed rows default to origin jotform with no entered_by/entered_at',
+  (select count(*) from recruiting.applications where origin = 'jotform' and entered_by is null and entered_at is null) = 5);
+select pg_temp.check('manual: file_kind has scan', 'scan'::recruiting.file_kind is not null);
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+savepoint sp;
+do $$ begin
+  insert into recruiting.applications (origin, submitted_at, name) values ('manual', now(), 'Sneaky Manager Entry');
+  raise notice 'UNEXPECTED: manager inserted an application';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+reset role;
+select pg_temp.check('manual: manager cannot insert an application', (select count(*) from recruiting.applications where name = 'Sneaky Manager Entry') = 0);
+rollback;
+
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+insert into recruiting.applications (origin, submitted_at, name, email, email_norm, phone, phone_norm, location, position_text, source, language, answers)
+  values ('manual', now() - interval '1 day', 'Paper Applicant', 'Paper@Example.com', 'paper@example.com', '(541) 555-0199', '5415550199',
+          'Eugene/Springfield', 'Landscape Maintenance Crew Member', 'Walk In', 'en', '{"manual_notes": "Ten years of mowing."}');
+select pg_temp.check('manual: hr can insert a manual row with no Jotform ids',
+  (select count(*) from recruiting.applications where name = 'Paper Applicant' and jotform_submission_id is null and form_id is null and jotform_url is null) = 1);
+select pg_temp.check('manual: trigger stamped entered_by with the hr user and entered_at',
+  (select entered_by = '22222222-2222-2222-2222-222222222222' and entered_at is not null from recruiting.applications where name = 'Paper Applicant'));
+select pg_temp.check('manual: trigger created the status row in the first stage',
+  (select s.name from recruiting.application_status st join recruiting.stages s on s.id = st.stage_id
+   join recruiting.applications a on a.id = st.application_id where a.name = 'Paper Applicant') = 'Applied');
+select pg_temp.check('manual: trigger created the opening history row',
+  (select count(*) from recruiting.status_history h join recruiting.applications a on a.id = h.application_id where a.name = 'Paper Applicant') = 1);
+insert into recruiting.application_files (application_id, storage_path, original_name, kind)
+  select id, 'manual/' || id || '/application.pdf', 'application.pdf', 'scan' from recruiting.applications where name = 'Paper Applicant';
+select pg_temp.check('manual: hr can record a scan file', (select count(*) from recruiting.application_files where kind = 'scan') = 1);
+savepoint sp;
+do $$ begin
+  insert into recruiting.applications (origin, submitted_at, name) values ('jotform', now(), 'Fake Jotform Row');
+  raise notice 'UNEXPECTED: a jotform row without ids was accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('manual: a jotform-origin row must carry its Jotform ids', (select count(*) from recruiting.applications where name = 'Fake Jotform Row') = 0);
+savepoint sp2;
+do $$ begin
+  insert into recruiting.applications (origin, submitted_at, name, jotform_submission_id, form_id)
+    select 'manual', now(), 'Mixed Row', '6000000000000000001', id from recruiting.forms limit 1;
+  raise notice 'UNEXPECTED: a manual row with a submission id was accepted';
+exception when check_violation or unique_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+select pg_temp.check('manual: a manual row may not carry a Jotform submission id', (select count(*) from recruiting.applications where name = 'Mixed Row') = 0);
+-- The manager view carries the manual row, its notes and origin.
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manual: manager sees the manual row in the curated view with origin and notes',
+  (select origin = 'manual' and manual_notes = 'Ten years of mowing.' and form_label is null and entered_by is not null
+   from recruiting.applications_for_managers where name = 'Paper Applicant'));
+select pg_temp.check('manual: manager view lists the scan among the files',
+  (select files -> 0 ->> 'kind' from recruiting.applications_for_managers where name = 'Paper Applicant') = 'scan');
+select pg_temp.check('manual: manager view still shows the five Jotform rows', (select count(*) from recruiting.applications_for_managers where origin = 'jotform') = 5);
+rollback;
+
+-- storage: authenticated staff may write under manual/ only
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'manual/00000000-0000-0000-0000-000000000001/scan.pdf', '{"mimetype":"application/pdf","size":1}');
+select pg_temp.check('storage: hr can upload under manual/', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'manual/%') = 1);
+savepoint sp;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'applications/x/not-allowed.pdf', '{}');
+  raise notice 'UNEXPECTED: hr uploaded outside manual/';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('storage: hr still cannot upload under applications/', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'applications/%') = 0);
+savepoint sp2;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'manual-not-a-prefix.pdf', '{}');
+  raise notice 'UNEXPECTED: hr uploaded at the bucket root';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+select pg_temp.check('storage: hr cannot upload at the bucket root', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name not like 'manual/%') = 0);
+savepoint sp3;
+do $$ begin
+  update storage.objects set name = 'manual/00000000-0000-0000-0000-000000000001/renamed.pdf' where name like 'manual/%';
+end $$;
+select pg_temp.check('storage: hr cannot change an uploaded scan (update filtered)', (select count(*) from storage.objects where name like 'manual/%/scan.pdf') = 1);
+rollback to sp3;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'manual/00000000-0000-0000-0000-000000000002/scan.jpg', '{"mimetype":"image/jpeg","size":1}');
+select pg_temp.check('storage: admin can upload under manual/', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'manual/%') = 2);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('storage: manager can read scans (signed URLs work)', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'manual/%') = 2);
+savepoint sp4;
+do $$ begin
+  insert into storage.objects (bucket_id, name, metadata) values ('recruiting-files', 'manual/x/manager.pdf', '{}');
+  raise notice 'UNEXPECTED: manager uploaded under manual/';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp4;
+select pg_temp.check('storage: manager cannot upload under manual/', (select count(*) from storage.objects where bucket_id = 'recruiting-files' and name like 'manual/%') = 2);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('storage: no profile sees no scans', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
+rollback;
+
 -- ----- trigger details (as postgres) -------------------------------------------------------
 begin;
 select pg_temp.check('seed: stage_since equals submitted_at for untouched applications',

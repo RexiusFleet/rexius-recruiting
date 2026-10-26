@@ -25,6 +25,7 @@
   var SIGNED_URL_SECONDS = 300; // resumes open through short-lived signed URLs
   var BUCKET = "recruiting-files";
   var STAGE_COLORS = ["var(--s-new)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)", "var(--s-offer)", "var(--s-hired)", "var(--s-no)", "var(--s-x)"];
+  var MANUAL_ANSWER_LABELS = { manual_notes: "Notes and skills from the paper form" }; // keys a manual entry stores in `answers`
   var SKIP_TYPES = { control_text: 1, control_head: 1, control_button: 1, control_divider: 1, control_pagebreak: 1, control_collapse: 1, control_signature: 1 };
 
   // ---------- State ----------
@@ -68,6 +69,16 @@
   function pad(n) { return String(n || "").padStart(2, "0"); }
   function firstLang(s) { s = (s || "").trim(); var i = s.indexOf("/"); if (i > 0) s = s.slice(0, i).trim(); return s; }
   function digits(s) { return (s || "").replace(/\D+/g, ""); }
+  // Same rules as normalizeEmail / normalizePhone in scripts/backfill/lib/clean.mjs, so a manual
+  // entry lands in the same duplicate group as the applicant's Jotform submissions.
+  function normalizeEmail(v) { if (typeof v !== "string") return null; v = v.trim().toLowerCase(); return v.indexOf("@") >= 0 ? v : null; }
+  function normalizePhone(v) { var d = digits(String(v || "")); return d.length >= 10 ? d.slice(-10) : null; }
+  // Same as storageSafeName in clean.mjs: an ASCII object key Storage accepts.
+  function storageSafeName(name, index) {
+    var cleaned = String(name || "").normalize("NFKD").replace(/[^\x20-\x7E]/g, "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/_+/g, "_").replace(/^[_.]+/, "").slice(0, 120);
+    var base = cleaned || "file";
+    return index > 0 ? index + "_" + base : base;
+  }
   function ymd(d) { if (!d) return ""; return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function fmtDate(d) { if (!d) return "—"; return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }); }
   function fmtDateTime(d) { if (!d) return "—"; return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
@@ -157,6 +168,7 @@
     profile = res.data; role = profile.role; staff = role === "admin" || role === "hr";
     $("who").textContent = profile.name + " · " + role;
     document.body.dataset.role = role;
+    $("addBtn").hidden = !staff;
     show("appView");
     await loadRefs();
     route();
@@ -182,7 +194,7 @@
   }
 
   // ---------- Applications ----------
-  var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, " +
+  var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, origin, entered_by, entered_at, " +
     "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at), application_files(id, storage_path, original_name, kind), status_history(to_stage_id)";
 
   async function fetchAll(table, columns) {
@@ -207,12 +219,14 @@
     // Furthest pipeline stage ever reached (Not selected / Withdrawn are not progress): drives funnels.
     var furthest = 0;
     (row.status_history || []).forEach(function (h) { var s = stageById[h.to_stage_id]; if (s && (!s.is_terminal || s.is_hired) && s.sort_order > furthest) furthest = s.sort_order; });
+    var manual = row.origin === "manual";
     return finish({
       id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "",
       emailNorm: row.email_norm || "", phoneNorm: row.phone_norm || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: pos ? pos.title : "",
       source: row.source || "", sourceDetail: row.source_detail || "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
-      hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: row.form_id, form: f ? f.short : "", formLabel: f ? f.label : "",
+      hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: row.form_id, form: manual ? "Manual" : (f ? f.short : ""), formLabel: manual ? "Manual entry" : (f ? f.label : ""),
+      origin: row.origin || "jotform", enteredBy: row.entered_by || null, enteredAt: row.entered_at ? new Date(row.entered_at) : null,
       jotformUrl: row.jotform_url || "", submissionId: row.jotform_submission_id,
       stageId: st.stage_id, assignedTo: st.assigned_to || "", notes: st.notes || "", tags: st.tags || [], stageSince: st.stage_since ? new Date(st.stage_since) : null,
       furthestSort: furthest,
@@ -223,18 +237,21 @@
     var f = formByLabel[row.form_label];
     var when = new Date(row.submitted_at);
     var files = (row.files || []).slice();
+    var manual = row.origin === "manual";
     return finish({
       id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "",
-      emailNorm: (row.email || "").trim().toLowerCase(), phoneNorm: digits(row.phone).slice(-10), city: row.city, state: row.state,
+      emailNorm: normalizeEmail(row.email) || "", phoneNorm: normalizePhone(row.phone) || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: row.position_title || "",
       source: row.source || "", sourceDetail: "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
-      hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: f ? f.id : null, form: f ? f.short : row.form_label, formLabel: row.form_label,
+      hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: f ? f.id : null, form: manual ? "Manual" : (f ? f.short : row.form_label || ""), formLabel: manual ? "Manual entry" : (row.form_label || ""),
+      origin: row.origin || "jotform", enteredBy: row.entered_by || null, enteredAt: row.entered_at ? new Date(row.entered_at) : null,
       jotformUrl: "", submissionId: null,
       stageId: row.stage_id, assignedTo: row.assigned_to || "", notes: "", tags: [], stageSince: row.stage_since ? new Date(row.stage_since) : null,
       furthestSort: stageById[row.furthest_stage_id] ? stageById[row.furthest_stage_id].sort_order : 0,
       files: files,
       curated: {
         education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before),
+        manualNotes: row.manual_notes || "",
         employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason), responsibilities: toText(e.responsibilities) }; })
       }
     });
@@ -416,6 +433,13 @@
     sel.addEventListener("change", function (e) { e.stopPropagation(); if (sel.value) setStage(a.id, parseInt(sel.value, 10)); });
     return sel;
   }
+  function fileIcon(f) { return f.kind === "resume" ? "📄" : f.kind === "scan" ? "🖨️" : "📎"; }
+  function fileLabel(f) { return (f.kind === "scan" ? "Scan: " : "") + (f.original_name || fileName(f.storage_path)); }
+  function formTag(a) {
+    var t = el("span", "tag" + (a.origin === "manual" ? " manual" : ""), a.form);
+    if (a.origin === "manual") t.title = "Typed in from a paper application" + (a.enteredAt ? " on " + fmtDate(a.enteredAt) : "");
+    return t;
+  }
   function fileButton(f, label) {
     var b = el("button", "link", label);
     b.type = "button"; b.title = f.original_name || fileName(f.storage_path);
@@ -449,11 +473,11 @@
       tr.appendChild(tdN);
       var tdD = el("td", "date", fmtDate(a.when)); tdD.title = fmtDateTime(a.when); tr.appendChild(tdD);
       tr.appendChild(el("td", "col-loc", a.location || "—"));
-      var tdP = el("td", "pos"); tdP.appendChild(document.createTextNode(a.positionText || "—")); tdP.appendChild(el("span", "tag", a.form)); tr.appendChild(tdP);
+      var tdP = el("td", "pos"); tdP.appendChild(document.createTextNode(a.positionText || "—")); tdP.appendChild(formTag(a)); tr.appendChild(tdP);
       tr.appendChild(el("td", "col-src", a.source || "—"));
       var tdS = el("td"); tdS.appendChild(statusControl(a)); tr.appendChild(tdS);
       var tdA = el("td", "att");
-      a.files.forEach(function (f) { tdA.appendChild(fileButton(f, f.kind === "resume" ? "📄" : "📎")); });
+      a.files.forEach(function (f) { tdA.appendChild(fileButton(f, fileIcon(f))); });
       tr.appendChild(tdA);
       tr.addEventListener("click", function () { openDrawer(a.id); });
       frag.appendChild(tr);
@@ -516,6 +540,7 @@
       altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), address: txt("address"), contactMethod: txt("contact_method", true),
       education: txt("education", true), skills: txt("relevant_skills"), workedBefore: txt("worked_before", true), appliedBefore: txt("applied_before", true),
       student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), portfolioLink: txt("portfolio_link").trim(),
+      manualNotes: typeof answers.manual_notes === "string" ? answers.manual_notes : "",
       employers: employers
     };
   }
@@ -523,8 +548,15 @@
   function renderDrawer() {
     var a = appById[selectedId]; if (!a) return;
     $("dName").textContent = a.name;
-    $("dSub").textContent = "Applied " + fmtDateTime(a.when) + " · " + a.form + " form" + (a.location ? " · " + a.location : "");
+    var manual = a.origin === "manual";
+    $("dSub").textContent = (manual ? "Received " + fmtDate(a.when) + " · Manual entry" : "Applied " + fmtDateTime(a.when) + " · " + a.form + " form") + (a.location ? " · " + a.location : "");
     var body = $("dBody"); body.innerHTML = "";
+    if (manual) {
+      var badge = el("div", "notice-inline");
+      badge.appendChild(formTag(a));
+      badge.appendChild(document.createTextNode(" Paper application typed in" + (a.enteredBy ? " by " + (profileNames[a.enteredBy] || "a removed user") : "") + (a.enteredAt ? " on " + fmtDateTime(a.enteredAt) : "") + ". The scan is under Files."));
+      body.appendChild(badge);
+    }
 
     // Review / status
     var sec = section(body, staff ? "Review" : "Status");
@@ -576,8 +608,8 @@
     // Files and links
     sec = section(body, "Files and links");
     var links = el("div", "links");
-    a.files.forEach(function (f) { links.appendChild(fileButton(f, (f.kind === "resume" ? "📄 " : "📎 ") + (f.original_name || fileName(f.storage_path)))); });
-    if (!a.files.length) links.appendChild(el("div", "meta", "No resume uploaded."));
+    a.files.forEach(function (f) { links.appendChild(fileButton(f, fileIcon(f) + " " + fileLabel(f))); });
+    if (!a.files.length) links.appendChild(el("div", "meta", manual ? "No scan or resume attached." : "No resume uploaded."));
     var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
     if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
     sec.appendChild(links);
@@ -627,6 +659,7 @@
     kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Applied before", d.appliedBefore);
     kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide);
     kv(ap, "Skills", d.skills);
+    kv(ap, "Notes from the paper form", d.manualNotes);
     var pl = $("portfolioLink");
     if (pl && d.portfolioLink) { var link = el("a", null, "Portfolio link"); link.href = /^https?:/.test(d.portfolioLink) ? d.portfolioLink : "https://" + d.portfolioLink; link.target = "_blank"; link.rel = "noopener"; pl.appendChild(link); }
   }
@@ -898,7 +931,7 @@
       if (type === "control_fileupload" || (Array.isArray(v) && v.every(function (u) { return /^https?:\/\//.test(String(u)); }))) txt = (Array.isArray(v) ? v : [v]).filter(Boolean).map(fileName).join(", ");
       else txt = toText(v);
       if (!txt) return;
-      var label = meta ? (a.language === "es" ? firstLang(meta.text) : meta.text) : "Question " + q;
+      var label = meta ? (a.language === "es" ? firstLang(meta.text) : meta.text) : (MANUAL_ANSWER_LABELS[q] || "Question " + q);
       label = label.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(); if (label.length > 140) label = label.slice(0, 137) + "…";
       var box = el("div"); box.appendChild(el("div", "q", label)); box.appendChild(el("div", "a", txt)); wrap.appendChild(box); n++;
     });
@@ -919,12 +952,12 @@
   }
   function exportCsv() {
     var rows = sortRows(applyFilters());
-    var head = ["Name", "Email", "Phone", "City", "State", "Applied", "Form", "Location", "Position", "Matched opening", "Heard from", "Referred by", "Can start", "Status", "In stage since", "Sent to", "Resume", "Files"];
+    var head = ["Name", "Email", "Phone", "City", "State", "Applied", "Form", "Origin", "Entered by", "Location", "Position", "Matched opening", "Heard from", "Referred by", "Can start", "Status", "In stage since", "Sent to", "Resume", "Files"];
     if (staff) head = head.concat(["Tags", "Notes", "Jotform link"]);
     var lines = [head.join(",")];
     rows.forEach(function (a) {
-      var cells = [a.name, a.email, a.phone, a.city, a.state, a.dateKey, a.form, a.location, a.positionText, a.positionTitle, a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : ""), a.referredBy, a.availableStart,
-        stageName(a.stageId), a.stageSince ? ymd(a.stageSince) : "", a.assignedTo, a.files.length ? "yes" : "no", a.files.map(function (f) { return f.original_name || fileName(f.storage_path); }).join("; ")];
+      var cells = [a.name, a.email, a.phone, a.city, a.state, a.dateKey, a.form, a.origin, a.enteredBy ? (profileNames[a.enteredBy] || "removed user") : "", a.location, a.positionText, a.positionTitle, a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : ""), a.referredBy, a.availableStart,
+        stageName(a.stageId), a.stageSince ? ymd(a.stageSince) : "", a.assignedTo, a.files.some(function (f) { return f.kind === "resume"; }) ? "yes" : "no", a.files.map(fileLabel).join("; ")];
       if (staff) cells = cells.concat([a.tags.join("; "), a.notes, a.jotformUrl]);
       lines.push(cells.map(csvCell).join(","));
     });
@@ -935,7 +968,103 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  // ---------- Manual entry (staff): a paper application typed in, with its scan ----------
+  // One applications row (origin = manual, no Jotform ids; the trigger stamps entered_by/entered_at
+  // and creates the status row), then each file goes to manual/<application id>/<name> in the
+  // bucket with an application_files row of kind scan or resume. Nothing from the scan is read
+  // into a column; it is stored as an image only.
+  var OTHER_POSITION = "__other__";
+  function openAddModal() {
+    var f = $("addForm"); f.reset();
+    $("mState").value = "OR"; $("mReceived").value = ymd(new Date()); $("mReceived").max = ymd(new Date());
+    $("addError").textContent = ""; $("mEmailDup").textContent = ""; $("mPhoneDup").textContent = "";
+    fillPositionOptions();
+    $("addModal").hidden = false;
+    $("mName").focus();
+  }
+  function closeAddModal() { $("addModal").hidden = true; }
+  function fillPositionOptions() {
+    var loc = $("mLocation").value, sel = $("mPosition"), prev = sel.value; sel.innerHTML = "";
+    var o0 = el("option", null, "Not given"); o0.value = ""; sel.appendChild(o0);
+    var open = Object.keys(positionById).map(function (id) { return positionById[id]; })
+      .filter(function (p) { return p.status === "open" && p.location === loc; })
+      .sort(function (a, b) { return a.title.localeCompare(b.title); });
+    open.forEach(function (p) { var o = el("option", null, p.title); o.value = p.id; sel.appendChild(o); });
+    var oo = el("option", null, open.length ? "Other / not listed (type it)" : "Type the position"); oo.value = OTHER_POSITION; sel.appendChild(oo);
+    sel.value = prev && sel.querySelector("option[value=\"" + prev + "\"]") ? prev : "";
+    togglePositionOther();
+  }
+  function togglePositionOther() { var other = $("mPosition").value === OTHER_POSITION; $("mPositionOtherWrap").hidden = !other; if (!other) $("mPositionOther").value = ""; }
+  function dupHint(elId, key) {
+    var hits = key ? apps.filter(function (a) { return a.dupKeys && a.dupKeys.indexOf(key) >= 0; }).sort(function (x, y) { return y.when - x.when; }) : [];
+    $(elId).textContent = hits.length ? "Already applied: " + hits.slice(0, 3).map(function (a) { return a.name + ", " + fmtDate(a.when); }).join("; ") + (hits.length > 3 ? " and " + (hits.length - 3) + " more" : "") : "";
+  }
+  function dateAtNoon(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0) : null; }
+
+  async function saveManualApplication() {
+    var errBox = $("addError"); errBox.textContent = "";
+    var name = $("mName").value.trim();
+    if (!name) { errBox.textContent = "The applicant's name is required."; $("mName").focus(); return; }
+    var received = $("mReceived").value, today = ymd(new Date());
+    if (!received) { errBox.textContent = "Enter the date the application was received."; return; }
+    if (received > today) { errBox.textContent = "The received date cannot be in the future."; return; }
+    var posSel = $("mPosition").value, positionId = null, positionText = null;
+    if (posSel === OTHER_POSITION) { positionText = $("mPositionOther").value.trim() || null; }
+    else if (posSel) { positionId = posSel; positionText = positionById[posSel] ? positionById[posSel].title : null; }
+    var source = $("mSource").value || null;
+    var email = $("mEmail").value.trim() || null, phone = $("mPhone").value.trim() || null;
+    var notes = $("mNotes").value.trim();
+    var scans = Array.prototype.slice.call($("mScan").files || []);
+    var resume = ($("mResume").files || [])[0] || null;
+    var files = scans.map(function (f) { return { file: f, kind: "scan" }; });
+    if (resume) files.push({ file: resume, kind: "resume" });
+    var tooBig = files.filter(function (x) { return x.file.size > 25 * 1024 * 1024; });
+    if (tooBig.length) { errBox.textContent = "Each file must be under 25 MB: " + tooBig.map(function (x) { return x.file.name; }).join(", "); return; }
+
+    var row = {
+      origin: "manual", submitted_at: (received === today ? new Date() : dateAtNoon(received)).toISOString(),
+      name: name, email: email, email_norm: normalizeEmail(email), phone: phone, phone_norm: normalizePhone(phone),
+      city: $("mCity").value.trim() || null, state: $("mState").value.trim().toUpperCase() || null,
+      location: $("mLocation").value, position_text: positionText, position_id: positionId,
+      source: source, source_detail: source === "Other" ? ($("mSourceDetail").value.trim() || null) : null,
+      referred_by: $("mReferredBy").value.trim() || null, available_start: $("mStart").value || null,
+      language: $("mLanguage").value, has_resume: false,
+      answers: notes ? { manual_notes: notes } : {}
+    };
+    var btn = $("addSave"); btn.disabled = true; btn.textContent = "Saving…";
+    var ins = await sb.from("applications").insert(row).select("id").single();
+    if (ins.error) { btn.disabled = false; btn.textContent = "Save application"; errBox.textContent = "Could not save: " + errText(ins.error); return; }
+    var id = ins.data.id, failed = [], hasResume = false, used = {};
+    for (var i = 0; i < files.length; i++) {
+      var x = files[i];
+      var base = storageSafeName(x.file.name, 0), n = used[base] || 0; used[base] = n + 1;
+      var path = "manual/" + id + "/" + storageSafeName(x.file.name, n);
+      btn.textContent = "Uploading " + (i + 1) + " of " + files.length + "…";
+      var up = await sb.storage.from(BUCKET).upload(path, x.file, { contentType: x.file.type || "application/octet-stream", upsert: false });
+      if (up.error) { failed.push(x.file.name + " (" + errText(up.error) + ")"); continue; }
+      var fr = await sb.from("application_files").insert({ application_id: id, storage_path: path, original_name: x.file.name, kind: x.kind, content_type: x.file.type || null, size_bytes: x.file.size });
+      if (fr.error) { failed.push(x.file.name + " (" + errText(fr.error) + ")"); continue; }
+      if (x.kind === "resume") hasResume = true;
+    }
+    if (hasResume) { var upd = await sb.from("applications").update({ has_resume: true }).eq("id", id); if (upd.error) failed.push("resume flag (" + errText(upd.error) + ")"); }
+    btn.disabled = false; btn.textContent = "Save application";
+    closeAddModal();
+    if (failed.length) notice("Saved " + name + ", but could not attach: " + failed.join("; ") + ". Open the application and try again later, or keep the paper copy.");
+    await loadApps();
+    if (appById[id]) openDrawer(id);
+  }
+
   // ---------- Wiring ----------
+  $("addBtn").addEventListener("click", openAddModal);
+  $("addClose").addEventListener("click", closeAddModal);
+  $("addCancel").addEventListener("click", closeAddModal);
+  $("addModal").addEventListener("click", function (e) { if (e.target === $("addModal")) closeAddModal(); });
+  $("addForm").addEventListener("submit", function (e) { e.preventDefault(); saveManualApplication(); });
+  $("mLocation").addEventListener("change", fillPositionOptions);
+  $("mPosition").addEventListener("change", togglePositionOther);
+  $("mSource").addEventListener("change", function () { $("mSourceDetailWrap").hidden = this.value !== "Other"; });
+  $("mEmail").addEventListener("input", function () { var k = normalizeEmail(this.value); dupHint("mEmailDup", k ? "e:" + k : null); });
+  $("mPhone").addEventListener("input", function () { var k = normalizePhone(this.value); dupHint("mPhoneDup", k ? "p:" + k : null); });
   $("loginForm").addEventListener("submit", function (e) { e.preventDefault(); signIn($("loginEmail").value.trim(), $("loginPassword").value); });
   $("signOutBtn").addEventListener("click", signOut);
   $("noAccessSignOut").addEventListener("click", signOut);
@@ -953,7 +1082,7 @@
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });
   $("toggleFilters").addEventListener("click", function () { $("filters").classList.toggle("open"); });
   $("dClose").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
+  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
   $("refreshBtn").addEventListener("click", loadApps);
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);
