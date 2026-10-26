@@ -155,8 +155,8 @@ Each phase is one session and one pull request.
 | --- | --- | --- | --- |
 | 0 Prototype | Artifact tracker proving data and mappings (`reference/prototype-tracker.html`) | — | done |
 | 1 Spec | Planning document in the claude.ai Project | — | done |
-| 2 Repo and Supabase setup | Repo layout, `supabase/config.toml`, migration creating schema `recruiting`, README with the manual steps (expose schema, link CLI) | Create empty repo; have project URL and anon key; confirm the Supabase plan is paid (free projects pause after 7 idle days and drop webhooks) | not started |
-| 3 Schema and roles | Migrations for every table, enums, RLS, helper functions, stages seeded, positions seeded from `docs/positions-seed.csv`, SQL to make the first admin | Fill `docs/positions-seed.csv` (title, location, department, hiring manager, pay range, posting URLs) | not started |
+| 2 Repo and Supabase setup | Repo layout, `supabase/config.toml`, migration creating schema `recruiting`, README with the manual steps (expose schema, link CLI) | Create empty repo; have project URL and anon key; confirm the Supabase plan is paid (free projects pause after 7 idle days and drop webhooks) | done (hosted settings pending an org admin, see README) |
+| 3 Schema and roles | Migrations for every table, enums, RLS, helper functions, stages seeded, positions seeded from `docs/positions-seed.csv`, SQL to make the first admin | Fill `docs/positions-seed.csv` (title, location, department, hiring manager, pay range, posting URLs) | in review |
 | 4 Backfill | `scripts/backfill/` importing all existing submissions with cleanup rules and resume copy to storage; idempotent on `jotform_submission_id` | Set `JOTFORM_API_KEY` as a Supabase secret (or local env for the script); never paste it in chat | not started |
 | 5 Webhook | Edge Function `recruiting-jotform-webhook` with a shared-secret check, same cleaning as backfill | Add the function URL to each of the three forms (Jotform settings → Integrations → Webhooks); set the shared secret | not started |
 | 6 Frontend and login | `web/` tracker with login, roles, pipeline, filters, drawer, contact log, CSV export | — | not started |

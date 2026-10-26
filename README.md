@@ -15,13 +15,15 @@ GitHub Pages later.
 | --- | --- | --- |
 | `supabase/config.toml` | Supabase CLI config. `recruiting` is in the exposed schemas; auth defaults match the dashboard steps below | 2 |
 | `supabase/migrations/` | Database migrations. Applied to the hosted project with `npm run db:migrate`, never with `supabase db push` (see "Two repos, one project"). One file per change, never edited after it has been applied | 2+ |
-| `supabase/seed.sql` | Local-only seed for `npx supabase start` / `db reset` | 3 |
+| `supabase/seed.sql` | Local-only seed: four test sign-ins and sample applications for `db reset` | 3 |
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform submissions | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions | 4 |
-| `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate` and `npm run db:status` | 2 |
+| `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
+| `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack | 3 |
 | `package.json` | Only the runner's `pg` dependency and the npm scripts. The frontend has no build step | 2 |
 | `web/` | The tracker frontend | 6 |
-| `docs/` | `database-conventions.md`, `positions-seed.csv` (fill in before Phase 3) | 2+ |
+| `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
 
 ## What Phase 2 created in the database
@@ -40,6 +42,32 @@ Migration `20261025000000_create_recruiting_schema_and_profiles.sql`:
 The migration was run through the Supabase CLI against a local Postgres 16 with the policies
 exercised as admin, HR, a user with no profile, `anon`, and `service_role`. It has not yet been
 applied to `am-projects`; that is step 4 below.
+
+## What Phase 3 created in the database
+
+Migrations `20261026000100` to `20261026000400`, all in schema `recruiting`:
+
+- Helpers `is_staff()` (admin or hr), `set_updated_at()` (trigger), `first_stage_id()`,
+  `role_rank()`; enums for position status, posting channel, file kind, contact kind and
+  direction, offer outcome, feedback verdict and document kind.
+- Tables: `stages`, `positions`, `postings`, `channel_spend`, `forms`, `applications`,
+  `application_files`, `application_status`, `status_history`, `contacts`, `offers`,
+  `referrals`, `manager_feedback`, `documents`. Every one has RLS on and explicit grants.
+- Triggers: inserting an application creates its `application_status` row in the first stage
+  and the opening `status_history` row; changing `stage_id` stamps `stage_since` and appends to
+  `status_history`. The app never writes `status_history` directly (no insert grant).
+- View `applications_for_managers`: the only path managers have to applications. It omits the
+  raw `answers`, notes, tags, offers, referrals and the contact log, and surfaces education,
+  skills and employment history from `answers` through each form's `field_map`.
+- Seed data: eight stages (Applied → Hired, plus Not selected and Withdrawn), the three Jotform
+  forms with their full question lists and field maps, and 17 positions from
+  `docs/positions-seed.csv` (department, manager and pay still blank).
+
+Role summary: admin and hr read and write everything (profiles and application deletes are
+admin-only); managers read stages, positions, postings, forms, profiles, documents their
+`min_role` allows, and the curated view, and may write their own `manager_feedback`; no profile
+or `anon` sees nothing. Checked locally with `scripts/test-policies.sql` and through the local
+Data API as each user.
 
 ## Manual steps in Supabase (do these in order)
 
@@ -98,13 +126,15 @@ Migrations are applied by this repo's own runner, not by `npx supabase db push`.
 in "Two repos, one project" below; the short version is that `db push` would make the
 inventory app's CLI stop working on the shared project.
 
-Get the connection string: Dashboard → **Connect** (button in the top bar) → **Session pooler**
-tab (not Transaction pooler) → copy the URI and replace `[YOUR-PASSWORD]` with the database
-password from step 3. Put it in a file named `.env` at the root of this repo (copy
+Get the connection string: Dashboard → **Connect** (button in the top bar) → the **Direct /
+Connection string** tile → under **Connection Method** pick **Session pooler** (not Direct, which
+is IPv6-only, and not Transaction pooler, which is port 6543) → copy the URI and replace
+`[YOUR-PASSWORD]` with the database password from step 3. The host looks like
+`aws-1-us-west-2.pooler.supabase.com`; the number and region are the project's own. Put it in a file named `.env` at the root of this repo (copy
 `.env.example`), which git ignores:
 
 ```
-SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres
 ```
 
 Then:
@@ -116,13 +146,27 @@ npm run db:migrate
 npm run db:status
 ```
 
-The first status shows `20261025000000_create_recruiting_schema_and_profiles.sql` as pending;
-migrate applies it inside a transaction and records it in `recruiting.schema_migrations`; the
-second status shows it as applied. In the dashboard, **Table Editor** → schema selector (top
-left, says `public`) → pick `recruiting` → you should see `profiles` and `schema_migrations`.
+The first status lists every migration in `supabase/migrations/` as pending; migrate applies
+each inside its own transaction and records it in `recruiting.schema_migrations`; the second
+status shows them as applied. In the dashboard, **Table Editor** → schema selector (top left,
+says `public`) → pick `recruiting` → you should see the tables. (In a narrow window the table
+list is hidden; widen it or use **SQL Editor** → `select * from recruiting.schema_migrations;`.)
 
-If the runner reports a certificate error: **Project Settings** → **Database** → **SSL
-Configuration** → download the certificate, and add
+**If you cannot get the database password** (resetting it needs the Administrator or Owner role
+in the Supabase organization; Developers can only read settings), the same SQL can go through
+the dashboard, which connects with your dashboard login instead:
+
+```sh
+npm run db:print
+```
+
+prints each migration wrapped in `begin; … commit;` with the matching
+`recruiting.schema_migrations` row, ready to paste into **SQL Editor** one file at a time, oldest
+first, skipping any the history table already lists. The runner recognises them as applied
+afterwards, so switching back to `npm run db:migrate` later is seamless.
+
+If the runner reports a certificate error ("self-signed certificate in certificate chain"):
+**Project Settings** → **Database** → **SSL Configuration** → download the certificate, and add
 `SUPABASE_DB_SSL_CA=/path/to/prod-ca-2021.crt` to `.env`.
 
 ### 5. Expose the `recruiting` schema in the Data API
@@ -170,17 +214,17 @@ compare, and `config.toml` still drives the local Docker stack.
 Dashboard → **Authentication** → **Users** → **Add user** → **Create new user**. Enter your
 Rexius email and a password (10 characters or more) and tick **Auto Confirm User**.
 
-Then **SQL Editor** → new query → run, with your email substituted:
+Then give that user the admin role, either from the repo root (uses the `.env` connection):
 
-```sql
-insert into recruiting.profiles (user_id, role, name)
-select id, 'admin', 'Your Name'
-from auth.users
-where email = 'you@rexius.com';
+```sh
+npm run db:make-admin -- you@rexius.com "Your Name"
 ```
 
-Check with `select * from recruiting.profiles;` — one row, role `admin`. Phase 3 adds the same
-SQL as a reusable script and the invite flow for HR and managers arrives in Phase 8.
+or, without the connection string, open `scripts/make-admin.sql`, change the email and name on
+its first `select` line, and run it in **SQL Editor**. Either way the result is one row in
+`recruiting.profiles` with role `admin`. Re-running for the same email updates the row rather
+than adding a second. Inviting HR and managers through the app arrives in Phase 8; until then
+an admin can insert their profile rows the same way with `'hr'` or `'manager'`.
 
 ### 8. Where secrets go (nothing to set yet)
 
@@ -205,12 +249,32 @@ project and serve it locally:
 npx serve web        # http://localhost:3000, which is why that URL is registered in step 6
 ```
 
-A full local Supabase stack (`npx supabase start`) needs Docker Desktop and gives you a
-throwaway database at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:54323`.
-`npx supabase db reset` replays the migrations and `supabase/seed.sql` into it. This is useful
-from Phase 3 on; nothing in Phase 2 requires it. The runner can target it too, with
+A full local Supabase stack (`npx supabase start`) needs Docker Desktop running and gives you a
+throwaway copy of the project: API at `http://127.0.0.1:54321`, Studio at
+`http://127.0.0.1:54323`, Postgres at `127.0.0.1:54322`. Its API, auth and redirect settings
+come from `supabase/config.toml`, so none of the dashboard steps above apply to it.
+`npx supabase db reset` replays `supabase/migrations/` and then `supabase/seed.sql`, which
+creates four local sign-ins (password `localdev-password` for all):
+
+| Email | Role |
+| --- | --- |
+| `admin@local.test` | admin |
+| `hr@local.test` | hr |
+| `manager@local.test` | manager |
+| `nobody@local.test` | none (auth user without a profile; must see nothing) |
+
+plus five invented applications in different stages, a referral, a contact, a posting and a
+month of spend. `scripts/test-policies.sql` exercises every policy as each of those users and as
+`anon` and `service_role`; run it after any migration change:
+
+```sh
+docker exec -i supabase_db_rexius-recruiting psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql
+```
+
+Every line should begin with `PASS`. The runner can target the local database too, with
 `SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres`, but `db reset` is the
-simpler way locally.
+simpler way locally. Starting only what Phase 3 needs is faster:
+`npx supabase start -x realtime,storage-api,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor`.
 
 ## Two repos, one project
 
