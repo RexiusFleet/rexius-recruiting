@@ -17,11 +17,11 @@ GitHub Pages later.
 | `supabase/migrations/` | Database migrations. Applied to the hosted project with `npm run db:migrate`, never with `supabase db push` (see "Two repos, one project"). One file per change, never edited after it has been applied | 2+ |
 | `supabase/seed.sql` | Local-only seed: four test sign-ins and sample applications for `db reset` | 3 |
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform submissions | 5 |
-| `scripts/backfill/` | One-time import of existing Jotform submissions | 4 |
+| `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack | 3 |
-| `package.json` | Only the runner's `pg` dependency and the npm scripts. The frontend has no build step | 2 |
+| `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/` | The tracker frontend | 6 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
@@ -69,9 +69,22 @@ admin-only); managers read stages, positions, postings, forms, profiles, documen
 or `anon` sees nothing. Checked locally with `scripts/test-policies.sql` and through the local
 Data API as each user.
 
+## What Phase 4 created
+
+Migration `20261027000100_storage_bucket_recruiting_files.sql`: the private Storage bucket
+`recruiting-files` (25 MiB per file) and one policy on `storage.objects` letting any signed-in
+user with a profile read its objects, which is what lets the frontend request short-lived signed
+URLs for managers as well as staff. There is no write policy for browser sessions; only
+`service_role` (the backfill script and, later, the webhook) writes to the bucket.
+
+`scripts/backfill/`: the import described in `scripts/backfill/README.md`. On the local stack it
+imported every submission from the three forms (about 1,600) with their resumes and portfolios,
+skipped nothing it had already imported on a second run, and stored none of the driver-licence,
+signature or initials answers. Running it against the hosted project is step 10 below.
+
 ## Manual steps in Supabase (do these in order)
 
-You need: a terminal with Node 20.12 or newer (the Supabase CLI runs through `npx`; the
+You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
 migration runner needs one `npm install`), and owner access to the `am-projects` project in the Supabase dashboard. Run every command from
 the root of this repo.
 
@@ -226,19 +239,20 @@ its first `select` line, and run it in **SQL Editor**. Either way the result is 
 than adding a second. Inviting HR and managers through the app arrives in Phase 8; until then
 an admin can insert their profile rows the same way with `'hr'` or `'manager'`.
 
-### 8. Where secrets go (nothing to set yet)
+### 8. Where secrets go
 
 | Secret | Needed from | Where to set it |
 | --- | --- | --- |
 | Database password | Step 3 | Prompted by `supabase link`, or `SUPABASE_DB_PASSWORD` in your shell |
 | `SUPABASE_DB_URL` (connection string, contains the password) | Step 4 and every later migration | `.env` at the repo root, gitignored |
 | CLI access token | Step 3 | `supabase login`, or `SUPABASE_ACCESS_TOKEN` in your shell |
-| `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | `npx supabase secrets set --env-file ./supabase/.env` with the key in that gitignored file, or Dashboard → **Edge Functions** → **Secrets**. The backfill script reads it from your local environment |
+| `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | For the backfill: `.env` at the repo root (step 10). For the webhook: `npx supabase secrets set --env-file ./supabase/.env` with the key in that gitignored file, or Dashboard → **Edge Functions** → **Secrets** |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Phase 4 (backfill) | `.env` at the repo root. The service-role key is in **Project Settings** → **API Keys**; it bypasses RLS and never goes near the frontend |
 | `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as above |
 | `ANTHROPIC_API_KEY` | Phase 9 | Same as above |
 
 `supabase/.env` and every `.env*` file are gitignored. Jotform's API key comes from Jotform →
-account settings → API; that happens in Phase 4.
+account settings → API (a read-only key is enough for the backfill).
 
 ### 9. Local development (optional)
 
@@ -271,10 +285,55 @@ month of spend. `scripts/test-policies.sql` exercises every policy as each of th
 docker exec -i supabase_db_rexius-recruiting psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql
 ```
 
-Every line should begin with `PASS`. The runner can target the local database too, with
+Every line should begin with `PASS`. Its row counts assume the fresh seed, so run it right after
+`db reset`, before a backfill. The runner can target the local database too, with
 `SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres`, but `db reset` is the
-simpler way locally. Starting only what Phase 3 needs is faster:
-`npx supabase start -x realtime,storage-api,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor`.
+simpler way locally. Starting only what the current phases need is faster:
+`npx supabase start -x realtime,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor`
+(keep `storage-api`; the backfill uploads to it).
+
+To fill the local stack with real applications, follow step 10 with `SUPABASE_URL` set to
+`http://127.0.0.1:54321` and the local service-role key from `npx supabase status`; start with
+`--limit 25`.
+
+### 10. Run the backfill (Phase 4)
+
+Order matters: the bucket migration first, then the schema exposed (step 5), then the script.
+
+1. **Apply the migration.** `npm run db:migrate` if `SUPABASE_DB_URL` works for you. If the
+   database password is still unavailable, `npm run db:print` and paste the
+   `20261027000100_storage_bucket_recruiting_files.sql` block into **SQL Editor**, or send it
+   through the Management API the way Phase 3 was applied (the CLI token stays in your keychain;
+   nothing is pasted into chat):
+
+   ```sh
+   npm run db:print | awk '/20261027000100/,/^commit;$/' > /tmp/bucket.sql &&    curl -s -X POST "https://api.supabase.com/v1/projects/<ref>/database/query"      -H "Authorization: Bearer $(security find-generic-password -s 'Supabase CLI' -w)"      -H "Content-Type: application/json"      --data "$(node -e 'process.stdout.write(JSON.stringify({query: require("fs").readFileSync("/tmp/bucket.sql","utf8")}))')"
+   ```
+
+   Check: Dashboard → **Storage** shows a private bucket `recruiting-files`.
+2. **Expose the schema** (step 5) if not done yet; the script talks to the Data API.
+3. **Put the three variables in `.env`** at the repo root (never in chat or a commit):
+   `JOTFORM_API_KEY` (Jotform → account settings → API), `SUPABASE_URL`
+   (`https://<ref>.supabase.co`) and `SUPABASE_SERVICE_ROLE_KEY` (**Project Settings** → **API
+   Keys** → the `service_role` key on the Legacy tab, or an `sb_secret_…` key). The service-role
+   key bypasses RLS; it belongs only in `.env` and in Edge Function secrets.
+4. **Dry run, then a small real run, then everything:**
+
+   ```sh
+   npm run backfill -- --dry-run
+   npm run backfill -- --form 232764918957171 --limit 25
+   npm run backfill
+   ```
+
+   Expect roughly 1,300 English, 230 Spanish and 55 CAS applications, a few hundred files, and
+   zero failures. Re-running is safe; it skips what is already there. `scripts/backfill/README.md`
+   has every option and the cleanup rules.
+5. **Check in the dashboard.** **Table Editor** → schema `recruiting` → `applications` has the
+   rows and `application_status` has one row per application in stage "Applied"; **Storage** →
+   `recruiting-files` → `applications/` has one folder per form.
+
+Delete the service-role key from `.env` afterwards if you prefer; the webhook (Phase 5) gets its
+own copy as a function secret.
 
 ## Two repos, one project
 

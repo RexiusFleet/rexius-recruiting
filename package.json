@@ -4,16 +4,21 @@
   "type": "module",
   "description": "Rexius Recruiter: scripts for the shared Supabase project. The frontend in web/ has no build step.",
   "engines": {
-    "node": ">=20.12"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:status": "node scripts/db-migrate.mjs --status",
     "serve": "npx serve web",
     "db:make-admin": "node scripts/make-admin.mjs",
-    "db:print": "node scripts/db-migrate.mjs --print"
+    "db:print": "node scripts/db-migrate.mjs --print",
+    "backfill": "node scripts/backfill/backfill.mjs",
+    "backfill:test": "node --test scripts/backfill/clean.test.mjs"
   },
   "devDependencies": {
     "pg": "8.23.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0"
   }
 }

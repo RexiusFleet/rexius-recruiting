@@ -2,7 +2,7 @@
 
 This file is the brief for building the Rexius Recruiter app. Commit it as `CLAUDE.md` in the root of the `rexius-recruiting` repository so Claude Code reads it at the start of every session. The `reference/` folder beside it holds the question maps for the three Jotform forms, the shape of a Jotform submission, and the working prototype of the tracker frontend.
 
-Last updated: 2026-10-25. Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
+Last updated: 2026-10-25 (Phase 4). Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
 
 ## 1. What we are building
 
@@ -157,7 +157,7 @@ Each phase is one session and one pull request.
 | 1 Spec | Planning document in the claude.ai Project | — | done |
 | 2 Repo and Supabase setup | Repo layout, `supabase/config.toml`, migration creating schema `recruiting`, README with the manual steps (expose schema, link CLI) | Create empty repo; have project URL and anon key; confirm the Supabase plan is paid (free projects pause after 7 idle days and drop webhooks) | done (hosted settings pending an org admin, see README) |
 | 3 Schema and roles | Migrations for every table, enums, RLS, helper functions, stages seeded, positions seeded from `docs/positions-seed.csv`, SQL to make the first admin | Fill `docs/positions-seed.csv` (title, location, department, hiring manager, pay range, posting URLs) | in review |
-| 4 Backfill | `scripts/backfill/` importing all existing submissions with cleanup rules and resume copy to storage; idempotent on `jotform_submission_id` | Set `JOTFORM_API_KEY` as a Supabase secret (or local env for the script); never paste it in chat | not started |
+| 4 Backfill | `scripts/backfill/` importing all existing submissions with cleanup rules and resume copy to storage; idempotent on `jotform_submission_id`; migration for the private `recruiting-files` bucket | Put `JOTFORM_API_KEY`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the gitignored `.env` (README step 10); never paste them in chat | in review |
 | 5 Webhook | Edge Function `recruiting-jotform-webhook` with a shared-secret check, same cleaning as backfill | Add the function URL to each of the three forms (Jotform settings → Integrations → Webhooks); set the shared secret | not started |
 | 6 Frontend and login | `web/` tracker with login, roles, pipeline, filters, drawer, contact log, CSV export | — | not started |
 | 7 Positions, channels, documents, reports | Positions UI, postings and spend entry, dropdown-drift check, offers, referrals, document library, Reports page over the views | Channel spend figures; documents to upload | not started |
