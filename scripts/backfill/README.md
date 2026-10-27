@@ -3,7 +3,7 @@
 One-time import of every existing submission from the three Jotform forms (CLAUDE.md section 4)
 into `recruiting.applications`, with resumes and portfolios copied into the private Storage
 bucket `recruiting-files` and recorded in `recruiting.application_files`. After this runs once,
-the Phase 5 webhook keeps the table current; the script stays useful for re-syncing (it is
+the Phase 5 webhook (README step 14) keeps the table current; the script stays useful for re-syncing (it is
 idempotent) and for re-cleaning after a rule change (`--refresh`).
 
 ## Files
@@ -11,7 +11,7 @@ idempotent) and for re-cleaning after a rule change (`--refresh`).
 | File | Purpose |
 | --- | --- |
 | `backfill.mjs` | The command. Reads forms, field maps and positions from the database, pages through Jotform's REST API, writes rows and files |
-| `lib/clean.mjs` | Pure functions: one submission in, one `applications` row plus a list of files out. Every cleanup and never-import rule lives here. The webhook reuses it |
+| `lib/clean.mjs` | Re-exports `supabase/functions/_shared/clean.mjs`, the pure functions that turn one submission into one `applications` row plus a list of files. Every cleanup and never-import rule lives there, shared with the Phase 5 webhook (the Supabase CLI only bundles files under `supabase/functions`) |
 | `lib/jotform.mjs` | Small Jotform REST client: paged `GET /form/{id}/submissions` (`APIKEY` header, `limit` max 1000, `offset`) and authenticated file download with retry |
 | `clean.test.mjs` | Unit tests for the rules, using the real field maps and question lists. `npm run backfill:test`, no network or database needed |
 

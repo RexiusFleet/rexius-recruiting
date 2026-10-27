@@ -391,12 +391,15 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
-# Phase 5 adds the Jotform webhook function. Jotform cannot send a Supabase JWT, so that function
-# will be configured here with `verify_jwt = false` and will check its own shared secret instead:
-# [functions.recruiting-jotform-webhook]
-# verify_jwt = false
-# Secrets (JOTFORM_API_KEY, the webhook shared secret, later ANTHROPIC_API_KEY) are never written
+# Phase 5: the Jotform webhook function. Jotform cannot send a Supabase JWT, so the gateway's
+# JWT check is off and the function checks its own shared secret (`?secret=` on the webhook
+# URL) instead. HOSTED PROJECT TOO: deploy with `--no-verify-jwt` (README.md step 14).
+[functions.recruiting-jotform-webhook]
+verify_jwt = false
+# Secrets (JOTFORM_API_KEY, JOTFORM_WEBHOOK_SECRET, later ANTHROPIC_API_KEY) are never written
 # here; set them with `npx supabase secrets set` or in the dashboard. See README.md step 8.
+# Locally, `supabase functions serve --env-file supabase/functions/.env` (gitignored; see
+# supabase/functions/.env.example).
 
 [edge_runtime]
 enabled = true
