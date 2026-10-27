@@ -18,6 +18,18 @@
     document.body.textContent = "config.js is missing the Supabase URL or key, or supabase-js did not load.";
     return;
   }
+  // Invite and password-reset emails (Phase 8) open this page with the session in the URL hash
+  // (#access_token=...&type=invite|recovery). supabase-js reads and clears that hash when the
+  // client is created, so the link type is noted first; onSession then asks for a password
+  // before showing the app. A failed link arrives as #error=...&error_description=... instead.
+  var AUTH_LINK = (function () {
+    var h = location.hash || "";
+    var t = /[#&]type=(invite|recovery|magiclink|signup|email_change)(?=&|$)/.exec(h);
+    var e = /[#&]error_description=([^&]*)/.exec(h);
+    var link = { type: t ? t[1] : "", error: e ? decodeURIComponent(e[1].replace(/\+/g, " ")) : "" };
+    if (link.error) history.replaceState(null, "", location.pathname + location.search);
+    return link;
+  })();
   var sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { db: { schema: "recruiting" } });
 
   var PAGE = 1000;              // PostgREST max rows per request (config.toml max_rows)
@@ -110,7 +122,7 @@
 
   // ---------- Views ----------
   function show(view) {
-    ["loginView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
+    ["loginView", "setPasswordView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
     if (view !== "appView") { hideDrawer(); currentPage = null; }
   }
 
@@ -140,7 +152,7 @@
 
   // ---------- Auth ----------
   async function signIn(email, password) {
-    $("loginError").textContent = "";
+    $("loginError").textContent = ""; $("loginNote").textContent = "";
     $("loginBtn").disabled = true;
     var res = await sb.auth.signInWithPassword({ email: email, password: password });
     $("loginBtn").disabled = false;
@@ -152,6 +164,34 @@
     resetData();
     show("loginView");
   }
+  // "Forgot your password?": Supabase emails a link back to this page with type=recovery.
+  async function forgotPassword() {
+    var email = $("loginEmail").value.trim();
+    $("loginError").textContent = ""; $("loginNote").textContent = "";
+    if (!email) { $("loginError").textContent = "Enter your email first, then click the link."; return; }
+    $("forgotBtn").disabled = true;
+    var res = await sb.auth.resetPasswordForEmail(email, { redirectTo: pageUrl() });
+    $("forgotBtn").disabled = false;
+    if (res.error) { $("loginError").textContent = res.error.message; return; }
+    $("loginNote").textContent = "If " + email + " has an account, a password-reset link is on its way. The link opens this page.";
+  }
+  // The page's own address without hash or query: what invite and reset links must come back to
+  // (it has to be on the redirect allow list in Supabase Auth; README step 6).
+  function pageUrl() { return location.origin + location.pathname; }
+  // After an invite or reset link: save the chosen password, then continue as a normal sign-in.
+  async function savePassword() {
+    var p1 = $("setPassword1").value, p2 = $("setPassword2").value;
+    $("setPasswordError").textContent = "";
+    if (p1.length < 10) { $("setPasswordError").textContent = "Use at least 10 characters."; return; }
+    if (p1 !== p2) { $("setPasswordError").textContent = "The two passwords differ."; return; }
+    $("setPasswordBtn").disabled = true;
+    var res = await sb.auth.updateUser({ password: p1 });
+    $("setPasswordBtn").disabled = false;
+    if (res.error) { $("setPasswordError").textContent = res.error.message; return; }
+    $("setPassword1").value = ""; $("setPassword2").value = "";
+    AUTH_LINK.type = "";
+    onSession(session);
+  }
   function resetData() {
     apps = []; appById = {}; selectedId = null; filters = emptyFilters(); shown = SHOW_STEP; lastLoaded = null;
     $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…";
@@ -161,7 +201,16 @@
 
   async function onSession(s) {
     session = s;
-    if (!s) { profile = null; role = null; staff = false; show("loginView"); return; }
+    if (!s) {
+      profile = null; role = null; staff = false; show("loginView");
+      if (AUTH_LINK.error) { $("loginError").textContent = "That link did not work: " + AUTH_LINK.error + ". Ask an admin for a new invite, or use the password link below."; AUTH_LINK.error = ""; }
+      return;
+    }
+    if (AUTH_LINK.type === "invite" || AUTH_LINK.type === "recovery") {
+      $("setPasswordEmail").textContent = s.user.email || s.user.id;
+      show("setPasswordView");
+      return;
+    }
     var res = await sb.from("profiles").select("user_id, role, name, location").eq("user_id", s.user.id).maybeSingle();
     if (res.error) { show("loginView"); $("loginError").textContent = "Could not read your profile: " + errText(res.error); return; }
     if (!res.data) { $("noAccessEmail").textContent = s.user.email || s.user.id; show("noAccessView"); return; }
@@ -1066,6 +1115,8 @@
   $("mEmail").addEventListener("input", function () { var k = normalizeEmail(this.value); dupHint("mEmailDup", k ? "e:" + k : null); });
   $("mPhone").addEventListener("input", function () { var k = normalizePhone(this.value); dupHint("mPhoneDup", k ? "p:" + k : null); });
   $("loginForm").addEventListener("submit", function (e) { e.preventDefault(); signIn($("loginEmail").value.trim(), $("loginPassword").value); });
+  $("forgotBtn").addEventListener("click", forgotPassword);
+  $("setPasswordForm").addEventListener("submit", function (e) { e.preventDefault(); savePassword(); });
   $("signOutBtn").addEventListener("click", signOut);
   $("noAccessSignOut").addEventListener("click", signOut);
   $("q").addEventListener("input", function () { filters.q = this.value; shown = SHOW_STEP; render(); });
@@ -1123,6 +1174,9 @@
     if (!booted) return;
     if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
       if (!s || !session || s.user.id !== session.user.id) onSession(s); else session = s;
+    } else if (event === "PASSWORD_RECOVERY" && s) {
+      // A recovery link that supabase-js only noticed after boot (rare): same password screen.
+      session = s; AUTH_LINK.type = "recovery"; onSession(s);
     } else if (s) session = s;
   });
 })();

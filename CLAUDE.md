@@ -2,7 +2,7 @@
 
 This file is the brief for building the Rexius Recruiter app. Commit it as `CLAUDE.md` in the root of the `rexius-recruiting` repository so Claude Code reads it at the start of every session. The `reference/` folder beside it holds the question maps for the three Jotform forms, the shape of a Jotform submission, and the working prototype of the tracker frontend.
 
-Last updated: 2026-10-26 (Phase 7). Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
+Last updated: 2026-10-27 (Phase 8). Planning history lives in the claude.ai Project "Job Application Tracker" (spec document: https://claude.ai/artifact/JHd1gSvT6ULe6QDPKNtSM1).
 
 ## 1. What we are building
 
@@ -164,7 +164,7 @@ Each phase is one session and one pull request.
 | 5 Webhook | Edge Function `recruiting-jotform-webhook` with a shared-secret check, same cleaning as backfill | Add the function URL to each of the three forms (Jotform settings → Integrations → Webhooks); set the shared secret | not started |
 | 6 Frontend and login | `web/` tracker with login, roles, pipeline, filters, drawer, contact log, CSV export; migration adding `files` to the manager view | — | done (hosted cutover in Phase 8) |
 | 7 Positions, channels, documents, reports | Positions UI, postings and spend entry, dropdown-drift check, position aliases and re-link, offers, referrals, document library, Reports page over the `report_*` views | Channel spend figures; documents to upload | in review (verified against the local stack; hosted cutover in Phase 8) |
-| 8 Hosting and invites | GitHub Pages, redirect URLs registered, HR and managers invited | Decide who gets which role | not started |
+| 8 Hosting and invites | GitHub Pages workflow, invite and password-reset flow in `web/`, `scripts/make-profile.sql`, README step 13 (Pages source, repo variables, auth URLs, SMTP, invites) | Decide who gets which role; set Pages source and the two repo variables | in review (PR 9; dashboard steps are the user's) |
 | 9 Claude features (later) | Edge Function calling the Anthropic API: role overviews with sources, salary reference research, applicant summaries, posting drafts | Set `ANTHROPIC_API_KEY` as a Supabase secret | later |
 
 Outside the phase table: **manual application entry** (PR 8, branch `claude/manual-applications`, 2026-10-26) adds the "Add application" form for paper applications with scans, migrations `20261030000100` to `20261030000300`, and 21 policy checks. Its view migration appends after Phase 7's `furthest_stage_id`, so on the hosted project Phase 7's migrations go first. README "What the manual-entry change created" has the details.
