@@ -37,7 +37,7 @@ select pg_temp.check('admin: reads status_history', (select count(*) from recrui
 insert into recruiting.profiles (user_id, role, name) values ('44444444-4444-4444-4444-444444444444', 'manager', 'Promoted Nobody');
 select pg_temp.check('admin: can add a profile', (select count(*) from recruiting.profiles) = 4);
 insert into recruiting.stages (name, sort_order) values ('Background check', 55);
-select pg_temp.check('admin: can add a stage', (select count(*) from recruiting.stages) = 9);
+select pg_temp.check('admin: can add a stage', (select count(*) from recruiting.stages) = 10);
 delete from recruiting.applications where jotform_submission_id = '6000000000000000005';
 select pg_temp.check('admin: can delete an application', (select count(*) from recruiting.applications) = 4);
 rollback;
@@ -104,7 +104,7 @@ select pg_temp.check('manager: sees zero rows of status_history', (select count(
 select pg_temp.check('manager: reads the curated view', (select count(*) from recruiting.applications_for_managers) = 5);
 select pg_temp.check('manager: view has stage and education', (select count(*) from recruiting.applications_for_managers where stage_name is not null and education is not null) = 5);
 select pg_temp.check('manager: view has employment history', (select jsonb_array_length(employment_history) from recruiting.applications_for_managers where name = 'Priya Natarajan') = 1);
-select pg_temp.check('manager: reads stages', (select count(*) from recruiting.stages) = 8);
+select pg_temp.check('manager: reads stages', (select count(*) from recruiting.stages) = 9);
 select pg_temp.check('manager: reads positions (17 seeded open + 10 past roles from Phase 7)', (select count(*) from recruiting.positions) = 27);
 select pg_temp.check('manager: reads postings', (select count(*) from recruiting.postings) = 1);
 select pg_temp.check('manager: reads forms', (select count(*) from recruiting.forms) = 3);

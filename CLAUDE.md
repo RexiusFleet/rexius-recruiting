@@ -127,7 +127,7 @@ These apply to the webhook, the backfill, and every later import.
 | `application_files` | Resumes, portfolios and scans of paper applications | `id`, `application_id`, `storage_path`, `original_name`, `kind` (resume, portfolio, scan, other), `jotform_url` |
 | `application_status` | Current review state, one per application | `application_id` (PK), `stage_id`, `assigned_to` (text), `notes`, `tags` text[], `updated_by`, `updated_at` |
 | `status_history` | Every stage change | `id`, `application_id`, `from_stage_id`, `to_stage_id`, `changed_by`, `changed_at` |
-| `stages` | Pipeline, admin-editable | `id`, `name`, `sort_order`, `is_terminal`, `is_hired` |
+| `stages` | Pipeline, admin-editable | `id`, `name`, `sort_order`, `is_terminal`, `is_hired`, `is_archive` (the one "set aside without an outcome" stage; `archive_before(date)` fills it) |
 | `contacts` | Candidate communication log | `id`, `application_id`, `kind` (email, call, text, in_person), `direction`, `template_key` (nullable), `summary`, `by`, `at` |
 | `manager_feedback` | Manager response on a hand-off | `id`, `application_id`, `manager_user_id`, `verdict` (interested, pass, undecided), `note`, `at` |
 | `position_aliases` | Other texts that mean a position at a location (Spanish labels, old labels, CAS free text); `match_position()` and the insert trigger use them | `id`, `position_id`, `alias`, `location`, `note`, `created_by`, `created_at`; unique on lower(alias)+location |

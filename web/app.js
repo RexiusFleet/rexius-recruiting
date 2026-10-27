@@ -36,7 +36,7 @@
   var SHOW_STEP = 250;          // "Show more" step, as in the prototype
   var SIGNED_URL_SECONDS = 300; // resumes open through short-lived signed URLs
   var BUCKET = "recruiting-files";
-  var STAGE_COLORS = ["var(--s-new)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)", "var(--s-offer)", "var(--s-hired)", "var(--s-no)", "var(--s-x)"];
+  var STAGE_COLORS = ["var(--s-new)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)", "var(--s-offer)", "var(--s-hired)", "var(--s-no)", "var(--s-x)", "var(--s-arch)"];
   var MANUAL_ANSWER_LABELS = { manual_notes: "Notes and skills from the paper form" }; // keys a manual entry stores in `answers`
   var SKIP_TYPES = { control_text: 1, control_head: 1, control_button: 1, control_divider: 1, control_pagebreak: 1, control_collapse: 1, control_signature: 1 };
 

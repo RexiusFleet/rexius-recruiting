@@ -3,7 +3,7 @@
   --paper: #f5f7f3; --panel: #ffffff; --ink: #172019; --mute: #5f6b63; --faint: #8d978f;
   --line: #d9dfd8; --line-strong: #b9c3ba; --accent: #2f6b3f; --accent-ink: #ffffff; --accent-soft: #e2eee4;
   --hover: #eef2ec; --select: #e3ece3; --warn-bg: #fbeedd; --warn-ink: #7a4b12; --bad: #a33b2a;
-  --s-new: #d88a2b; --s-rev: #6b7f8f; --s-sent: #3f74a8; --s-int: #7c5fb3; --s-offer: #2a8a8a; --s-hired: #2f6b3f; --s-no: #9a9f9a; --s-x: #8a6d5a;
+  --s-new: #d88a2b; --s-rev: #6b7f8f; --s-sent: #3f74a8; --s-int: #7c5fb3; --s-offer: #2a8a8a; --s-hired: #2f6b3f; --s-no: #9a9f9a; --s-x: #8a6d5a; --s-arch: #b0a48c;
   --radius: 6px; --shadow: 0 10px 30px rgba(23, 32, 25, 0.12);
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -14,7 +14,7 @@
     --paper: #121714; --panel: #1a211c; --ink: #e7ece7; --mute: #a3ada5; --faint: #747f77;
     --line: #2b352e; --line-strong: #3f4b42; --accent: #7fc392; --accent-ink: #0f1a12; --accent-soft: #223328;
     --hover: #202a24; --select: #243127; --warn-bg: #3a2d16; --warn-ink: #f1c98a; --bad: #e08a7a;
-    --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-offer: #5fbfbf; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884;
+    --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-offer: #5fbfbf; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884; --s-arch: #8c846f;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
 }
@@ -23,7 +23,7 @@
   --paper: #121714; --panel: #1a211c; --ink: #e7ece7; --mute: #a3ada5; --faint: #747f77;
   --line: #2b352e; --line-strong: #3f4b42; --accent: #7fc392; --accent-ink: #0f1a12; --accent-soft: #223328;
   --hover: #202a24; --select: #243127; --warn-bg: #3a2d16; --warn-ink: #f1c98a; --bad: #e08a7a;
-  --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-offer: #5fbfbf; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884;
+  --s-new: #e6a04a; --s-rev: #8ea2b3; --s-sent: #6f9fd0; --s-int: #a68de0; --s-offer: #5fbfbf; --s-hired: #7fc392; --s-no: #777d77; --s-x: #b59884; --s-arch: #8c846f;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
