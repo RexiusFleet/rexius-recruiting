@@ -9,8 +9,8 @@ Backend: one Supabase project shared with the inventory app, called `am-projects
 these docs. In the dashboard it is currently named **Apparel** (ref `hibjqcgitqtgmkurghlw`);
 the rename to am-projects waits on an organization Administrator and changes nothing that
 runs, since every tool here connects by ref, not by name. This app owns the
-Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally for now and on
-GitHub Pages later.
+Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally during development and
+published to GitHub Pages at https://andy-rexius.github.io/rexius-recruiting/ (step 13).
 
 ## Repo layout
 
@@ -27,6 +27,8 @@ GitHub Pages later.
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `config.js` (project URL and publishable key only). No build step | 6, 7 |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
+| `.github/workflows/pages.yml` | Publishes `web/` to GitHub Pages on every push to `main`, writing `config.js` from two repository variables on the way (step 13) | 8 |
+| `scripts/make-profile.sql` | Give an invited user a role (`admin`, `hr` or `manager`) by pasting into SQL Editor | 8 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
 
@@ -242,6 +244,28 @@ birth or signature on the paper copy.** The scan is stored as an image only (not
 it), but it is still a file anyone with a profile can open, and CLAUDE.md section 5 says those
 values are never stored anywhere in this app.
 
+## What Phase 8 created
+
+Hosting and invites. Nothing changes in the database.
+
+- `.github/workflows/pages.yml`: on every push to `main` that touches `web/`, uploads `web/` to
+  GitHub Pages as-is (no build), except that it overwrites `web/config.js` with the hosted
+  project's URL and publishable key, read from the repository variables `SUPABASE_URL` (optional,
+  defaults to the am-projects URL) and `SUPABASE_PUBLISHABLE_KEY`. The committed `config.js` keeps
+  the local Docker stack's values, so `npx serve web` still works unchanged. The workflow refuses
+  a key that looks like a secret key. Both deployed values are public by design: the key only
+  identifies the project, and `anon` has no access to schema `recruiting` (step 5's curl check).
+- `web/`: an invite or password-reset email now works end to end. Supabase sends the person a
+  link that opens the site with a session in the URL; the page notices the link type before
+  supabase-js clears it and shows **Choose a password** (10 characters or more, typed twice)
+  before anything else. An expired or already-used link shows a plain message on the sign-in
+  card instead of a blank page. The sign-in card gained **Forgot your password?**, which asks
+  Supabase to email a reset link back to the page's own address (it must be on the redirect
+  allow list, step 6). Verified against the local stack: invite link → choose password →
+  no-access screen for a user without a profile; expired link → message; forgot-password → a
+  "Reset your password" email in the local mail catcher.
+- `scripts/make-profile.sql`: `make-admin.sql` generalised to any role, for step 13.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
@@ -366,10 +390,16 @@ after saving and retry.
 
 Dashboard → **Authentication** → **URL Configuration**:
 
-- **Site URL**: `http://localhost:3000`
-- **Redirect URLs**: add `http://localhost:3000/**` and `http://127.0.0.1:3000/**`
-
-Phase 8 adds the GitHub Pages URL here and moves Site URL to it.
+- **Site URL**: `https://andy-rexius.github.io/rexius-recruiting/` once the site is published
+  (step 13); `http://localhost:3000` until then. Invite and reset emails sent from the dashboard
+  link to the Site URL, so it has to be the page people should land on. This setting is shared
+  with the inventory app, whose code only uses password sign-in; the one effect is that a
+  password-recovery email sent from the dashboard for one of its users would open the recruiter
+  page, where the person can still set their password.
+- **Redirect URLs**: add `https://andy-rexius.github.io/rexius-recruiting/**`,
+  `http://localhost:3000/**` and `http://127.0.0.1:3000/**`. The page's "Forgot your password?"
+  link names the page's own address as the return address, and Supabase only honours addresses
+  on this list.
 
 Dashboard → **Authentication** → **Sign In / Providers**:
 
@@ -397,8 +427,8 @@ npm run db:make-admin -- you@rexius.com "Your Name"
 or, without the connection string, open `scripts/make-admin.sql`, change the email and name on
 its first `select` line, and run it in **SQL Editor**. Either way the result is one row in
 `recruiting.profiles` with role `admin`. Re-running for the same email updates the row rather
-than adding a second. Inviting HR and managers through the app arrives in Phase 8; until then
-an admin can insert their profile rows the same way with `'hr'` or `'manager'`.
+than adding a second. HR and managers are invited in step 13; `scripts/make-profile.sql` is the
+same statement with the role as a third value.
 
 ### 8. Where secrets go
 
@@ -510,10 +540,15 @@ The tracker is complete and verified locally; it works against the hosted projec
    `select recruiting.relink_applications();`) once; the insert trigger handles rows that arrive
    later.
 2. Schema `recruiting` is exposed in the Data API (step 5).
-3. The page's URL is registered under Authentication → URL Configuration (step 6; GitHub Pages
-   adds its own URL in Phase 8).
-4. `web/config.js` holds the hosted URL and publishable key instead of the local ones.
-5. Each user has an auth account and a `profiles` row (step 7).
+3. The page's URL is registered under Authentication → URL Configuration (step 6).
+4. The deployed `config.js` holds the hosted URL and publishable key: the GitHub Pages workflow
+   writes it from the repository variables in step 13. (For a hand-run copy against the hosted
+   project, edit `web/config.js` locally as its comment says and do not commit it.)
+5. Each user has an auth account and a `profiles` row (steps 7 and 13).
+6. The three manual-entry migrations (`20261030000100` to `20261030000300`) are applied; the
+   hosted project had the twelve files up to `20261029000400` as of 2026-10-26. Check with
+   `select version from recruiting.schema_migrations order by 1;` in SQL Editor and apply any
+   missing file with `npm run db:print` and the editor (step 4).
 
 ### 12. Phase 7 data to enter by hand
 
@@ -534,6 +569,57 @@ Nothing in Phase 7 is imported; these are typed in through the app by admin or h
 - **Offers and referrals**: record offers from the applicant drawer as they happen (the
   acceptance and time-to-fill reports depend on them); tick Hired and enter the bonus date on
   the referral when paid.
+
+### 13. Host on GitHub Pages and invite users (Phase 8)
+
+The site is the same `web/` folder the workflow in `.github/workflows/pages.yml` uploads; nothing
+is built. Its address is `https://andy-rexius.github.io/rexius-recruiting/` (the rexius-apparel
+site lives beside it). GitHub Pages sites are public pages: anyone with the address sees the
+sign-in card, and nothing else, because every piece of data is behind Supabase Auth and
+row-level security and the page ships only the public key.
+
+1. **Pages on a private repository.** `rexius-recruiting` is private, and GitHub only publishes
+   Pages from a private repository on a paid plan (GitHub Pro for a personal account, Team for an
+   organization). Open **Settings → Pages**; if it asks you to upgrade, either upgrade the plan
+   or make the repository public (**Settings → General → Danger Zone → Change visibility**), as
+   rexius-apparel is. Public would expose the code, migrations, docs, the Jotform question maps
+   and `docs/positions-seed.csv` (titles and, once filled in, departments, managers and pay
+   ranges). It holds no keys, passwords or applicant data; `.gitignore` keeps `.env` out.
+2. **Source.** **Settings → Pages → Build and deployment → Source**: choose **GitHub Actions**
+   (not "Deploy from a branch", which would publish the repo root).
+3. **Variables.** **Settings → Secrets and variables → Actions → Variables → New repository
+   variable**: `SUPABASE_PUBLISHABLE_KEY` = the publishable key from Supabase **Project
+   Settings → API Keys** (`sb_publishable_…`, or the legacy `anon` JWT). Optionally
+   `SUPABASE_URL` = `https://hibjqcgitqtgmkurghlw.supabase.co` (the default when unset). These are
+   Variables, not Secrets: the value is public by design and ends up in the page.
+4. **Deploy.** Merge the Phase 8 pull request; the workflow runs on the push to `main`. To run it
+   by hand later: **Actions → Deploy web to GitHub Pages → Run workflow**. The run's summary
+   shows the site address; the first deploy can take a few minutes to become reachable.
+5. **Auth URLs.** Step 6 with the Pages address as Site URL and in the redirect list. Without the
+   redirect entry, invite and reset links fail with "redirect_to is not allowed".
+6. **Check.** Open the site, sign in as your admin (step 7). The Applications page is empty until
+   the hosted backfill (step 10) has run; the local stack's data is never copied up.
+7. **Email sending.** Supabase's built-in mailer is meant for development: a few messages per
+   hour, from a `supabase.io` address, to any recipient. Before inviting more than a couple of
+   people, set **Authentication → Emails → SMTP Settings** to Rexius' mail provider so invites
+   come from a rexius.com address and are not rate-limited (an organization Administrator does
+   this). The invite and recovery templates under **Authentication → Emails → Templates** can
+   stay as they are; both link to the Site URL.
+8. **Invite each HR user and manager.** For each person:
+   1. **Authentication → Users → Invite user** → their rexius.com email. The user row appears at
+      once and the email goes out.
+   2. **SQL Editor**: `scripts/make-profile.sql` with their email, name and role (`hr` or
+      `manager`; `admin` for a second admin). Do this straight after the invite, before they
+      open the email, so they do not land on the "No access" screen.
+   3. They click the link, land on the site, choose a password, and are in. The link is good
+      for 24 hours by default (**Authentication → Sign In / Providers → Email → Email OTP
+      Expiration**); if it has expired, they type their email on the sign-in card and use
+      **Forgot your password?**, which sends a fresh link.
+   Managers see every location for now; the `profiles.location` column is for a later scoping
+   policy. Removing someone: delete their `profiles` row (`delete from recruiting.profiles where
+   user_id = …`) and the auth user (**Authentication → Users → … → Delete user**).
+9. **Local development keeps working.** `npx serve web` uses the committed `config.js` with the
+   local stack's values. Do not commit hosted values into it; the workflow supplies them.
 
 ## Two repos, one project
 
@@ -577,7 +663,8 @@ on the developer's machine.
 | Layer | What it guarantees | How it is enforced |
 | --- | --- | --- |
 | Public API key (`anon` / publishable) | Identifies the project; grants nothing | `anon` has no `usage` on schema `recruiting`, so every unauthenticated request fails at the schema before reaching a table. Verified with the curl check in step 5 |
-| Sign-in | Accounts exist only when an admin creates or invites them | Public signup is off (step 6). Email + password through Supabase Auth, confirmations on |
+| Sign-in | Accounts exist only when an admin creates or invites them | Public signup is off (step 6). Email + password through Supabase Auth, confirmations on. Invite and reset links only return to addresses on the redirect allow list |
+| Hosting | The published page holds no data and no secret | GitHub Pages serves static files from `web/`; the only project-specific values are the URL and publishable key, which grant nothing (row above). A Pages site is public, so the sign-in card is visible to anyone; nothing behind it is |
 | Profile row | A login without a `recruiting.profiles` row sees nothing | Every policy calls `recruiting.current_role()`, which returns null without a profile. `scripts/test-policies.sql` checks this for every table and the curated view |
 | Role | Managers never see notes, tags, raw answers, offers, referrals, contacts or history | Managers have no select policy on those tables; they read `applications_for_managers`, which does not contain those columns |
 | Row-level security | Decides per row, on every query, for every table | Enabled in the same migration that creates each table; the test script asserts no table in `recruiting` has it off |

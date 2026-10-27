@@ -19,7 +19,21 @@
     <label>Email <input type="email" id="loginEmail" name="email" autocomplete="username" required></label>
     <label>Password <input type="password" id="loginPassword" name="password" autocomplete="current-password" required></label>
     <div class="err" id="loginError" role="alert"></div>
+    <div class="meta" id="loginNote" role="status"></div>
     <button class="btn primary" id="loginBtn" type="submit">Sign in</button>
+    <p class="meta"><button type="button" class="linkbtn" id="forgotBtn">Forgot your password? Enter your email above and click here.</button></p>
+  </form>
+</section>
+
+<!-- Arrived from an invite or password-reset email: choose a password before going on -->
+<section class="gate" id="setPasswordView" hidden>
+  <form class="card" id="setPasswordForm" autocomplete="on">
+    <h1>Choose a password</h1>
+    <p class="meta">You are signed in as <b id="setPasswordEmail"></b>. Set the password you will use from now on.</p>
+    <label>New password <input type="password" id="setPassword1" name="new-password" autocomplete="new-password" minlength="10" required></label>
+    <label>Repeat it <input type="password" id="setPassword2" name="confirm-password" autocomplete="new-password" minlength="10" required></label>
+    <div class="err" id="setPasswordError" role="alert"></div>
+    <button class="btn primary" id="setPasswordBtn" type="submit">Save password</button>
   </form>
 </section>
 

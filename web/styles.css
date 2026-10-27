@@ -59,6 +59,7 @@ button:disabled { cursor: default; opacity: .55; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .btn.small { padding: 4px 9px; font-size: 13px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-align: left; }
 
 .notice { margin: 0 24px 10px; padding: 10px 14px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .notice .btn { border-color: currentColor; background: transparent; color: inherit; }
