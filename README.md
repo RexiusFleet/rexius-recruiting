@@ -266,6 +266,30 @@ Hosting and invites. Nothing changes in the database.
   "Reset your password" email in the local mail catcher.
 - `scripts/make-profile.sql`: `make-admin.sql` generalised to any role, for step 13.
 
+## What the archive change created
+
+The hosted backfill ran on 2026-10-27 (1,608 applications, 1,071 files, nothing failed). The team
+decided to review only applications submitted on or after 2026-10-01 and keep the rest for
+reference. Migration `20261031000100_archived_stage.sql`:
+
+- `stages.is_archive` and one new terminal stage, **Archived** (id 9, after Withdrawn): neither a
+  hire nor a rejection. The funnel, source-quality and position reports already ignore terminal
+  stages that are not hires, so archived rows never count as progress or as "not selected";
+  applicants per source and per month still count them.
+- `recruiting.archive_before(cutoff date)`: moves every application still in the first stage and
+  submitted before the cutoff to Archived and returns the count; the status_history trigger logs
+  each move with `changed_by` null (the system). Rows anyone has already moved stay put, and a
+  second run moves nothing. Staff only. Run on the hosted project with `'2026-10-01'`: 1,480
+  archived, 128 left in Applied.
+- `report_time_in_stage` redefined so a stay that ended by archiving is not counted as time in
+  Applied (it would otherwise average in months of pre-tracker waiting).
+- `web/`: a colour for the ninth stage chip. An archived application can be moved back into the
+  pipeline from the drawer like any other.
+
+Applied to the hosted project through the CLI's Management API route (`npx supabase db query
+--linked -f <file>`, then the `schema_migrations` row by hand), since the `.env` database
+connection does not work for a Developer.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
@@ -538,7 +562,7 @@ The tracker is complete and verified locally; it works against the hosted projec
 1. Migrations `20261028000100` through `20261029000400` are applied (done, as of 2026-10-26).
    After the hosted backfill, click "Re-link applications" on the Positions page (or run
    `select recruiting.relink_applications();`) once; the insert trigger handles rows that arrive
-   later.
+   later. (Done 2026-10-27: 1,608 applications imported, 1,219 linked to a position.)
 2. Schema `recruiting` is exposed in the Data API (step 5).
 3. The page's URL is registered under Authentication → URL Configuration (step 6).
 4. The deployed `config.js` holds the hosted URL and publishable key: the GitHub Pages workflow
