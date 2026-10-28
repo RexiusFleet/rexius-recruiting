@@ -42,6 +42,11 @@ button:disabled { cursor: default; opacity: .55; }
 .gate { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 26px 24px; width: min(380px, 100%); box-shadow: var(--shadow); display: grid; gap: 12px; }
 .card h1 { margin: 0; font-size: 22px; }
+.card .logo { display: block; margin: 2px 0 4px; }
+.card .logo img { display: block; width: min(240px, 100%); height: auto; }
+/* The dark-mode wordmark is white; the <picture> source only follows the OS, so cover the data-theme override too. */
+:root[data-theme="dark"] .card .logo img { content: url("assets/rexius-logo-white.webp"); }
+:root[data-theme="light"] .card .logo img { content: url("assets/rexius-logo.webp"); }
 .card p { margin: 0; }
 .card label { display: grid; gap: 4px; font-size: 13px; color: var(--mute); }
 .card input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); width: 100%; }
@@ -51,6 +56,8 @@ button:disabled { cursor: default; opacity: .55; }
 .app { display: flex; flex-direction: column; min-height: 100%; }
 .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 20px 24px 12px; flex-wrap: wrap; }
 .top h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 2px; }
+.top .title { display: flex; align-items: center; gap: 12px; }
+.top .mark { width: 44px; height: 44px; border-radius: 6px; flex: none; }
 .meta { color: var(--mute); font-size: 13px; min-height: 18px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .who { color: var(--mute); font-size: 13px; margin-right: 6px; }
