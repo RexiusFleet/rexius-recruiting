@@ -312,6 +312,73 @@ position. Hosted now holds 1,405 applications, the oldest from 2026-01-04. The b
 `scripts/backfill/README.md`. The Phase 5 webhook only ever sees new submissions and needs no
 change.
 
+## What the application-download change created
+
+HR hands a candidate to a hiring manager by email, and until now that meant opening the Jotform
+inbox, downloading Jotform's "New Document 1" PDF of the submission and attaching it with the
+resume. The drawer now has a **Download application (PDF)** button under *Files and links* that
+builds the same kind of document in the browser from what the tracker already holds, named
+`<Last>-<First>-application.pdf` (last word of the name, then the first word). Nothing new is
+stored anywhere and no new migration is needed.
+
+**Why not Jotform's own PDF.** Two options were weighed:
+
+1. Copy Jotform's generated PDF into the `recruiting-files` bucket during the backfill and the
+   webhook, and list it next to the resume. Rejected. Jotform's PDF renders every answer,
+   including the driver licence number, expiry and class, the three signatures and the initials
+   fields that CLAUDE.md section 5 says are never stored (the example file was even named with
+   what looks like a date of birth). Storing those PDFs would put never-store data in Supabase,
+   and there is no supported way to redact them on the way in. Fetching them is also
+   undocumented: Jotform's API reference lists no PDF endpoint; the only routes are support-forum
+   answers (`api.jotform.com/generatePDF?formid=…&submissionid=…&apiKey=…&download=1`, and an
+   older `server.php?action=getSubmissionPDF`) that render whichever PDF document is the form's
+   default, with reports of hangs. Not something to build an import on.
+2. Generate the PDF client-side from the cleaned data. Built. The importer already dropped the
+   never-store questions, so the source data cannot contain them, and `answerItems` in
+   `web/app.js` applies the form's `never_import` list again before anything is laid out.
+
+**What is in it.** Exactly what the signed-in role's drawer shows, and nothing from the
+staff-only review sections (status, assignee, tags, notes, offers, referral, contact log and
+manager feedback are left out: it is a hand-off document, not an HR record):
+
+- Header: name, applied date and form (or "paper application received" for a manual entry),
+  location, and the Rexius mark.
+- Contact: email, phone, alternate phone, phone type, preferred contact method, address.
+- Application: form, location, position (and the matched opening when it differs), source,
+  referred by, available start, education, worked at Rexius before, applied before, student,
+  forklift experience, herbicide licence, skills, portfolio link, and the notes typed from a
+  paper form.
+- Employment history: each employer with title, location, dates, responsibilities and reason
+  for leaving.
+- Files: the names of the resume, portfolio and scan on file, so the reader knows what was sent
+  alongside (the files themselves are opened or attached separately, as before).
+- Other answers (admin and hr only, Jotform rows only): every remaining cleaned answer in form
+  order with its question text, as the "Full application" section of the drawer shows it.
+  Dates always carry the year, since the file outlives the screen.
+- A footer on every page with who prepared it and when, the page count, and a note that
+  licence details, signatures and initials are not stored in the tracker.
+
+**Roles.** Admin and hr get the full document above. Managers get the button too, built from
+the curated view (`applications_for_managers`), which is everything they can read: contact,
+position, availability, education, skills, employment history and file names, with no "Other
+answers" section because the raw `answers` are staff-only. Giving managers the button exposes
+nothing they do not already see in the drawer and lets them print or forward an applicant to a
+foreman without asking HR for the file.
+
+**How it works.** `web/application-pdf.js` lays the document out with jsPDF 3.0.3, loaded from a
+pinned jsDelivr URL in `index.html` the same way as supabase-js. `applicationModel(id)` in
+`web/app.js` assembles the sections (for staff it reads the row's `answers` on click; managers
+use the curated columns already loaded). The PDF is produced in the browser and handed to the
+download; nothing is written to Supabase or fetched from Jotform. jsPDF's built-in fonts cover
+Latin text including Spanish accents; a character outside that range is replaced with "?".
+
+Verified against the local stack with 1,404 applications: as hr, an English applicant with
+three employers and a resume (3 pages), a Spanish applicant (2 pages, Spanish answers intact)
+and the seeded paper application (1 page, scan and resume listed), each extracted back to text
+and checked for licence, signature, initials, Social Security and birth-date terms (none outside
+the footer note); the drawer button downloads without errors. As manager, the same button
+produces the curated document only and no notes or tags reach the model.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
