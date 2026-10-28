@@ -50,14 +50,21 @@ npm run backfill -- --refresh                       # re-clean rows already impo
 | `--refresh` | Update rows that already exist and re-upload their files. Status, notes and history are untouched |
 | `--skip-files` | Rows only; no file downloads or uploads |
 | `--sample` | Print one cleaned row per form and stop (implies `--dry-run`); useful for checking a form's mapping |
+| `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in the Jotform account's time zone. Default `2026-01-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |
 
 Re-running without `--refresh` changes nothing already imported: submissions are matched on
 `jotform_submission_id` and files on their object key, and both are skipped when present. A run
 that is interrupted can simply be started again. Submissions in Jotform's trash (`status`
-`DELETED`) are skipped and counted.
+`DELETED`) are skipped and counted, and so are submissions from before the `--since` date.
+
+The tracker holds nothing from before 2026. On 2026-10-28 the 207 applications submitted before
+2026 (Oregon time) were deleted from the hosted project and the local stack; they had no files,
+notes, contacts or offers. Candidates re-apply after a year, and Jotform still has every
+original submission. The default cutoff keeps a re-run from importing them again; pass
+`--since 2023-01-01` if they are ever wanted back.
 
 The report at the end lists, per form: fetched, inserted, updated, already present, deleted,
-failed, how many linked to a position, how many had a resume, and files found, copied, skipped
+old (before `--since`), failed, how many linked to a position, how many had a resume, and files found, copied, skipped
 and failed; then how many email addresses and phone numbers appear on more than one
 application (repeat applicants, which matter in a seasonal business). Any warning (a file that
 could not be downloaded, a submission without a parseable time) is printed with its submission

@@ -115,7 +115,7 @@ These apply to the webhook, the backfill, and every later import.
 - **Role-restricted:** offers and offer history, notes, and the raw cleaned `answers` JSON are HR and Admin only. Managers see a curated summary (contact, position, availability, experience, resume).
 - **Resumes:** copied into the `recruiting-files` bucket; served to signed-in users through short-lived signed URLs; never public.
 - **Scans of paper applications:** stored under `manual/<application id>/` in the same bucket as images only (nothing is read out of them into a column), with the same read rule as resumes (any user with a profile, via signed URL); only admin and hr can upload, and nothing under `manual/` can be replaced or deleted from the browser. A paper form may show an SSN, licence number, date of birth or signature, so staff black those out before uploading; the form and the README say so. The typed fields are the same ones the import keeps, plus one free-text `answers.manual_notes` that managers see.
-- **Retention:** keep everything for now (repeat applicants matter in a seasonal business). A purge rule is an open question for HR.
+- **Retention:** the tracker holds applications from 2026 on. Everything submitted before 2026-01-01 (Oregon time) was deleted on 2026-10-28 and the backfill's default `--since` cutoff keeps it out; Jotform remains the archive, and candidates re-apply after a year anyway. A rolling purge rule for older not-selected applications is still an open question for HR.
 
 ## 6. Data model (schema `recruiting`)
 
@@ -171,7 +171,7 @@ Outside the phase table: **manual application entry** (PR 8, branch `claude/manu
 
 ## 9. Open questions (ask only when a phase needs the answer)
 
-- Retention / purge rule for not-selected applications.
+- Rolling retention / purge rule for not-selected applications (everything before 2026 is already gone; see section 5).
 - Whether managers should eventually leave feedback (table exists; UI can wait).
 - Department and hiring manager per location, for the positions seed.
 - Whether the inventory app needs anything beyond the shared user convention.

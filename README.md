@@ -293,6 +293,25 @@ Applied to the hosted project through the CLI's Management API route (`npx supab
 --linked -f <file>`, then the `schema_migrations` row by hand), since the `.env` database
 connection does not work for a Developer.
 
+## What the pre-2026 cleanup did
+
+Decided 2026-10-28: the tracker keeps only applications from 2026 on. Candidates have to re-apply
+after a year, nothing before the tracker existed carried status or notes, and Jotform keeps every
+original submission. The 207 applications submitted before 2026-01-01 (Oregon time) were deleted
+from the hosted project and the local stack with one statement:
+
+```sql
+delete from recruiting.applications
+ where submitted_at < timestamptz '2026-01-01 00:00 America/Los_Angeles';
+```
+
+The cascades removed their status, history and file rows (there were none of the last). None of
+them had files in the bucket, notes, contacts, offers or referrals, and none had filled a
+position. Hosted now holds 1,405 applications, the oldest from 2026-01-04. The backfill gained a
+`--since` option whose default is `2026-01-01`, so a re-run or `--refresh` leaves them out; see
+`scripts/backfill/README.md`. The Phase 5 webhook only ever sees new submissions and needs no
+change.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps

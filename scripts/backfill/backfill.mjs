@@ -15,6 +15,10 @@
 //   --refresh        update applications that already exist and re-copy their files
 //   --skip-files     import rows but do not download or upload files
 //   --sample         print one cleaned row per form (answers truncated) and stop; implies --dry-run
+//   --since <date>   import only submissions made on or after this date (YYYY-MM-DD, in the
+//                    Jotform account's time zone); default 2026-01-01. Older submissions are
+//                    counted as "old" and never written. The tracker keeps nothing from before
+//                    2026 (candidates re-apply after a year; Jotform keeps the originals).
 //
 // Environment (shell, or a gitignored .env at the repo root; never committed, never pasted
 // into chat):
@@ -42,13 +46,16 @@ import { JotformClient } from "./lib/jotform.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BUCKET = "recruiting-files";
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// Submissions before this date are never imported (decision of 2026-10-28; see README). Override
+// per run with --since.
+const DEFAULT_SINCE = "2026-01-01";
 
 // ---------------------------------------------------------------------------------------------
 // Arguments and environment
 // ---------------------------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-const opts = { dryRun: false, forms: [], limit: Infinity, refresh: false, skipFiles: false, sample: false };
+const opts = { dryRun: false, forms: [], limit: Infinity, refresh: false, skipFiles: false, sample: false, since: DEFAULT_SINCE };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   const next = () => {
@@ -64,12 +71,15 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--limit") {
     opts.limit = Number(next());
     if (!Number.isInteger(opts.limit) || opts.limit < 1) fail("--limit needs a positive integer");
+  } else if (a === "--since") {
+    opts.since = next();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.since) || Number.isNaN(Date.parse(opts.since))) fail("--since needs a date as YYYY-MM-DD");
   } else if (a === "--help" || a === "-h") { printUsage(); process.exit(0); }
   else fail(`Unknown option ${a}`);
 }
 
 function printUsage() {
-  console.log("Usage: npm run backfill -- [--dry-run] [--form <id>]... [--limit <n>] [--refresh] [--skip-files] [--sample]");
+  console.log("Usage: npm run backfill -- [--dry-run] [--form <id>]... [--limit <n>] [--refresh] [--skip-files] [--sample] [--since <YYYY-MM-DD>]");
 }
 
 function fail(msg) {
@@ -144,6 +154,7 @@ const totals = { forms: [], filesCopied: 0, filesSkipped: 0, filesFailed: 0, war
 
 async function main() {
   console.log(`Backfill ${opts.dryRun ? "(dry run) " : ""}-> ${env.supabaseUrl}${isLocal ? " (local stack)" : ""}`);
+  console.log(`Importing submissions made on or after ${opts.since} (${env.timeZone}); older ones are skipped.`);
   if (!isLocal && !opts.dryRun) {
     console.log("Target is not the local stack. Writing real data to the hosted project.");
   }
@@ -176,6 +187,13 @@ async function main() {
   if (!opts.dryRun) await duplicateReport();
 }
 
+// The cutoff is a calendar date in the Jotform account's zone; compare on the local date of the
+// submission there, so "2026-01-01" keeps a 12:30 AM New Year's submission in Oregon.
+const sinceDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: env.timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+function isBeforeSince(submittedAtIso) {
+  return sinceDateFmt.format(new Date(submittedAtIso)) < opts.since;
+}
+
 async function ensureBucket() {
   const { data, error } = await supabase.storage.getBucket(BUCKET);
   if (error || !data) {
@@ -187,7 +205,7 @@ async function ensureBucket() {
 async function importForm(form, positions, existing, existingFiles) {
   const c = {
     form: form.jotform_form_id, label: form.label,
-    fetched: 0, inserted: 0, updated: 0, skippedExisting: 0, skippedDeleted: 0, failed: 0,
+    fetched: 0, inserted: 0, updated: 0, skippedExisting: 0, skippedDeleted: 0, skippedOld: 0, failed: 0,
     filesFound: 0, filesCopied: 0, filesSkipped: 0, filesFailed: 0,
     positionMatched: 0, withResume: 0, warnings: [],
   };
@@ -206,6 +224,7 @@ async function importForm(form, positions, existing, existingFiles) {
     const { row, files, warnings } = buildApplication(sub, form, positions, { timeZone: env.timeZone });
     for (const w of warnings) c.warnings.push(`${row.jotform_submission_id}: ${w}`);
     if (!row.submitted_at) { c.failed++; continue; }
+    if (isBeforeSince(row.submitted_at)) { c.skippedOld++; continue; }
     if (row.position_id) c.positionMatched++;
     if (row.has_resume) c.withResume++;
     c.filesFound += files.length;
@@ -299,15 +318,15 @@ function guessContentType(name) {
 function printReport() {
   console.log("\n== Report");
   const pad = (s, n) => String(s).padEnd(n);
-  console.log(`  ${pad("form", 42)} ${pad("fetched", 8)} ${pad("inserted", 9)} ${pad("updated", 8)} ${pad("existing", 9)} ${pad("deleted", 8)} ${pad("failed", 7)} ${pad("pos match", 10)} ${pad("w/ resume", 10)} ${pad("files", 6)} ${pad("copied", 7)} ${pad("f.skip", 7)} f.fail`);
+  console.log(`  ${pad("form", 42)} ${pad("fetched", 8)} ${pad("inserted", 9)} ${pad("updated", 8)} ${pad("existing", 9)} ${pad("deleted", 8)} ${pad("old", 6)} ${pad("failed", 7)} ${pad("pos match", 10)} ${pad("w/ resume", 10)} ${pad("files", 6)} ${pad("copied", 7)} ${pad("f.skip", 7)} f.fail`);
   for (const c of totals.forms) {
-    console.log(`  ${pad(c.label.slice(0, 41), 42)} ${pad(c.fetched, 8)} ${pad(c.inserted, 9)} ${pad(c.updated, 8)} ${pad(c.skippedExisting, 9)} ${pad(c.skippedDeleted, 8)} ${pad(c.failed, 7)} ${pad(c.positionMatched, 10)} ${pad(c.withResume, 10)} ${pad(c.filesFound, 6)} ${pad(c.filesCopied, 7)} ${pad(c.filesSkipped, 7)} ${c.filesFailed}`);
+    console.log(`  ${pad(c.label.slice(0, 41), 42)} ${pad(c.fetched, 8)} ${pad(c.inserted, 9)} ${pad(c.updated, 8)} ${pad(c.skippedExisting, 9)} ${pad(c.skippedDeleted, 8)} ${pad(c.skippedOld, 6)} ${pad(c.failed, 7)} ${pad(c.positionMatched, 10)} ${pad(c.withResume, 10)} ${pad(c.filesFound, 6)} ${pad(c.filesCopied, 7)} ${pad(c.filesSkipped, 7)} ${c.filesFailed}`);
   }
   const all = totals.forms.reduce((a, c) => ({
     fetched: a.fetched + c.fetched, inserted: a.inserted + c.inserted, updated: a.updated + c.updated,
-    failed: a.failed + c.failed,
-  }), { fetched: 0, inserted: 0, updated: 0, failed: 0 });
-  console.log(`  total: ${all.fetched} fetched, ${all.inserted} inserted, ${all.updated} updated, ${all.failed} failed; files ${totals.filesCopied} copied, ${totals.filesSkipped} already present, ${totals.filesFailed} failed`);
+    failed: a.failed + c.failed, skippedOld: a.skippedOld + c.skippedOld,
+  }), { fetched: 0, inserted: 0, updated: 0, failed: 0, skippedOld: 0 });
+  console.log(`  total: ${all.fetched} fetched, ${all.inserted} inserted, ${all.updated} updated, ${all.skippedOld} before ${opts.since} (skipped), ${all.failed} failed; files ${totals.filesCopied} copied, ${totals.filesSkipped} already present, ${totals.filesFailed} failed`);
   const warnings = totals.forms.flatMap((c) => c.warnings);
   if (warnings.length) {
     console.log(`\n== Warnings (${warnings.length})`);
