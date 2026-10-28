@@ -11,13 +11,15 @@
 \pset tuples_only on
 
 -- Helper: impersonate a Data API request for a given user id (or anon).
-create or replace function pg_temp.as_user(uid text) returns void language plpgsql as $$
+-- `aal` is the JWT's authenticator assurance level: aal2 (the default here) after the second
+-- factor, aal1 after a password only. Migration 20261102000100 makes current_role() null at aal1.
+create or replace function pg_temp.as_user(uid text, aal text default 'aal2') returns void language plpgsql as $$
 begin
   if uid is null then
     perform set_config('request.jwt.claims', '{"role":"anon"}', true);
     execute 'set local role anon';
   else
-    perform set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, true);
+    perform set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated', 'aal', aal)::text, true);
     execute 'set local role authenticated';
   end if;
 end $$;
@@ -167,6 +169,32 @@ select pg_temp.check('no profile: zero stages', (select count(*) from recruiting
 select pg_temp.check('no profile: zero positions', (select count(*) from recruiting.positions) = 0);
 select pg_temp.check('no profile: zero profiles', (select count(*) from recruiting.profiles) = 0);
 select pg_temp.check('no profile: zero documents', (select count(*) from recruiting.documents) = 0);
+rollback;
+
+-- ----- password only, no second factor (aal1) ----------------------------------------------
+-- The admin from the first block, before entering the authenticator code: nothing but their
+-- own profile row.
+begin;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+select pg_temp.check('aal1 admin: role is null', recruiting.current_role() is null);
+select pg_temp.check('aal1 admin: not staff', recruiting.is_staff() is not true);
+select pg_temp.check('aal1 admin: zero applications', (select count(*) from recruiting.applications) = 0);
+select pg_temp.check('aal1 admin: zero rows in curated view', (select count(*) from recruiting.applications_for_managers) = 0);
+select pg_temp.check('aal1 admin: zero stages', (select count(*) from recruiting.stages) = 0);
+select pg_temp.check('aal1 admin: zero documents', (select count(*) from recruiting.documents) = 0);
+select pg_temp.check('aal1 admin: zero report rows', (select count(*) from recruiting.report_position_funnel) = 0);
+select pg_temp.check('aal1 admin: sees only their own profile row',
+  (select count(*) from recruiting.profiles) = 1 and (select user_id from recruiting.profiles) = '11111111-1111-1111-1111-111111111111');
+update recruiting.profiles set role = 'hr' where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.check('aal1 admin: cannot change own role (update filtered out)',
+  (select role from recruiting.profiles where user_id = '11111111-1111-1111-1111-111111111111') = 'admin');
+select pg_temp.check('aal1 admin: zero storage objects visible', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
+rollback;
+-- A JWT with no aal claim at all counts as aal1.
+begin;
+select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+set local role authenticated;
+select pg_temp.check('no aal claim: role is null', recruiting.current_role() is null);
 rollback;
 
 -- ----- anon --------------------------------------------------------------------------------

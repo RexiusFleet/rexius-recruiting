@@ -23,7 +23,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 | --- | --- |
 | Standalone app on Supabase + GitHub, not a Claude artifact | Managers and HR need their own logins and roles |
 | Three roles: Admin, HR, Manager (view only); managers see all locations for now | Simple to reason about; location scoping is a later column + policy |
-| Email + password sign-in via Supabase Auth | May move to Google sign-in restricted to Rexius accounts later |
+| Email + password sign-in via Supabase Auth, plus a required authenticator-app code (TOTP) on every sign-in since 2026-10-28; `recruiting.current_role()` is null unless the JWT is `aal2` | A password alone must never reach applicant data. May move to Google sign-in restricted to Rexius accounts later |
 | One Supabase project is shared with a second, unrelated app (apparel inventory tracker and department invoicer). It is currently named `Apparel` in the dashboard (ref `hibjqcgitqtgmkurghlw`, Rexius organization) and will be renamed `am-projects` once the user has the Administrator role; the name is only a dashboard label and nothing in either repo depends on it | Separate by schema (`recruiting`, `inventory`), bucket, and function name; shared `auth.users`, one `profiles` table per app |
 | Jotform intake by webhook (Edge Function) plus a one-time backfill via Jotform's REST API | Live data, no refresh button |
 | Driver licence numbers and expiry dates, signature images, and initials fields are never imported; the licence class is (many roles need a CDL) | Personal-information rules, section 5 |
