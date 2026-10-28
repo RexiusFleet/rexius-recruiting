@@ -312,6 +312,84 @@ position. Hosted now holds 1,405 applications, the oldest from 2026-01-04. The b
 `scripts/backfill/README.md`. The Phase 5 webhook only ever sees new submissions and needs no
 change.
 
+## What the application-download change created
+
+HR hands a candidate to a hiring manager by email, and until now that meant opening the Jotform
+inbox, downloading Jotform's "New Document 1" PDF of the submission and attaching it with the
+resume. The drawer now has a **Download application (PDF)** button under *Files and links* that
+builds the same kind of document in the browser from what the tracker already holds, named
+`<Last>-<First>-application.pdf` (last word of the name, then the first word). Nothing new is
+stored anywhere and no new migration is needed.
+
+**Why not Jotform's own PDF.** Two options were weighed:
+
+1. Copy Jotform's generated PDF into the `recruiting-files` bucket during the backfill and the
+   webhook, and list it next to the resume. Rejected. Jotform's PDF renders every answer,
+   including the driver licence number, expiry and class, the three signatures and the initials
+   fields that CLAUDE.md section 5 says are never stored (the example file was even named with
+   what looks like a date of birth). Storing those PDFs would put never-store data in Supabase,
+   and there is no supported way to redact them on the way in. Fetching them is also
+   undocumented: Jotform's API reference lists no PDF endpoint; the only routes are support-forum
+   answers (`api.jotform.com/generatePDF?formid=…&submissionid=…&apiKey=…&download=1`, and an
+   older `server.php?action=getSubmissionPDF`) that render whichever PDF document is the form's
+   default, with reports of hangs. Not something to build an import on.
+2. Generate the PDF client-side from the cleaned data. Built. The importer already dropped the
+   never-store questions, so the source data cannot contain them, and `answerItems` in
+   `web/app.js` applies the form's `never_import` list again before anything is laid out.
+
+**What is in it.** Exactly what the signed-in role's drawer shows, and nothing from the
+staff-only review sections (status, assignee, tags, notes, offers, referral, contact log and
+manager feedback are left out: it is a hand-off document, not an HR record):
+
+- Header: name, applied date and form (or "paper application received" for a manual entry),
+  location, and the Rexius mark.
+- Contact: email, phone, alternate phone, phone type, preferred contact method, address.
+- Application: position (and the matched opening when it differs), location, form, source,
+  referred by, available start, education, worked at Rexius before, applied before, student,
+  forklift experience, herbicide licence, driver licence class, skills, portfolio link, and the
+  notes typed from a paper form.
+- Employment history: each employer with title, location, dates, responsibilities and reason
+  for leaving.
+- Files: the names of the resume, portfolio and scan on file, so the reader knows what was sent
+  alongside (the files themselves are opened or attached separately, as before).
+- Other answers (admin and hr only, Jotform rows only): every remaining cleaned answer in form
+  order with its question text, as the "Full application" section of the drawer shows it.
+  Dates always carry the year, since the file outlives the screen.
+- A footer on every page with who prepared it and when, the page count, and a note that
+  licence details, signatures and initials are not stored in the tracker.
+
+**Roles.** Admin and hr get the full document above. Managers get the button too, built from
+the curated view (`applications_for_managers`), which is everything they can read: contact,
+position, availability, education, skills, employment history and file names, with no "Other
+answers" section because the raw `answers` are staff-only. Giving managers the button exposes
+nothing they do not already see in the drawer and lets them print or forward an applicant to a
+foreman without asking HR for the file.
+
+**Driver licence class.** Many roles need a CDL, so question 35 ("Class or Type of License") is
+now imported and shown as "Driver licence class" in the drawer, the PDF and the manager view. The
+licence number (30) and expiry (31) stay dropped. Because 35 is a free-text box right under the
+number, the importer refuses an answer with five or more digits in a row or over 60 characters
+(a warning is logged instead), and the backfill tests cover both sides. Migration
+`20261101000100_licence_class.sql` moves 35 out of each form's `never_import`, adds the
+`licence_class` key to `field_map`, and appends `licence_class` to `applications_for_managers`.
+Rows imported before the migration have no answer 35, so after applying it run the backfill once
+with `--refresh --skip-files` (step 10) to re-clean every row from Jotform; new rows get it as
+they arrive.
+
+**How it works.** `web/application-pdf.js` lays the document out with jsPDF 3.0.3, loaded from a
+pinned jsDelivr URL in `index.html` the same way as supabase-js. `applicationModel(id)` in
+`web/app.js` assembles the sections (for staff it reads the row's `answers` on click; managers
+use the curated columns already loaded). The PDF is produced in the browser and handed to the
+download; nothing is written to Supabase or fetched from Jotform. jsPDF's built-in fonts cover
+Latin text including Spanish accents; a character outside that range is replaced with "?".
+
+Verified against the local stack with 1,404 applications: as hr, an English applicant with
+three employers and a resume (3 pages), a Spanish applicant (2 pages, Spanish answers intact)
+and the seeded paper application (1 page, scan and resume listed), each extracted back to text
+and checked for licence, signature, initials, Social Security and birth-date terms (none outside
+the footer note); the drawer button downloads without errors. As manager, the same button
+produces the curated document only and no notes or tags reach the model.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
@@ -830,7 +908,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
-| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
+| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials | No column exists for them; the importer drops the licence number and expiry, signature and initials answers before writing `answers` (CLAUDE.md section 5). The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above
 

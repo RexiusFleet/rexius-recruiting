@@ -26,7 +26,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 | Email + password sign-in via Supabase Auth | May move to Google sign-in restricted to Rexius accounts later |
 | One Supabase project is shared with a second, unrelated app (apparel inventory tracker and department invoicer). It is currently named `Apparel` in the dashboard (ref `hibjqcgitqtgmkurghlw`, Rexius organization) and will be renamed `am-projects` once the user has the Administrator role; the name is only a dashboard label and nothing in either repo depends on it | Separate by schema (`recruiting`, `inventory`), bucket, and function name; shared `auth.users`, one `profiles` table per app |
 | Jotform intake by webhook (Edge Function) plus a one-time backfill via Jotform's REST API | Live data, no refresh button |
-| Driver licence numbers, signature images, and initials fields are never imported | Personal-information rules, section 5 |
+| Driver licence numbers and expiry dates, signature images, and initials fields are never imported; the licence class is (many roles need a CDL) | Personal-information rules, section 5 |
 | Resumes are copied into Supabase Storage with signed URLs | Managers must not need Jotform logins |
 | Static HTML/JS frontend; run locally during development; GitHub Pages when others need it | No build server required |
 | Status, notes, offers, positions etc. live only in Supabase; Jotform stays the source of record for the raw submission | One place to change things |
@@ -90,7 +90,8 @@ Other forms exist in the account (Internal Employment Application 2026, Employme
 | Employer 1: name / location / title / start / end / reason | 72 / 280 / 76 / 348 / 377 / 352 | 72 / 280 / 76 / 348 / 375 / 352 | 72 / 280 / 76 / 348 / 378 / 352 |
 | Employer 2 | 83 / 85 / 87 / 349 / 378 / 94 | 83 / 85 / 87 / 349 / 376 / 94 | 83 / 85 / 87 / 349 / 379 / 94 |
 | Employer 3 | 95 / 287 / 99 / 350 / 379 / 107 | 95 / 287 / 99 / 350 / 377 / 107 | 95 / 287 / 99 / 350 / 380 / 107 |
-| Driver licence number / expiry / class — NEVER IMPORT | 30 / 31 / 35 | 30 / 31 / 35 | 30 / 31 / 35 |
+| Driver licence class or type (free text; dropped if it looks like a number) | 35 | 35 | 35 |
+| Driver licence number / expiry — NEVER IMPORT | 30 / 31 | 30 / 31 | 30 / 31 |
 | Signatures — NEVER IMPORT | 238, 333, 369 | 238, 333, 369 | 238, 333, 369 |
 | Initials — NEVER IMPORT | 324–332 | 324–332 | 324–332 |
 
@@ -111,7 +112,7 @@ The English form's three position dropdowns are what applicants choose from. The
 These apply to the webhook, the backfill, and every later import.
 
 - **Never stored anywhere:** Social Security numbers, bank details, dates of birth, government ID numbers, offered or agreed wages, signed offer letters.
-- **Dropped at import:** driver licence number/expiry/class (30, 31, 35), signature images (238, 333, 369), initials (324–332). Anyone who needs them opens the submission in Jotform via the stored `jotform_url`.
+- **Dropped at import:** driver licence number and expiry (30, 31), signature images (238, 333, 369), initials (324–332). Anyone who needs them opens the submission in Jotform via the stored `jotform_url`. The licence class or type (35) is kept since 2026-10-28 because many roles need a CDL; it is a free-text box under the licence number, so the importer drops an answer with five or more digits in a row or over 60 characters.
 - **Role-restricted:** offers and offer history, notes, and the raw cleaned `answers` JSON are HR and Admin only. Managers see a curated summary (contact, position, availability, experience, resume).
 - **Resumes:** copied into the `recruiting-files` bucket; served to signed-in users through short-lived signed URLs; never public.
 - **Scans of paper applications:** stored under `manual/<application id>/` in the same bucket as images only (nothing is read out of them into a column), with the same read rule as resumes (any user with a profile, via signed URL); only admin and hr can upload, and nothing under `manual/` can be replaced or deleted from the browser. A paper form may show an SSN, licence number, date of birth or signature, so staff black those out before uploading; the form and the README say so. The typed fields are the same ones the import keeps, plus one free-text `answers.manual_notes` that managers see.
@@ -167,7 +168,7 @@ Each phase is one session and one pull request.
 | 8 Hosting and invites | GitHub Pages workflow, invite and password-reset flow in `web/`, `scripts/make-profile.sql`, README step 13 (Pages source, repo variables, auth URLs, SMTP, invites) | Decide who gets which role; set Pages source and the two repo variables | done (site live 2026-10-27; Supabase auth URLs, the three `20261030` migrations, the hosted backfill and invites remain README step 13) |
 | 9 Claude features (later) | Edge Function calling the Anthropic API: role overviews with sources, salary reference research, applicant summaries, posting drafts | Set `ANTHROPIC_API_KEY` as a Supabase secret | later |
 
-Outside the phase table: **manual application entry** (PR 8, branch `claude/manual-applications`, 2026-10-26) adds the "Add application" form for paper applications with scans, migrations `20261030000100` to `20261030000300`, and 21 policy checks. Its view migration appends after Phase 7's `furthest_stage_id`, so on the hosted project Phase 7's migrations go first. README "What the manual-entry change created" has the details.
+Outside the phase table: **manual application entry** (PR 8, branch `claude/manual-applications`, 2026-10-26) adds the "Add application" form for paper applications with scans, migrations `20261030000100` to `20261030000300`, and 21 policy checks. Its view migration appends after Phase 7's `furthest_stage_id`, so on the hosted project Phase 7's migrations go first. README "What the manual-entry change created" has the details. **Application download** (branch `claude/application-pdf`, 2026-10-28) adds a "Download application (PDF)" button to the drawer, generated in the browser from the tracker's own data (`web/application-pdf.js`, jsPDF pinned on jsDelivr) instead of copying Jotform's PDF, which renders the never-store fields; README "What the application-download change created" records the decision.
 
 ## 9. Open questions (ask only when a phase needs the answer)
 

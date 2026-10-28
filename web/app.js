@@ -299,7 +299,7 @@
       furthestSort: stageById[row.furthest_stage_id] ? stageById[row.furthest_stage_id].sort_order : 0,
       files: files,
       curated: {
-        education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before),
+        education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before), licenceClass: toText(row.licence_class),
         manualNotes: row.manual_notes || "",
         employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason), responsibilities: toText(e.responsibilities) }; })
       }
@@ -588,7 +588,7 @@
     return {
       altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), address: txt("address"), contactMethod: txt("contact_method", true),
       education: txt("education", true), skills: txt("relevant_skills"), workedBefore: txt("worked_before", true), appliedBefore: txt("applied_before", true),
-      student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), portfolioLink: txt("portfolio_link").trim(),
+      student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), licenceClass: txt("licence_class"), portfolioLink: txt("portfolio_link").trim(),
       manualNotes: typeof answers.manual_notes === "string" ? answers.manual_notes : "",
       employers: employers
     };
@@ -662,6 +662,12 @@
     var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
     if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
     sec.appendChild(links);
+    var dlWrap = el("div", "links");
+    var dl2 = el("button", "btn small", "Download application (PDF)"); dl2.type = "button";
+    dl2.title = "A printable copy of this application built from the tracker's data, named " + (window.RR && RR.applicationPdf ? RR.applicationPdf.fileName(a.name) : "Last-First-application.pdf") + ". Send it to the hiring manager with the resume.";
+    dl2.addEventListener("click", function () { downloadApplication(a.id, dl2); });
+    dlWrap.appendChild(dl2);
+    sec.appendChild(dlWrap);
 
     // Duplicates
     if (a.dups && a.dups.length) {
@@ -706,7 +712,7 @@
     kv(c, "Prefers", d.contactMethod);
     kv(c, "Address", d.address);
     kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Applied before", d.appliedBefore);
-    kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide);
+    kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide); kv(ap, "Driver licence class", d.licenceClass);
     kv(ap, "Skills", d.skills);
     kv(ap, "Notes from the paper form", d.manualNotes);
     var pl = $("portfolioLink");
@@ -966,26 +972,100 @@
     });
     sec.appendChild(form);
   }
-  function renderAnswers(a, answers) {
-    var sec = $("answersSec"); if (!sec) return;
-    sec.querySelectorAll(".hint, .answers").forEach(function (n) { n.remove(); });
+  // Every cleaned answer as { id, q, a } in form order, labelled with the question text. Skips
+  // layout questions, signatures (never imported anyway) and anything in `exclude`. The importer
+  // already dropped the never-import questions (CLAUDE.md section 5); the field_map's
+  // `never_import` list is applied again here so a row written by another path cannot leak them.
+  function answerItems(a, answers, exclude) {
     var f = formById[a.formId]; var qs = (f && f.questions) || {};
+    var never = {}; (((f && f.field_map) || {}).never_import || []).forEach(function (q) { never[String(q)] = true; });
     var ids = Object.keys(answers);
     ids.sort(function (x, y) { var ox = qs[x] ? parseInt(qs[x].order, 10) : 9999, oy = qs[y] ? parseInt(qs[y].order, 10) : 9999; return ox - oy; });
-    var wrap = el("div", "answers"), n = 0;
+    var out = [];
     ids.forEach(function (q) {
       var meta = qs[q]; var type = meta ? meta.type : "";
-      if (SKIP_TYPES[type]) return;
+      if (SKIP_TYPES[type] || never[q] || (exclude && exclude[q])) return;
       var v = answers[q], txt;
       if (type === "control_fileupload" || (Array.isArray(v) && v.every(function (u) { return /^https?:\/\//.test(String(u)); }))) txt = (Array.isArray(v) ? v : [v]).filter(Boolean).map(fileName).join(", ");
       else txt = toText(v);
       if (!txt) return;
       var label = meta ? (a.language === "es" ? firstLang(meta.text) : meta.text) : (MANUAL_ANSWER_LABELS[q] || "Question " + q);
-      label = label.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(); if (label.length > 140) label = label.slice(0, 137) + "…";
-      var box = el("div"); box.appendChild(el("div", "q", label)); box.appendChild(el("div", "a", txt)); wrap.appendChild(box); n++;
+      label = label.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      out.push({ id: q, q: label.length > 140 ? label.slice(0, 137) + "…" : label, qFull: label, a: txt });
     });
-    if (!n) wrap.appendChild(el("div", "hint", "No answers to show."));
+    return out;
+  }
+  function renderAnswers(a, answers) {
+    var sec = $("answersSec"); if (!sec) return;
+    sec.querySelectorAll(".hint, .answers").forEach(function (n) { n.remove(); });
+    var wrap = el("div", "answers");
+    var items = answerItems(a, answers);
+    items.forEach(function (it) { var box = el("div"); box.appendChild(el("div", "q", it.q)); box.appendChild(el("div", "a", it.a)); wrap.appendChild(box); });
+    if (!items.length) wrap.appendChild(el("div", "hint", "No answers to show."));
     sec.appendChild(wrap);
+  }
+
+  // ---------- Application PDF ----------
+  // The document model for application-pdf.js: exactly what this role's drawer shows, and nothing
+  // from the staff-only sections (status, notes, tags, offers, referral, contact log, feedback).
+  // Staff build it from the cleaned `answers` through the form's field_map; managers from the
+  // curated view's columns, which is all they can read. Jotform's own PDF is not used because it
+  // renders the driver licence, signature and initials fields that are never stored here.
+  // Dates in the PDF always carry the year: the file outlives the screen it was made from.
+  function fullDate(d) { return d ? d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : ""; }
+  function fullDay(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? fullDate(new Date(+m[1], +m[2] - 1, +m[3])) : (s || ""); }
+  async function applicationModel(id) {
+    var a = appById[id]; if (!a) throw new Error("Application not loaded");
+    var answers = {}, d;
+    if (staff) {
+      var r = await sb.from("applications").select("answers").eq("id", id).single();
+      if (r.error) throw r.error;
+      answers = (r.data && r.data.answers) || {};
+      d = detailsFromAnswers(a, answers);
+    } else d = a.curated || { employers: [] };
+    var manual = a.origin === "manual";
+    var sections = [];
+    sections.push({ title: "Contact", rows: [
+      ["Email", a.email], ["Phone", a.phone], ["Alternate phone", d.altPhone], ["Phone type", d.phoneType], ["Prefers", d.contactMethod],
+      ["Address", d.address], ["City", d.address ? "" : [a.city, a.state].filter(Boolean).join(", ")]
+    ] });
+    sections.push({ title: "Application", rows: [
+      ["Position", a.positionText],
+      ["Matched opening", a.positionTitle && a.positionTitle !== a.positionText ? a.positionTitle : ""],
+      ["Location", a.location], ["Form", a.formLabel],
+      ["Heard from", a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : "")], ["Referred by", a.referredBy],
+      ["Can start", fullDay(a.availableStart)], ["Education", d.education], ["Worked at Rexius before", d.workedBefore], ["Applied before", d.appliedBefore],
+      ["Student", d.student], ["Forklift experience", d.forklift], ["Herbicide licence", d.herbicide], ["Driver licence class", d.licenceClass], ["Skills", d.skills],
+      ["Portfolio link", d.portfolioLink], ["Notes from the paper form", d.manualNotes]
+    ] });
+    sections.push({ title: "Employment history", jobs: (d.employers || []).slice() });
+    var fileNames = a.files.map(fileLabel);
+    sections.push({ title: "Files", text: fileNames.length ? "Sent separately from the tracker: " + fileNames.join("; ") + "." : "" });
+    if (staff && !manual) {
+      // Everything else the applicant answered, minus the questions already shown above.
+      var f = formById[a.formId]; var fm = (f && f.field_map) || {}; var used = {};
+      Object.keys(fm).forEach(function (k) {
+        var v = fm[k];
+        if (typeof v === "string") used[v] = true;
+        else if (Array.isArray(v)) v.forEach(function (e) { if (e && typeof e === "object") Object.keys(e).forEach(function (kk) { used[String(e[kk])] = true; }); });
+        else if (v && typeof v === "object") Object.keys(v).forEach(function (kk) { if (typeof v[kk] === "string") used[v[kk]] = true; });
+      });
+      sections.push({ title: "Other answers", items: answerItems(a, answers, used).map(function (it) { return { q: it.qFull, a: it.a }; }) });
+    }
+    return {
+      name: a.name,
+      subtitle: (manual ? "Paper application received " + fullDate(a.when) : "Applied " + fullDate(a.when) + " through the " + (a.formLabel || a.form) + " form") + (a.location ? " · " + a.location : ""),
+      byline: "Rexius Recruiter · prepared by " + (profile ? profile.name : "") + " on " + fmtDateTime(new Date()),
+      sections: sections,
+      note: "This copy was generated from Rexius Recruiter. Driver licence details, signatures and initials are not stored in the tracker and do not appear here; " + (a.jotformUrl ? "HR can see the original submission in Jotform." : "the paper original is with HR.")
+    };
+  }
+  async function downloadApplication(id, btn) {
+    if (!window.RR || !RR.applicationPdf) { notice("The PDF module did not load. Reload the page and try again."); return; }
+    var was = btn ? btn.textContent : ""; if (btn) { btn.disabled = true; btn.textContent = "Preparing PDF…"; }
+    try { await RR.applicationPdf.download(await applicationModel(id)); }
+    catch (e) { notice("Could not build the application PDF: " + errText(e)); }
+    if (btn) { btn.disabled = false; btn.textContent = was; }
   }
 
   // ---------- Export ----------
@@ -1159,7 +1239,8 @@
       apps.forEach(function (a) { var p = positionById[a.positionId]; a.positionTitle = p ? p.title : ""; });
       return positions;
     },
-    reloadApps: loadApps
+    reloadApps: loadApps,
+    applicationModel: applicationModel, downloadApplication: downloadApplication
   };
 
   // ---------- Boot ----------
