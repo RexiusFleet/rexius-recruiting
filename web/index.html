@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rexius Recruiter</title>
+<link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -14,6 +16,10 @@
 <!-- Sign in -->
 <section class="gate" id="loginView" hidden>
   <form class="card" id="loginForm" autocomplete="on">
+    <picture class="logo">
+      <source srcset="assets/rexius-logo-white.webp" media="(prefers-color-scheme: dark)">
+      <img src="assets/rexius-logo.webp" alt="Rexius" width="2000" height="391">
+    </picture>
     <h1>Rexius Recruiter</h1>
     <p class="meta">Sign in with the email and password an admin set up for you.</p>
     <label>Email <input type="email" id="loginEmail" name="email" autocomplete="username" required></label>
@@ -50,9 +56,12 @@
 <!-- Tracker -->
 <div class="app" id="appView" hidden>
   <header class="top">
-    <div>
+    <div class="title">
+      <img class="mark" src="assets/rexius-mark.png" alt="" width="600" height="600">
+      <div>
       <h1 id="pageTitle">Rexius applicants</h1>
       <div class="meta" id="meta">Loading…</div>
+      </div>
     </div>
     <div class="actions">
       <span class="who" id="who"></span>
