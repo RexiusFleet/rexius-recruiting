@@ -19,7 +19,10 @@ published to GitHub Pages at https://andy-rexius.github.io/rexius-recruiting/ (s
 | `supabase/config.toml` | Supabase CLI config. `recruiting` is in the exposed schemas; auth defaults match the dashboard steps below | 2 |
 | `supabase/migrations/` | Database migrations. Applied to the hosted project with `npm run db:migrate`, never with `supabase db push` (see "Two repos, one project"). One file per change, never edited after it has been applied | 2+ |
 | `supabase/seed.sql` | Local-only seed: four test sign-ins and sample applications for `db reset` | 3 |
-| `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform submissions | 5 |
+| `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform's webhook for each new submission, fetches the submission from Jotform's API and inserts it with the backfill's rules (step 14; its README has the request and response shapes) | 5 |
+| `supabase/functions/_shared/clean.mjs` | The cleanup, field-map and never-import rules, one submission in and one `applications` row plus its files out. Canonical copy, used by the webhook and re-exported by `scripts/backfill/lib/clean.mjs` | 4, 5 |
+| `supabase/functions/.env.example` | Names of the webhook's local variables; copy to the gitignored `supabase/functions/.env` for `functions serve` | 5 |
+| `scripts/webhook-test/stub-jotform.mjs` | Stand-in for api.jotform.com (one made-up submission and resume) so the webhook can be tested on the local stack with no key and no real data (`npm run webhook:stub`) | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
@@ -290,11 +293,46 @@ Applied to the hosted project through the CLI's Management API route (`npx supab
 --linked -f <file>`, then the `schema_migrations` row by hand), since the `.env` database
 connection does not work for a Developer.
 
+## What Phase 5 created
+
+`supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
+`applications` current without anyone re-running the backfill. Jotform calls it once per new
+submission on each of the three forms (step 14 adds the URL to the forms). The function:
+
+- checks a shared secret on the URL (`?secret=…`, the `JOTFORM_WEBHOOK_SECRET` function
+  secret) in constant time before reading anything else. The API gateway's JWT check is off
+  for this function (`verify_jwt = false` in `config.toml`, `--no-verify-jwt` on deploy)
+  because Jotform cannot send a Supabase JWT; the secret is the authentication;
+- reads only `formID` and `submissionID` from Jotform's multipart POST and rejects a form ID
+  that is not an active row in `recruiting.forms` (logged, HTTP 400);
+- answers `{"status":"exists"}` when `applications` already holds the submission, so a retried
+  or duplicated delivery never creates a second row (a race between two deliveries is caught by
+  the unique index and answered the same way);
+- fetches the submission from Jotform's REST API (`GET /submission/{id}`) with the
+  `JOTFORM_API_KEY` secret rather than trusting the posted body, checks it belongs to the
+  posted form, and skips submissions in Jotform's trash;
+- builds the row with `supabase/functions/_shared/clean.mjs`, the same module the backfill
+  uses, so the field map, the Spanish value cleanup, email and phone normalisation and the
+  never-import list (driver licence 30/31/35, signatures 238/333/369, initials 324–332) are one
+  piece of code. The insert trigger puts the application in the first stage, writes the first
+  `status_history` row and matches the position; the function never writes those tables;
+- responds to Jotform, then copies resumes and portfolios into `recruiting-files` and records
+  them in `application_files` in the background (Jotform waits at most five seconds for a
+  reply). A file that fails to copy is logged; `npm run backfill -- --refresh` re-copies it.
+
+Logs (Dashboard → **Edge Functions** → the function → **Logs**) carry form and submission IDs
+and outcomes only, never answers, names or secrets. The backfill stays useful for re-syncing
+after an outage (it skips what the webhook already imported) and for `--refresh`.
+
+`scripts/backfill/lib/clean.mjs` is now a one-line re-export of the shared module; the backfill,
+its tests and its README are otherwise unchanged. `scripts/webhook-test/stub-jotform.mjs` and
+`supabase/functions/.env.example` support the local test in step 14.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
 migration runner needs one `npm install`), and access to the `am-projects` project (currently named Apparel) in the Supabase dashboard; steps 1, 5 and 6
-need the Administrator or Owner role in the Supabase organization, the rest work as a Developer. Run every command from
+need the Administrator or Owner role in the Supabase organization, as does setting the Edge Function secrets in step 14; the rest work as a Developer. Run every command from
 the root of this repo.
 
 Never paste a key, password, or token into chat, a file in this repo, or a commit. Everything
@@ -461,9 +499,9 @@ same statement with the role as a third value.
 | Database password | Step 3 | Prompted by `supabase link`, or `SUPABASE_DB_PASSWORD` in your shell |
 | `SUPABASE_DB_URL` (connection string, contains the password) | Step 4 and every later migration | `.env` at the repo root, gitignored |
 | CLI access token | Step 3 | `supabase login`, or `SUPABASE_ACCESS_TOKEN` in your shell |
-| `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | For the backfill: `.env` at the repo root (step 10). For the webhook: `npx supabase secrets set --env-file ./supabase/.env` with the key in that gitignored file, or Dashboard → **Edge Functions** → **Secrets** |
+| `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | For the backfill: `.env` at the repo root (step 10). For the webhook: an Edge Function secret (step 14): Dashboard → **Edge Functions** → **Secrets**, or `npx supabase secrets set --env-file supabase/functions/.env` with the key in that gitignored file (an org Administrator; a Developer can view secrets but not create them) |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Phase 4 (backfill) | `.env` at the repo root. The service-role key is in **Project Settings** → **API Keys**; it bypasses RLS and never goes near the frontend |
-| `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as above |
+| `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as the webhook's `JOTFORM_API_KEY`. Any long random string you make up (`openssl rand -hex 32`); it goes on the webhook URL in Jotform and nowhere else |
 | `ANTHROPIC_API_KEY` | Phase 9 | Same as above |
 
 `supabase/.env` and every `.env*` file are gitignored. Jotform's API key comes from Jotform →
@@ -645,6 +683,84 @@ row-level security and the page ships only the public key.
 9. **Local development keeps working.** `npx serve web` uses the committed `config.js` with the
    local stack's values. Do not commit hosted values into it; the workflow supplies them.
 
+### 14. Turn on the Jotform webhook (Phase 5)
+
+After this, every new submission on the three forms appears in the tracker within seconds,
+and the backfill is only for catching up after an outage. The function is deployed by a
+Developer; the two secrets need an organization Administrator or Owner (a Developer can see
+secrets but not create them).
+
+1. **Set the two secrets** (Administrator). Dashboard → **Edge Functions** → **Secrets** →
+   add `JOTFORM_API_KEY` (Jotform → account settings → **API**; read-only is enough; the same
+   key the backfill uses is fine) and `JOTFORM_WEBHOOK_SECRET` (a long random string, for
+   example the output of `openssl rand -hex 32`; keep it somewhere you can paste it into Jotform
+   in step 3). The CLI alternative is a gitignored file with those two lines and
+   `npx supabase secrets set --env-file supabase/functions/.env`. `SUPABASE_URL` and
+   `SUPABASE_SERVICE_ROLE_KEY` are injected by Supabase; do not add them. Optional:
+   `JOTFORM_TIMEZONE` if the Jotform account is not on Pacific time, `JOTFORM_API_BASE` for an
+   EU account. Nothing is pasted into chat, a file in this repo, or a commit.
+2. **Deploy** (Developer is enough; the CLI must be linked, step 3):
+
+   ```sh
+   npx supabase functions deploy recruiting-jotform-webhook --no-verify-jwt
+   ```
+
+   The function's URL is `https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-jotform-webhook`.
+   Dashboard → **Edge Functions** should list it with JWT verification off. Deploying before the
+   secrets exist is harmless: the function answers 503 "function not configured" until they do.
+   Check from your shell (expect `{"ok":true,...}`; the secret value comes from the dashboard, not
+   from this file):
+
+   ```sh
+   curl "https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-jotform-webhook?secret=<JOTFORM_WEBHOOK_SECRET>"
+   ```
+
+3. **Add the webhook to each of the three forms** in Jotform: open the form → **Settings** →
+   **Integrations** → search **Webhooks** → paste the function URL with the secret as its
+   query string:
+
+   ```
+   https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-jotform-webhook?secret=<JOTFORM_WEBHOOK_SECRET>
+   ```
+
+   → **Complete Integration**. Do this for Employment Application 2026 (`260115636145148`),
+   Employment Application-ESP 2025 (`232824275836160`) and CAS Employment Application 2026
+   (`232764918957171`). A form not in `recruiting.forms` (the QR card, internal and referral
+   forms) would be rejected with "unknown form", so do not add it there.
+4. **Confirm it works.** Submit a test application on one form (your own name, a throwaway
+   email, a small PDF as the resume). Within a few seconds it is on the tracker's Applications
+   page in stage Applied with the resume in the drawer; the function's **Logs** show
+   `inserted application …` then `1 of 1 file(s) copied`. Delete the test row afterwards in
+   **Table Editor** → `recruiting.applications` (the status, history and file rows go with it)
+   and the file under **Storage** → `recruiting-files` → `applications/<form>/<submission>/`, or
+   leave it and move it to Archived. If nothing arrives: Jotform → the form → **Settings** →
+   **Integrations** → **Webhooks** shows the delivery status, and the function's Logs say why
+   it was rejected.
+5. **Catching up.** If the project was paused or the function was down, run
+   `npm run backfill` (step 10); it skips every submission the webhook already imported.
+
+**Test it locally** (no Jotform key, no real data), with the local stack running (step 9):
+
+```sh
+cp supabase/functions/.env.example supabase/functions/.env   # gitignored; dummy values are fine
+npm run webhook:stub                                          # terminal 1: fake api.jotform.com on 8787
+npx supabase functions serve --env-file supabase/functions/.env   # terminal 2
+```
+
+Then, in a third terminal, post what Jotform would post (the stub's sample is form
+`260115636145148`, submission `6990000000000000001`):
+
+```sh
+curl -X POST -F formID=260115636145148 -F submissionID=6990000000000000001 -F rawRequest='{}' \
+  "http://127.0.0.1:54321/functions/v1/recruiting-jotform-webhook?secret=local-test-secret"
+```
+
+Expect `{"status":"inserted",...}` the first time and `{"status":"exists",...}` on every
+repeat; the row ("Test Webhook", Eugene/Springfield, Landscape Maintenance Crew Member) is on
+the local tracker in Applied with `resume.pdf` attached, and its `answers` hold no `30`, `238`
+or `324` key. Without `?secret=` the answer is 401; with `formID=123456` it is 400 "unknown
+form". Checked this way on 2026-10-27.
+
 ## Two repos, one project
 
 The inventory app is its own project in its own repository and environment; the only thing it
@@ -705,7 +821,11 @@ Two secrets give full read and write access to everything, ignoring every policy
 - They are never committed, never pasted into chat, never put in `web/`. The frontend ships only
   the project URL and the publishable key, which are public by design.
 - The service-role key is used only by the backfill script and Edge Functions. On a developer's
-  machine it lives in the gitignored `.env`; on Supabase it lives in Edge Function secrets.
+  machine it lives in the gitignored `.env`; on Supabase it is injected into Edge Functions.
+- The webhook's shared secret (`JOTFORM_WEBHOOK_SECRET`) and the Jotform API key let a caller
+  insert applications and read Jotform, not read the database. They live in Edge Function
+  secrets and, the shared secret only, on the webhook URL inside Jotform's form settings. Rotate
+  both by setting new values and updating the three webhook URLs (step 14).
 - Rotate either one if a laptop holding `.env` is lost, or a person who had the key leaves.
   Rotating the service-role key does not affect the frontend.
 
