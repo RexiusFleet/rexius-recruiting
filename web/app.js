@@ -1069,7 +1069,14 @@
   }
 
   // ---------- Export ----------
-  function csvCell(v) { v = v == null ? "" : String(v); return /[",\n\r]/.test(v) ? "\"" + v.replace(/"/g, "\"\"") + "\"" : v; }
+  // A cell that begins with = + - @ or a tab/CR would be run as a formula by Excel and Sheets
+  // (CSV injection: applicants type these fields). Prefix it with an apostrophe so it stays text;
+  // a plain number such as -5 is left alone.
+  function csvCell(v) {
+    v = v == null ? "" : String(v);
+    if (/^[\s]*[=+\-@\t\r]/.test(v) && !/^\s*-?\d+(\.\d+)?\s*$/.test(v)) v = "'" + v;
+    return /[",\n\r]/.test(v) ? "\"" + v.replace(/"/g, "\"\"") + "\"" : v;
+  }
   function downloadCsv(name, head, rows) {
     var lines = [head.map(csvCell).join(",")];
     rows.forEach(function (r) { lines.push(r.map(csvCell).join(",")); });
