@@ -344,7 +344,7 @@ manager feedback are left out: it is a hand-off document, not an HR record):
 - Header: name, applied date and form (or "paper application received" for a manual entry),
   location, and the Rexius mark.
 - Contact: email, phone, alternate phone, phone type, preferred contact method, address.
-- Application: form, location, position (and the matched opening when it differs), source,
+- Application: position (and the matched opening when it differs), location, form, source,
   referred by, available start, education, worked at Rexius before, applied before, student,
   forklift experience, herbicide licence, skills, portfolio link, and the notes typed from a
   paper form.

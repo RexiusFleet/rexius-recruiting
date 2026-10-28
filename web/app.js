@@ -1030,8 +1030,9 @@
       ["Address", d.address], ["City", d.address ? "" : [a.city, a.state].filter(Boolean).join(", ")]
     ] });
     sections.push({ title: "Application", rows: [
-      ["Form", a.formLabel], ["Location", a.location], ["Position", a.positionText],
+      ["Position", a.positionText],
       ["Matched opening", a.positionTitle && a.positionTitle !== a.positionText ? a.positionTitle : ""],
+      ["Location", a.location], ["Form", a.formLabel],
       ["Heard from", a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : "")], ["Referred by", a.referredBy],
       ["Can start", fullDay(a.availableStart)], ["Education", d.education], ["Worked at Rexius before", d.workedBefore], ["Applied before", d.appliedBefore],
       ["Student", d.student], ["Forklift experience", d.forklift], ["Herbicide licence", d.herbicide], ["Skills", d.skills],
