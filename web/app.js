@@ -299,7 +299,7 @@
       furthestSort: stageById[row.furthest_stage_id] ? stageById[row.furthest_stage_id].sort_order : 0,
       files: files,
       curated: {
-        education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before),
+        education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before), licenceClass: toText(row.licence_class),
         manualNotes: row.manual_notes || "",
         employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason), responsibilities: toText(e.responsibilities) }; })
       }
@@ -588,7 +588,7 @@
     return {
       altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), address: txt("address"), contactMethod: txt("contact_method", true),
       education: txt("education", true), skills: txt("relevant_skills"), workedBefore: txt("worked_before", true), appliedBefore: txt("applied_before", true),
-      student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), portfolioLink: txt("portfolio_link").trim(),
+      student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), licenceClass: txt("licence_class"), portfolioLink: txt("portfolio_link").trim(),
       manualNotes: typeof answers.manual_notes === "string" ? answers.manual_notes : "",
       employers: employers
     };
@@ -712,7 +712,7 @@
     kv(c, "Prefers", d.contactMethod);
     kv(c, "Address", d.address);
     kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Applied before", d.appliedBefore);
-    kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide);
+    kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide); kv(ap, "Driver licence class", d.licenceClass);
     kv(ap, "Skills", d.skills);
     kv(ap, "Notes from the paper form", d.manualNotes);
     var pl = $("portfolioLink");
@@ -1035,7 +1035,7 @@
       ["Location", a.location], ["Form", a.formLabel],
       ["Heard from", a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : "")], ["Referred by", a.referredBy],
       ["Can start", fullDay(a.availableStart)], ["Education", d.education], ["Worked at Rexius before", d.workedBefore], ["Applied before", d.appliedBefore],
-      ["Student", d.student], ["Forklift experience", d.forklift], ["Herbicide licence", d.herbicide], ["Skills", d.skills],
+      ["Student", d.student], ["Forklift experience", d.forklift], ["Herbicide licence", d.herbicide], ["Driver licence class", d.licenceClass], ["Skills", d.skills],
       ["Portfolio link", d.portfolioLink], ["Notes from the paper form", d.manualNotes]
     ] });
     sections.push({ title: "Employment history", jobs: (d.employers || []).slice() });

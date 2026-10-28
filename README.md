@@ -346,8 +346,8 @@ manager feedback are left out: it is a hand-off document, not an HR record):
 - Contact: email, phone, alternate phone, phone type, preferred contact method, address.
 - Application: position (and the matched opening when it differs), location, form, source,
   referred by, available start, education, worked at Rexius before, applied before, student,
-  forklift experience, herbicide licence, skills, portfolio link, and the notes typed from a
-  paper form.
+  forklift experience, herbicide licence, driver licence class, skills, portfolio link, and the
+  notes typed from a paper form.
 - Employment history: each employer with title, location, dates, responsibilities and reason
   for leaving.
 - Files: the names of the resume, portfolio and scan on file, so the reader knows what was sent
@@ -364,6 +364,17 @@ position, availability, education, skills, employment history and file names, wi
 answers" section because the raw `answers` are staff-only. Giving managers the button exposes
 nothing they do not already see in the drawer and lets them print or forward an applicant to a
 foreman without asking HR for the file.
+
+**Driver licence class.** Many roles need a CDL, so question 35 ("Class or Type of License") is
+now imported and shown as "Driver licence class" in the drawer, the PDF and the manager view. The
+licence number (30) and expiry (31) stay dropped. Because 35 is a free-text box right under the
+number, the importer refuses an answer with five or more digits in a row or over 60 characters
+(a warning is logged instead), and the backfill tests cover both sides. Migration
+`20261101000100_licence_class.sql` moves 35 out of each form's `never_import`, adds the
+`licence_class` key to `field_map`, and appends `licence_class` to `applications_for_managers`.
+Rows imported before the migration have no answer 35, so after applying it run the backfill once
+with `--refresh --skip-files` (step 10) to re-clean every row from Jotform; new rows get it as
+they arrive.
 
 **How it works.** `web/application-pdf.js` lays the document out with jsPDF 3.0.3, loaded from a
 pinned jsDelivr URL in `index.html` the same way as supabase-js. `applicationModel(id)` in
@@ -897,7 +908,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
-| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers, signatures, initials | No column exists for them; the importer drops the licence, signature and initials answers before writing `answers` (CLAUDE.md section 5). The test script and the backfill tests assert none remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
+| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials | No column exists for them; the importer drops the licence number and expiry, signature and initials answers before writing `answers` (CLAUDE.md section 5). The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above
 

@@ -309,6 +309,18 @@ export function buildApplication(submission, form, positions, { timeZone = "Amer
     const v = cleanAnswerValue(qid, item?.answer, type, { language, positionQids });
     if (v !== undefined) answers[qid] = v;
   }
+  // Licence class ("Class or Type of License", question 35 on every form) is kept because many
+  // roles need a CDL. It is a free-text box right under the licence number, so an answer that
+  // looks like a number (five or more digits in a row) or runs long is dropped rather than stored;
+  // the number and expiry themselves stay in never_import (CLAUDE.md section 5).
+  const licenceQid = fm.licence_class == null ? null : String(fm.licence_class);
+  if (licenceQid && licenceQid in answers) {
+    const v = answers[licenceQid];
+    if (typeof v !== "string" || /\d{5,}/.test(v) || v.trim().length > 60) {
+      delete answers[licenceQid];
+      warnings.push(`licence class answer dropped (looked like a licence number)`);
+    }
+  }
 
   // Name
   const nameAns = get(fm.name);

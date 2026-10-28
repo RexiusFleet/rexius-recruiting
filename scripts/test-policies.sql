@@ -103,6 +103,8 @@ select pg_temp.check('manager: sees zero rows of referrals', (select count(*) fr
 select pg_temp.check('manager: sees zero rows of status_history', (select count(*) from recruiting.status_history) = 0);
 select pg_temp.check('manager: reads the curated view', (select count(*) from recruiting.applications_for_managers) = 5);
 select pg_temp.check('manager: view has stage and education', (select count(*) from recruiting.applications_for_managers where stage_name is not null and education is not null) = 5);
+select pg_temp.check('forms: licence number and expiry stay in never_import, class does not', (select count(*) from recruiting.forms where field_map -> 'never_import' ? '30' and field_map -> 'never_import' ? '31' and not field_map -> 'never_import' ? '35' and field_map ->> 'licence_class' = '35') = 3);
+select pg_temp.check('manager: view has licence_class', (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name = 'applications_for_managers' and column_name = 'licence_class') = 1);
 select pg_temp.check('manager: view has employment history', (select jsonb_array_length(employment_history) from recruiting.applications_for_managers where name = 'Priya Natarajan') = 1);
 select pg_temp.check('manager: reads stages', (select count(*) from recruiting.stages) = 9);
 select pg_temp.check('manager: reads positions (17 seeded open + 10 past roles from Phase 7)', (select count(*) from recruiting.positions) = 27);

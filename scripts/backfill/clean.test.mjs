@@ -21,6 +21,13 @@ const seedSql = readFileSync(join(repoRoot, "supabase", "migrations", "202610260
 const fieldMaps = [...seedSql.matchAll(/\$json\$(\{"address".*?\})\$json\$/gs)].map((m) => JSON.parse(m[1]));
 assert.equal(fieldMaps.length, 3, "expected three field maps in the seed migration");
 
+// Migration 20261101000100 moves question 35 (licence class) out of never_import into a
+// `licence_class` key on every form; the fixtures get the same change so the tests see the
+// field maps as the database holds them after that migration.
+for (const fm of fieldMaps) {
+  fm.never_import = (fm.never_import ?? []).filter((q) => String(q) !== "35");
+  fm.licence_class = "35";
+}
 const forms = {
   en: { id: 1, jotform_form_id: "260115636145148", language: "en", default_location: null, questions: reference["260115636145148"].questions, field_map: fieldMaps[0] },
   es: { id: 2, jotform_form_id: "232824275836160", language: "es", default_location: null, questions: reference["232824275836160"].questions, field_map: fieldMaps[1] },
@@ -128,11 +135,12 @@ test("English submission: fields, position link, files, never-import", () => {
   assert.equal(row.language, "en");
   assert.equal(row.jotform_url, "https://www.jotform.com/inbox/260115636145148/6000000000000000001");
   // Never-import questions are gone from answers; nothing signature-like survives anywhere.
-  for (const qid of ["30", "31", "35", "238", "333", "369", "324", "325", "326", "327", "328", "329", "330", "331", "332"]) {
+  for (const qid of ["30", "31", "238", "333", "369", "324", "325", "326", "327", "328", "329", "330", "331", "332"]) {
     assert.ok(!(qid in row.answers), `answer ${qid} must not be stored`);
   }
   assert.ok(!JSON.stringify(row).includes("_signature_"));
   assert.ok(!JSON.stringify(row).includes("A1234567"));
+  assert.equal(row.answers["35"], "C", "licence class is kept");
   assert.equal(row.answers["344"], "High School Diploma");
   assert.equal(row.answers["261"], "2026-11-02");
   assert.equal(row.answers["264"], "(541) 555-0101");
@@ -247,4 +255,23 @@ test("missing name and unparseable time are reported, not thrown", () => {
   assert.equal(row.name, "(no name)");
   assert.equal(row.submitted_at, null);
   assert.equal(warnings.length, 2);
+});
+
+test("licence class: kept when it is a class, dropped when it looks like a licence number", () => {
+  const make = (v) => ({
+    id: "6000000000000000009", form_id: "260115636145148", created_at: "2026-10-23 00:56:12", status: "ACTIVE",
+    answers: a({ 9: { first: "Sam", last: "Lee" }, 22: "sam@example.com", 342: "Eugene/Springfield", 30: "B9876543", 35: v }),
+  });
+  for (const v of ["C", "Class A CDL", "A", "CDL class B with tanker endorsement", "no"]) {
+    const { row, warnings } = buildApplication(make(v), forms.en, positions);
+    assert.equal(row.answers["35"], v);
+    assert.deepEqual(warnings, []);
+    assert.ok(!("30" in row.answers));
+  }
+  for (const v of ["B9876543", "1234567", "C 98765432", "x".repeat(61)]) {
+    const { row, warnings } = buildApplication(make(v), forms.en, positions);
+    assert.ok(!("35" in row.answers), `"${v}" must be dropped`);
+    assert.equal(warnings.length, 1);
+    assert.ok(!JSON.stringify(row).includes("9876543"));
+  }
 });
