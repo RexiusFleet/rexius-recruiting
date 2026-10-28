@@ -43,6 +43,32 @@
   </form>
 </section>
 
+<!-- First sign-in: set up an authenticator app (TOTP) -->
+<section class="gate" id="mfaEnrollView" hidden>
+  <form class="card" id="mfaEnrollForm" autocomplete="off">
+    <h1>Set up two-factor sign-in</h1>
+    <p class="meta">Every Rexius Recruiter account needs an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy or similar). Scan this code with the app, then enter the six-digit code it shows.</p>
+    <img class="qr" id="mfaQr" alt="QR code for the authenticator app" hidden>
+    <p class="meta">Cannot scan? Enter this key in the app by hand: <code id="mfaSecret"></code></p>
+    <label>Code from the app <input type="text" id="mfaEnrollCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+    <div class="err" id="mfaEnrollError" role="alert"></div>
+    <button class="btn primary" id="mfaEnrollBtn" type="submit">Verify and finish</button>
+    <p class="meta"><button type="button" class="linkbtn" id="mfaEnrollSignOut">Sign out</button></p>
+  </form>
+</section>
+
+<!-- Every later sign-in: the six-digit code -->
+<section class="gate" id="mfaChallengeView" hidden>
+  <form class="card" id="mfaChallengeForm" autocomplete="off">
+    <h1>Enter your code</h1>
+    <p class="meta">Signed in as <b id="mfaChallengeEmail"></b>. Open your authenticator app and enter the six-digit code for Rexius Recruiter.</p>
+    <label>Code from the app <input type="text" id="mfaChallengeCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+    <div class="err" id="mfaChallengeError" role="alert"></div>
+    <button class="btn primary" id="mfaChallengeBtn" type="submit">Continue</button>
+    <p class="meta">Lost the app or a new phone? Ask an admin to reset your two-factor setup, then sign in again. <button type="button" class="linkbtn" id="mfaChallengeSignOut">Sign out</button></p>
+  </form>
+</section>
+
 <!-- Signed in, no profile -->
 <section class="gate" id="noAccessView" hidden>
   <div class="card">

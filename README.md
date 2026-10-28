@@ -390,6 +390,51 @@ and checked for licence, signature, initials, Social Security and birth-date ter
 the footer note); the drawer button downloads without errors. As manager, the same button
 produces the curated document only and no notes or tags reach the model.
 
+## What the two-factor change created
+
+Two-factor sign-in for every tracker user (2026-10-28). Each account needs an authenticator app
+(TOTP: Google Authenticator, Microsoft Authenticator, 1Password, Authy and the like); a password
+alone no longer reaches any data.
+
+- Migration `20261102000100_require_mfa.sql`: `recruiting.current_role()` now returns null
+  unless the session's JWT carries `aal = 'aal2'`, which Supabase Auth sets only after a code
+  from an enrolled factor has been verified. Every policy, view and storage rule already goes
+  through that function, so a password-only session behaves like a login with no profile: no
+  rows, no files, no reports. One new policy lets a user read their own `profiles` row before
+  the second factor, so the page can say "No access" to an account without a role instead of
+  making it set up an app for nothing. `service_role` is unaffected (no `sub`, so no role, as
+  before).
+- `web/`: two gate screens. On the first sign-in (and after an invite's "choose a password")
+  the page calls `auth.mfa.enroll`, shows the QR code and the key for manual entry, and
+  verifies the first code. On every later sign-in it asks for the six-digit code
+  (`listFactors` + `challengeAndVerify`) before loading the profile. A password-reset link for a
+  user who already has a factor asks for the code first, because changing the password needs an
+  aal2 session. Sessions stay in the browser as before, so a code is needed once per sign-in,
+  not once per page load.
+- `scripts/test-policies.sql`: the impersonation helper takes an `aal` argument (default
+  `aal2`), and a new block checks that the admin at `aal1` sees no applications, view rows,
+  stages, documents, reports or storage objects, only their own profile row, and cannot change
+  it; a JWT with no `aal` claim counts as `aal1`.
+- `supabase/config.toml`: TOTP enrol and verify switched on for the local stack. The hosted
+  project has them on by default (Dashboard → **Authentication** → **Multi-Factor**; check
+  that TOTP shows "Enabled", and that **Verification** is not disabled).
+
+**Resetting a user's second factor.** Someone who loses their phone cannot sign in. An
+Administrator opens Dashboard → **Authentication** → **Users** → the user, and removes their
+factor; or runs this in the SQL Editor:
+
+```sql
+delete from auth.mfa_factors where user_id = '<the user id from the Users page>';
+```
+
+The user signs in with their password and is taken through enrolment again. Nothing else about
+the account changes. There are no recovery codes; the admin reset is the recovery path.
+
+**Deploying it.** Merge (Pages redeploys `web/`), then apply the migration. Any session that is
+signed in at that moment keeps its `aal1` token and loses access until the person signs out
+and in again, which takes them through enrolment. Apply the migration after the Pages deploy
+has finished, not before, or the page cannot show the enrolment screen.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
@@ -566,6 +611,12 @@ Dashboard → **Authentication** → **Sign In / Providers**:
 - **Allow new users to sign up**: turn **off**. Users are invited by an admin; nobody should be
   able to create an account from the login page. (Admin-created users and invites still work
   with this off.)
+
+Dashboard → **Authentication** → **Multi-Factor**:
+
+- **TOTP** (authenticator app): enabled, with enrolment and verification both allowed. It is on
+  by default; only check it. The tracker requires it for every user (see "What the two-factor
+  change created").
 
 Do these in the dashboard, not with `npx supabase config push`. Auth URLs and exposed schemas
 are project-wide settings shared with the inventory app, and a config push from either repo
@@ -900,7 +951,7 @@ on the developer's machine.
 | Layer | What it guarantees | How it is enforced |
 | --- | --- | --- |
 | Public API key (`anon` / publishable) | Identifies the project; grants nothing | `anon` has no `usage` on schema `recruiting`, so every unauthenticated request fails at the schema before reaching a table. Verified with the curl check in step 5 |
-| Sign-in | Accounts exist only when an admin creates or invites them | Public signup is off (step 6). Email + password through Supabase Auth, confirmations on. Invite and reset links only return to addresses on the redirect allow list |
+| Sign-in | Accounts exist only when an admin creates or invites them, and a password alone reaches no data | Public signup is off (step 6). Email + password through Supabase Auth, confirmations on, then a code from an authenticator app on every sign-in: `recruiting.current_role()` is null unless the JWT says `aal2`, so a stolen or guessed password gets the "enter your code" screen and nothing else. Invite and reset links only return to addresses on the redirect allow list |
 | Hosting | The published page holds no data and no secret | GitHub Pages serves static files from `web/`; the only project-specific values are the URL and publishable key, which grant nothing (row above). A Pages site is public, so the sign-in card is visible to anyone; nothing behind it is |
 | Profile row | A login without a `recruiting.profiles` row sees nothing | Every policy calls `recruiting.current_role()`, which returns null without a profile. `scripts/test-policies.sql` checks this for every table and the curated view |
 | Role | Managers never see notes, tags, raw answers, offers, referrals, contacts or history | Managers have no select policy on those tables; they read `applications_for_managers`, which does not contain those columns |

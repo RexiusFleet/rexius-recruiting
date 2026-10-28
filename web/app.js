@@ -122,7 +122,7 @@
 
   // ---------- Views ----------
   function show(view) {
-    ["loginView", "setPasswordView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
+    ["loginView", "setPasswordView", "mfaEnrollView", "mfaChallengeView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
     if (view !== "appView") { hideDrawer(); currentPage = null; }
   }
 
@@ -192,6 +192,59 @@
     AUTH_LINK.type = "";
     onSession(session);
   }
+  // ---------- MFA (TOTP) ----------
+  // supabase-js 2.118: mfa.enroll returns {id, totp: {qr_code (SVG data URI), secret, uri}};
+  // challengeAndVerify does the challenge + verify round trip and stores the aal2 session.
+  var enrolFactorId = null;
+  async function showEnroll() {
+    $("mfaEnrollError").textContent = ""; $("mfaEnrollCode").value = "";
+    $("mfaQr").hidden = true; $("mfaQr").removeAttribute("src"); $("mfaSecret").textContent = "…";
+    show("mfaEnrollView");
+    var have = await sb.auth.mfa.listFactors();
+    if (have.data) for (var i = 0; i < (have.data.totp || []).length; i++) if (have.data.totp[i].status === "unverified") await sb.auth.mfa.unenroll({ factorId: have.data.totp[i].id });
+    var res = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator app", issuer: "Rexius Recruiter" });
+    if (res.error) { $("mfaEnrollError").textContent = "Could not start two-factor setup: " + res.error.message; return; }
+    enrolFactorId = res.data.id;
+    $("mfaQr").src = res.data.totp.qr_code; $("mfaQr").hidden = false;
+    $("mfaSecret").textContent = res.data.totp.secret;
+    $("mfaEnrollCode").focus();
+  }
+  async function finishEnroll() {
+    var code = $("mfaEnrollCode").value.replace(/\s+/g, "");
+    $("mfaEnrollError").textContent = "";
+    if (!enrolFactorId) { $("mfaEnrollError").textContent = "Setup has not started; sign out and in again."; return; }
+    if (!/^\d{6}$/.test(code)) { $("mfaEnrollError").textContent = "Enter the six digits shown in the app."; return; }
+    $("mfaEnrollBtn").disabled = true;
+    var res = await sb.auth.mfa.challengeAndVerify({ factorId: enrolFactorId, code: code });
+    $("mfaEnrollBtn").disabled = false;
+    if (res.error) { $("mfaEnrollError").textContent = /invalid|expired/i.test(res.error.message) ? "That code did not match. Wait for the app to show a new one and try again." : res.error.message; return; }
+    enrolFactorId = null;
+    await continueAfterMfa();
+  }
+  async function showChallenge(s) {
+    $("mfaChallengeError").textContent = ""; $("mfaChallengeCode").value = "";
+    $("mfaChallengeEmail").textContent = s.user.email || s.user.id;
+    show("mfaChallengeView");
+    $("mfaChallengeCode").focus();
+  }
+  async function answerChallenge() {
+    var code = $("mfaChallengeCode").value.replace(/\s+/g, "");
+    $("mfaChallengeError").textContent = "";
+    if (!/^\d{6}$/.test(code)) { $("mfaChallengeError").textContent = "Enter the six digits shown in the app."; return; }
+    $("mfaChallengeBtn").disabled = true;
+    var factors = await sb.auth.mfa.listFactors();
+    var f = factors.data ? (factors.data.totp || []).filter(function (x) { return x.status === "verified"; })[0] : null;
+    if (factors.error || !f) { $("mfaChallengeBtn").disabled = false; $("mfaChallengeError").textContent = "No authenticator is set up for this account: " + (factors.error ? factors.error.message : "ask an admin to reset it."); return; }
+    var res = await sb.auth.mfa.challengeAndVerify({ factorId: f.id, code: code });
+    $("mfaChallengeBtn").disabled = false;
+    if (res.error) { $("mfaChallengeError").textContent = /invalid|expired/i.test(res.error.message) ? "That code did not match. Wait for the app to show a new one and try again." : res.error.message; return; }
+    await continueAfterMfa();
+  }
+  // The verified session (aal2) is now stored; re-read it and carry on to the profile.
+  async function continueAfterMfa() {
+    var res = await sb.auth.getSession();
+    onSession(res.data ? res.data.session : null);
+  }
   function resetData() {
     apps = []; appById = {}; selectedId = null; filters = emptyFilters(); shown = SHOW_STEP; lastLoaded = null;
     $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…";
@@ -199,16 +252,42 @@
     Object.keys(pages).forEach(function (n) { if (pages[n].reset) pages[n].reset(); });
   }
 
+  // Sign-in can report the session twice (the stored one at boot, then SIGNED_IN); run the
+  // gate once at a time so enrolment is not started twice.
+  var gateRunning = false, gateAgain = null;
   async function onSession(s) {
+    if (gateRunning) { gateAgain = s; return; }
+    gateRunning = true;
+    try { await gate(s); } finally {
+      gateRunning = false;
+      if (gateAgain !== null) { var n = gateAgain; gateAgain = null; if (!n || !session || n.user.id !== session.user.id) onSession(n); else session = n; }
+    }
+  }
+  async function gate(s) {
     session = s;
     if (!s) {
       profile = null; role = null; staff = false; show("loginView");
       if (AUTH_LINK.error) { $("loginError").textContent = "That link did not work: " + AUTH_LINK.error + ". Ask an admin for a new invite, or use the password link below."; AUTH_LINK.error = ""; }
       return;
     }
+    // Two-factor sign-in (migration 20261102000100): the database returns nothing until the
+    // session is at aal2, so the order is password -> code (or enrolment) -> profile. A user
+    // arriving from an invite or reset link sets a password first when they have no factor yet;
+    // one who already has a factor enters the code first, since changing the password needs aal2.
+    var aal = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal.error) { show("loginView"); $("loginError").textContent = "Could not check two-factor status: " + aal.error.message; return; }
+    var hasFactor = aal.data.nextLevel === "aal2", verified = aal.data.currentLevel === "aal2";
+    if (!verified && hasFactor) { await showChallenge(s); return; }
     if (AUTH_LINK.type === "invite" || AUTH_LINK.type === "recovery") {
       $("setPasswordEmail").textContent = s.user.email || s.user.id;
       show("setPasswordView");
+      return;
+    }
+    if (!verified) {
+      // Nothing to protect for an account without a role: say so before asking for an app.
+      var own = await sb.from("profiles").select("role").eq("user_id", s.user.id).maybeSingle();
+      if (!own.error && !own.data) { $("noAccessEmail").textContent = s.user.email || s.user.id; show("noAccessView"); return; }
+      await showEnroll();
       return;
     }
     var res = await sb.from("profiles").select("user_id, role, name, location").eq("user_id", s.user.id).maybeSingle();
@@ -1206,6 +1285,10 @@
   $("setPasswordForm").addEventListener("submit", function (e) { e.preventDefault(); savePassword(); });
   $("signOutBtn").addEventListener("click", signOut);
   $("noAccessSignOut").addEventListener("click", signOut);
+  $("mfaEnrollForm").addEventListener("submit", function (e) { e.preventDefault(); finishEnroll(); });
+  $("mfaEnrollSignOut").addEventListener("click", signOut);
+  $("mfaChallengeForm").addEventListener("submit", function (e) { e.preventDefault(); answerChallenge(); });
+  $("mfaChallengeSignOut").addEventListener("click", signOut);
   $("q").addEventListener("input", function () { filters.q = this.value; shown = SHOW_STEP; render(); });
   $("from").addEventListener("change", function () { filters.from = this.value; render(); });
   $("to").addEventListener("change", function () { filters.to = this.value; render(); });
