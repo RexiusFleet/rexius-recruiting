@@ -62,10 +62,11 @@
   <form class="card" id="mfaChallengeForm" autocomplete="off">
     <h1>Enter your code</h1>
     <p class="meta">Signed in as <b id="mfaChallengeEmail"></b>. Open your authenticator app and enter the six-digit code for Rexius Recruiter.</p>
+    <label id="mfaChallengeFactorWrap" hidden>Which authenticator <select id="mfaChallengeFactor"></select></label>
     <label>Code from the app <input type="text" id="mfaChallengeCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
     <div class="err" id="mfaChallengeError" role="alert"></div>
     <button class="btn primary" id="mfaChallengeBtn" type="submit">Continue</button>
-    <p class="meta">Lost the app or a new phone? Ask an admin to reset your two-factor setup, then sign in again. <button type="button" class="linkbtn" id="mfaChallengeSignOut">Sign out</button></p>
+    <p class="meta">Lost the app or a new phone? Ask an admin to reset your two-factor setup, then sign in again. Next time, add a second device on the Security page so a lost phone does not lock you out. <button type="button" class="linkbtn" id="mfaChallengeSignOut">Sign out</button></p>
   </form>
 </section>
 
@@ -104,6 +105,7 @@
     <a href="#/positions" data-page="positions">Positions</a>
     <a href="#/documents" data-page="documents">Documents</a>
     <a href="#/reports" data-page="reports" class="staff-only">Reports</a>
+    <a href="#/security" data-page="security">Security</a>
   </nav>
 
   <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="btn small" id="noticeBtn" type="button" hidden></button></div>
@@ -220,6 +222,26 @@
     <div class="empty" id="docEmpty" hidden></div>
   </div>
 
+  <!-- Security: the signed-in user's own authenticators -->
+  <div class="page pad" id="page-security" hidden>
+    <div class="prose">
+      <h2>Your authenticators</h2>
+      <p class="meta">Every sign-in to Rexius Recruiter needs a six-digit code from an authenticator app. Add a second device (a work phone with Duo Mobile, a personal phone, a password manager) so a lost or replaced phone does not lock you out. Any device listed here can produce the code; pick it on the sign-in screen.</p>
+      <p class="meta">Duo Mobile holds these codes under "Add account" → "Use QR code"; its push approvals only work for services connected to Duo, which this app is not.</p>
+    </div>
+    <div class="toolbar">
+      <span class="grow"></span>
+      <button class="btn primary" id="secAddBtn" type="button">Add authenticator</button>
+    </div>
+    <div class="tablewrap">
+      <table id="secTable">
+        <thead><tr><th>Name</th><th>Added</th><th>Status</th><th></th></tr></thead>
+        <tbody id="secRows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="secEmpty" hidden></div>
+  </div>
+
   <!-- Reports -->
   <div class="page" id="page-reports" hidden>
     <div class="reports">
@@ -287,6 +309,33 @@
   </form>
 </div>
 
+<div class="modal" id="secModal" hidden role="dialog" aria-modal="true" aria-labelledby="secTitle">
+  <form class="card modal-card" id="secForm" autocomplete="off">
+    <div class="modal-head">
+      <div>
+        <h2 id="secTitle">Add an authenticator</h2>
+        <p class="meta">Name the device, then scan the code with the new app and enter the six-digit code it shows. Your other authenticators keep working.</p>
+      </div>
+      <button class="close" id="secClose" aria-label="Close" type="button">×</button>
+    </div>
+    <div class="form-grid">
+      <label class="span2">Name this device <input type="text" id="secName" maxlength="60" required placeholder="Work phone (Duo)"></label>
+    </div>
+    <div id="secStep2" hidden>
+      <img class="qr" id="secQr" alt="QR code for the authenticator app" hidden>
+      <p class="meta">Cannot scan? Enter this key in the app by hand: <code id="secSecret">…</code></p>
+      <div class="form-grid">
+        <label class="span2">Code from the app <input type="text" id="secCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"></label>
+      </div>
+    </div>
+    <div class="err" id="secError" role="alert"></div>
+    <div class="modal-actions">
+      <button class="btn" id="secCancel" type="button">Cancel</button>
+      <button class="btn primary" id="secSave" type="submit">Show QR code</button>
+    </div>
+  </form>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@3.0.3/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
@@ -295,5 +344,6 @@
 <script src="positions.js"></script>
 <script src="documents.js"></script>
 <script src="reports.js"></script>
+<script src="security.js"></script>
 </body>
 </html>

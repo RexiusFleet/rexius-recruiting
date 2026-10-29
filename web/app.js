@@ -221,10 +221,22 @@
     enrolFactorId = null;
     await continueAfterMfa();
   }
+  // More than one verified authenticator (Security page): the user says which device the code
+  // is from, because each device has its own secret and a code only verifies against its own.
+  var challengeFactors = [];
   async function showChallenge(s) {
     $("mfaChallengeError").textContent = ""; $("mfaChallengeCode").value = "";
     $("mfaChallengeEmail").textContent = s.user.email || s.user.id;
+    var sel = $("mfaChallengeFactor"); sel.innerHTML = ""; $("mfaChallengeFactorWrap").hidden = true; challengeFactors = [];
     show("mfaChallengeView");
+    var factors = await sb.auth.mfa.listFactors();
+    if (factors.data) challengeFactors = (factors.data.totp || []).filter(function (x) { return x.status === "verified"; });
+    if (challengeFactors.length > 1) {
+      challengeFactors.forEach(function (f) { var o = el("option", null, f.friendly_name || "Authenticator"); o.value = f.id; sel.appendChild(o); });
+      var last = null; try { last = localStorage.getItem("rr.mfaFactor"); } catch (e) {}
+      if (last && challengeFactors.some(function (f) { return f.id === last; })) sel.value = last;
+      $("mfaChallengeFactorWrap").hidden = false;
+    }
     $("mfaChallengeCode").focus();
   }
   async function answerChallenge() {
@@ -232,12 +244,18 @@
     $("mfaChallengeError").textContent = "";
     if (!/^\d{6}$/.test(code)) { $("mfaChallengeError").textContent = "Enter the six digits shown in the app."; return; }
     $("mfaChallengeBtn").disabled = true;
-    var factors = await sb.auth.mfa.listFactors();
-    var f = factors.data ? (factors.data.totp || []).filter(function (x) { return x.status === "verified"; })[0] : null;
-    if (factors.error || !f) { $("mfaChallengeBtn").disabled = false; $("mfaChallengeError").textContent = "No authenticator is set up for this account: " + (factors.error ? factors.error.message : "ask an admin to reset it."); return; }
+    var f = null;
+    if (!challengeFactors.length) {
+      var factors = await sb.auth.mfa.listFactors();
+      challengeFactors = factors.data ? (factors.data.totp || []).filter(function (x) { return x.status === "verified"; }) : [];
+      if (factors.error || !challengeFactors.length) { $("mfaChallengeBtn").disabled = false; $("mfaChallengeError").textContent = "No authenticator is set up for this account: " + (factors.error ? factors.error.message : "ask an admin to reset it."); return; }
+    }
+    var chosen = $("mfaChallengeFactor").value;
+    f = challengeFactors.filter(function (x) { return x.id === chosen; })[0] || challengeFactors[0];
     var res = await sb.auth.mfa.challengeAndVerify({ factorId: f.id, code: code });
     $("mfaChallengeBtn").disabled = false;
-    if (res.error) { $("mfaChallengeError").textContent = /invalid|expired/i.test(res.error.message) ? "That code did not match. Wait for the app to show a new one and try again." : res.error.message; return; }
+    if (res.error) { $("mfaChallengeError").textContent = /invalid|expired/i.test(res.error.message) ? "That code did not match" + (challengeFactors.length > 1 ? " the device picked above" : "") + ". Wait for the app to show a new one and try again." : res.error.message; return; }
+    try { localStorage.setItem("rr.mfaFactor", f.id); } catch (e) {}
     await continueAfterMfa();
   }
   // The verified session (aal2) is now stored; re-read it and carry on to the profile.
