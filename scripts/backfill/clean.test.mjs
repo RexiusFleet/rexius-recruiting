@@ -28,6 +28,9 @@ for (const fm of fieldMaps) {
   fm.never_import = (fm.never_import ?? []).filter((q) => String(q) !== "35");
   fm.licence_class = "35";
 }
+// Migration 20261103000100 adds question 263 (street address) to never_import on every form;
+// city and state are still read from it into their own columns.
+for (const fm of fieldMaps) fm.never_import.push("263");
 const forms = {
   en: { id: 1, jotform_form_id: "260115636145148", language: "en", default_location: null, questions: reference["260115636145148"].questions, field_map: fieldMaps[0] },
   es: { id: 2, jotform_form_id: "232824275836160", language: "es", default_location: null, questions: reference["232824275836160"].questions, field_map: fieldMaps[1] },
@@ -141,6 +144,8 @@ test("English submission: fields, position link, files, never-import", () => {
   assert.ok(!JSON.stringify(row).includes("_signature_"));
   assert.ok(!JSON.stringify(row).includes("A1234567"));
   assert.equal(row.answers["35"], "C", "licence class is kept");
+  assert.ok(!("263" in row.answers), "street address is never stored");
+  assert.equal(row.city, "Eugene"); assert.equal(row.state, "OR");
   assert.equal(row.answers["344"], "High School Diploma");
   assert.equal(row.answers["261"], "2026-11-02");
   assert.equal(row.answers["264"], "(541) 555-0101");

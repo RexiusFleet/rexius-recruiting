@@ -665,7 +665,7 @@
       return { employer: toText(answers[e.name]), location: toText(answers[e.location]), title: toText(answers[e.title]), start: toText(answers[e.start]), end: toText(answers[e.end]), reason: toText(answers[e.reason]), responsibilities: toText(answers[e.responsibilities]) };
     }).filter(function (e) { return e.employer || e.title; });
     return {
-      altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), address: txt("address"), contactMethod: txt("contact_method", true),
+      altPhone: txt("phone_alt"), phoneType: txt("phone_type", true), contactMethod: txt("contact_method", true),
       education: txt("education", true), skills: txt("relevant_skills"), workedBefore: txt("worked_before", true), appliedBefore: txt("applied_before", true),
       student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), licenceClass: txt("licence_class"), portfolioLink: txt("portfolio_link").trim(),
       manualNotes: typeof answers.manual_notes === "string" ? answers.manual_notes : "",
@@ -789,7 +789,6 @@
     kv(c, "Alternate phone", d.altPhone, d.altPhone ? "tel:" + digits(d.altPhone) : null);
     kv(c, "Phone type", d.phoneType);
     kv(c, "Prefers", d.contactMethod);
-    kv(c, "Address", d.address);
     kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Applied before", d.appliedBefore);
     kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide); kv(ap, "Driver licence class", d.licenceClass);
     kv(ap, "Skills", d.skills);
@@ -1106,7 +1105,7 @@
     var sections = [];
     sections.push({ title: "Contact", rows: [
       ["Email", a.email], ["Phone", a.phone], ["Alternate phone", d.altPhone], ["Phone type", d.phoneType], ["Prefers", d.contactMethod],
-      ["Address", d.address], ["City", d.address ? "" : [a.city, a.state].filter(Boolean).join(", ")]
+      ["City", [a.city, a.state].filter(Boolean).join(", ")]
     ] });
     sections.push({ title: "Application", rows: [
       ["Position", a.positionText],

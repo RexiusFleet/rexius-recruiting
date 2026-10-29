@@ -341,6 +341,9 @@ export function buildApplication(submission, form, positions, { timeZone = "Amer
   // Contact
   const email = isBlank(get(fm.email)) ? null : String(get(fm.email)).trim();
   const phone = phoneText(get(fm.phone)) ?? phoneText(get(fm.phone_alt));
+  // The address question (263) is in never_import since 2026-10-28, so the street address,
+  // apartment line and postal code never reach `answers`; only city and state are kept, in
+  // their own columns, read straight from the raw answer here.
   const addr = get(fm.address);
   const city = addr && typeof addr === "object" && !isBlank(addr.city) ? String(addr.city).trim() : null;
   const state = addr && typeof addr === "object" && !isBlank(addr.state) ? String(addr.state).trim() : null;

@@ -26,7 +26,7 @@ Rexius context: landscape and forest-products company in Oregon; locations Eugen
 | Email + password sign-in via Supabase Auth, plus a required authenticator-app code (TOTP) on every sign-in since 2026-10-28; `recruiting.current_role()` is null unless the JWT is `aal2` | A password alone must never reach applicant data. May move to Google sign-in restricted to Rexius accounts later |
 | One Supabase project is shared with a second, unrelated app (apparel inventory tracker and department invoicer). It is currently named `Apparel` in the dashboard (ref `hibjqcgitqtgmkurghlw`, Rexius organization) and will be renamed `am-projects` once the user has the Administrator role; the name is only a dashboard label and nothing in either repo depends on it | Separate by schema (`recruiting`, `inventory`), bucket, and function name; shared `auth.users`, one `profiles` table per app |
 | Jotform intake by webhook (Edge Function) plus a one-time backfill via Jotform's REST API | Live data, no refresh button |
-| Driver licence numbers and expiry dates, signature images, and initials fields are never imported; the licence class is (many roles need a CDL) | Personal-information rules, section 5 |
+| Driver licence numbers and expiry dates, signature images, initials fields and street addresses (city and state only) are never imported; the licence class is (many roles need a CDL) | Personal-information rules, section 5 |
 | Resumes are copied into Supabase Storage with signed URLs | Managers must not need Jotform logins |
 | Static HTML/JS frontend; run locally during development; GitHub Pages when others need it | No build server required |
 | Status, notes, offers, positions etc. live only in Supabase; Jotform stays the source of record for the raw submission | One place to change things |
@@ -73,7 +73,7 @@ Other forms exist in the account (Internal Employment Application 2026, Employme
 | Email | 22 | 22 | 22 |
 | Phone / alternate phone | 264 / 265 | 264 / 265 | 264 / 265 |
 | Phone type | 266 | 266 | 266 |
-| Address | 263 | 263 | 263 |
+| Address — only city and state are kept (NEVER IMPORT the street, apartment line or postal code) | 263 | 263 | 263 |
 | Preferred contact method | 21 | 21 | 21 |
 | Location | 342 | 342 | — (use "CAS") |
 | Position | 340 Eugene/Springfield, 341 Central Oregon, 343 Lake Oswego | 340, 341, 343 | 375 (free text) |
@@ -112,7 +112,7 @@ The English form's three position dropdowns are what applicants choose from. The
 These apply to the webhook, the backfill, and every later import.
 
 - **Never stored anywhere:** Social Security numbers, bank details, dates of birth, government ID numbers, offered or agreed wages, signed offer letters.
-- **Dropped at import:** driver licence number and expiry (30, 31), signature images (238, 333, 369), initials (324–332). Anyone who needs them opens the submission in Jotform via the stored `jotform_url`. The licence class or type (35) is kept since 2026-10-28 because many roles need a CDL; it is a free-text box under the licence number, so the importer drops an answer with five or more digits in a row or over 60 characters.
+- **Dropped at import:** driver licence number and expiry (30, 31), signature images (238, 333, 369), initials (324–332), and since 2026-10-28 the street address (263: street, apartment line and postal code; only city and state are kept, in their own columns, and the rows imported before then were purged by migration `20261103000100`). Anyone who needs them opens the submission in Jotform via the stored `jotform_url`. The licence class or type (35) is kept since 2026-10-28 because many roles need a CDL; it is a free-text box under the licence number, so the importer drops an answer with five or more digits in a row or over 60 characters.
 - **Role-restricted:** offers and offer history, notes, and the raw cleaned `answers` JSON are HR and Admin only. Managers see a curated summary (contact, position, availability, experience, resume).
 - **Resumes:** copied into the `recruiting-files` bucket; served to signed-in users through short-lived signed URLs; never public.
 - **Scans of paper applications:** stored under `manual/<application id>/` in the same bucket as images only (nothing is read out of them into a column), with the same read rule as resumes (any user with a profile, via signed URL); only admin and hr can upload, and nothing under `manual/` can be replaced or deleted from the browser. A paper form may show an SSN, licence number, date of birth or signature, so staff black those out before uploading; the form and the README say so. The typed fields are the same ones the import keeps, plus one free-text `answers.manual_notes` that managers see.
