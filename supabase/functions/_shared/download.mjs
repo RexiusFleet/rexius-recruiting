@@ -1,6 +1,9 @@
 // Shared by the Edge Function and the local backfill. Applicant answers must never choose
-// where a request carrying the Jotform API key is sent.
-import { isUploadUrl } from "./clean.mjs";
+// where a request carrying the Jotform API key is sent. The key goes only to the approved
+// upload URL on www.jotform.com; Jotform answers with a redirect to a signed, short-lived URL
+// on files.jotform.com, which is followed with no credentials at all (2026-10-29). Any other
+// destination ends the download.
+import { isUploadUrl, isSignedFileUrl } from "./clean.mjs";
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
@@ -18,14 +21,16 @@ export async function downloadJotformUpload(url, apiKey, {
     let queryFallback = false;
     let redirects = 0;
     for (;;) {
-      // The only destination receiving credentials is the exact approved Jotform host.
-      if (!isUploadUrl(target.href)) return { ok: false, reason: "unapproved redirect destination" };
+      // The only destination receiving credentials is the exact approved Jotform host; the
+      // signed file host gets none.
+      const keyed = isUploadUrl(target.href);
+      if (!keyed && !isSignedFileUrl(target.href)) return { ok: false, reason: "unapproved redirect destination" };
       const requestUrl = new URL(target);
-      if (queryFallback) requestUrl.searchParams.set("apiKey", apiKey);
+      if (keyed && queryFallback) requestUrl.searchParams.set("apiKey", apiKey);
       let res;
       try {
         res = await fetchImpl(requestUrl, {
-          headers: queryFallback ? {} : { APIKEY: apiKey },
+          headers: keyed && !queryFallback ? { APIKEY: apiKey } : {},
           redirect: "manual", signal: controller.signal,
         });
       } catch {
@@ -38,11 +43,11 @@ export async function downloadJotformUpload(url, apiKey, {
         let next;
         try { next = new URL(location, requestUrl); }
         catch { return { ok: false, reason: "invalid redirect destination" }; }
-        if (!isUploadUrl(next.href)) return { ok: false, reason: "unapproved redirect destination" };
+        if (!isUploadUrl(next.href) && !isSignedFileUrl(next.href)) return { ok: false, reason: "unapproved redirect destination" };
         target = next;
         continue;
       }
-      if ((res.status === 401 || res.status === 403) && !queryFallback) {
+      if ((res.status === 401 || res.status === 403) && keyed && !queryFallback) {
         await res.body?.cancel();
         queryFallback = true;
         continue;

@@ -66,3 +66,47 @@ test("streaming stops when a response exceeds the configured limit", async () =>
   assert.equal(result.ok, false);
   assert.match(result.reason, /exceeds/);
 });
+
+test("the signed files.jotform.com redirect is followed without any credentials", async () => {
+  const calls = [];
+  const signed = "https://files.jotform.com/jufs/rexius%2F123%2F456%2Fresume.pdf?md5=abc&expires=1";
+  const result = await downloadJotformUpload(file, key, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), key: init.headers.APIKEY });
+      if (calls.length === 1) return new Response(null, { status: 302, headers: { Location: signed } });
+      return new Response("synthetic file", { headers: { "content-type": "application/pdf" } });
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].key, key);
+  assert.equal(calls[1].url, signed);
+  assert.equal(calls[1].key, undefined);
+  assert.ok(!calls[1].url.includes("apiKey"));
+});
+
+test("a redirect to files.jotform.com outside /jufs/ is refused", async () => {
+  const calls = [];
+  const result = await downloadJotformUpload(file, key, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), key: init.headers.APIKEY });
+      return new Response(null, { status: 302, headers: { Location: "https://files.jotform.com/other/resume.pdf" } });
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(calls.length, 1);
+});
+
+test("a 403 from the signed host does not trigger the key-in-query fallback", async () => {
+  const calls = [];
+  const result = await downloadJotformUpload(file, key, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), key: init.headers.APIKEY });
+      if (calls.length === 1) return new Response(null, { status: 302, headers: { Location: "https://files.jotform.com/jufs/x.pdf?md5=a&expires=1" } });
+      return new Response(null, { status: 403 });
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(calls.length, 2);
+  assert.ok(!calls[1].url.includes("apiKey"));
+});

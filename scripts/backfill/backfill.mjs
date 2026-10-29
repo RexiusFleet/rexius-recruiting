@@ -182,7 +182,7 @@ async function main() {
   if (!opts.dryRun && !opts.skipFiles) await ensureBucket();
 
   for (const form of selected) {
-    await importForm(form, positions, existing, existingFiles);
+    await importForm(form, positions, existing, existingFiles, purged);
   }
 
   printReport();
@@ -204,7 +204,7 @@ async function ensureBucket() {
   if (data.public) throw new Error(`Storage bucket "${BUCKET}" is public; it must be private.`);
 }
 
-async function importForm(form, positions, existing, existingFiles) {
+async function importForm(form, positions, existing, existingFiles, purged) {
   const c = {
     form: form.jotform_form_id, label: form.label,
     fetched: 0, inserted: 0, updated: 0, skippedExisting: 0, skippedDeleted: 0, skippedPurged: 0, skippedOld: 0, failed: 0,

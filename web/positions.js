@@ -70,11 +70,15 @@
     });
     return m;
   }
+  // CAS applications keep their free-text position as entered (the CAS form has no dropdown
+  // and the handful of CAS roles are not tracked as positions), so they are never "unmatched".
+  var FREE_TEXT_LOCATION = "CAS";
   function unmatchedGroups() {
-    var m = {}, skipped = 0, total = 0, linked = 0;
+    var m = {}, skipped = 0, total = 0, linked = 0, freeText = 0;
     RR.state().apps.forEach(function (a) {
       total++;
       if (a.positionId) { linked++; return; }
+      if (a.location === FREE_TEXT_LOCATION) { freeText++; return; }
       var t = (a.positionText || "").trim();
       if (!t || t.toLowerCase() === "any") { skipped++; return; }
       var k = a.location + "\u0000" + t.toLowerCase();
@@ -82,7 +86,7 @@
       g.count++;
     });
     var groups = Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.count - a.count || a.text.localeCompare(b.text); });
-    return { groups: groups, skipped: skipped, total: total, linked: linked };
+    return { groups: groups, skipped: skipped, total: total, linked: linked, freeText: freeText };
   }
   function labelOf(p) { return (p.jotform_option_label || p.title || "").trim(); }
   function driftIssues() {
@@ -223,7 +227,7 @@
     var st = RR.state();
     var u = unmatchedGroups();
     var pct = u.total ? Math.round(100 * u.linked / u.total) : 0;
-    $("posMatchRate").textContent = u.linked.toLocaleString() + " of " + u.total.toLocaleString() + " applications are linked to a position (" + pct + "%). " + u.skipped.toLocaleString() + " answered “Any” or left it blank and cannot be linked.";
+    $("posMatchRate").textContent = u.linked.toLocaleString() + " of " + u.total.toLocaleString() + " applications are linked to a position (" + pct + "%). " + u.skipped.toLocaleString() + " answered “Any” or left it blank and cannot be linked." + (u.freeText ? " " + u.freeText.toLocaleString() + " CAS application" + (u.freeText === 1 ? " keeps" : "s keep") + " the position as typed." : "");
     var tbody = $("unmatchedRows"); tbody.innerHTML = "";
     $("unmatchedTable").hidden = !u.groups.length;
     $("unmatchedHint").textContent = u.groups.length
