@@ -478,6 +478,44 @@ Deploy order: merge, `npm run db:migrate`, then `npm run purge:unmatched` to see
 `npm run purge:unmatched -- --yes` to delete. Redeploy the webhook so it reads the new table
 (`supabase functions deploy recruiting-jotform-webhook --no-verify-jwt`).
 
+## What the CAS free-text change created
+
+The CAS form has a free-text position box and no location question, and the few CAS roles are
+not tracked on the Positions page, so the unmatched-position purge of 2026-10-28 deleted every
+2026 CAS application (13) along with the old dropdown labels it was meant to remove. CAS is now
+the one location where the position stays as the applicant typed it (2026-10-29): `position_id`
+stays null, the tracker's position filter and drawer show the text, and nothing counts it as
+unmatched.
+
+- `web/positions.js`: the "Applications with no matched position" list skips location CAS and
+  the match-rate sentence says how many CAS applications keep the position as typed. The funnel
+  and time-to-fill reports still group CAS under "(no matched position) · CAS", since there is
+  no position row to group by.
+- `scripts/purge-unmatched.mjs`: its definition of unmatched excludes location CAS, so a later
+  clean-up cannot delete CAS applications again.
+- Migration `20261105000100_cas_freeform_positions.sql`: takes the 13 CAS submission IDs off
+  `purged_submissions` (IDs only, no applicant data) and documents `position_text`.
+- Migration `20261105000200_purged_submissions_grant.sql`: `20261104000100` created the purge
+  list with no grant, so the backfill and the webhook (both on the service-role key) got
+  "permission denied" instead of a list. The purge script worked because it connects to
+  Postgres directly. With the grant the webhook works again without a redeploy.
+- `scripts/backfill/backfill.mjs`: the purge list was read in `main()` but used in
+  `importForm()`, which crashed every run with "purged is not defined"; it is now passed in.
+- `supabase/functions/_shared/download.mjs` and `clean.mjs`: the approved-URL guard of
+  2026-10-28 refused every resume, because Jotform answers a keyed request for an upload with a
+  302 to a signed, short-lived URL on `files.jotform.com/jufs/...`. That one destination is now
+  followed with no credentials (no header, no `apiKey` query); the key still goes only to
+  `www.jotform.com/uploads/`, and any other redirect still ends the download. Three tests cover
+  it (`npm run backfill:test`).
+
+Done on the hosted project on 2026-10-29: both migrations applied, `npm run backfill -- --form
+232764918957171 --refresh` restored the 13 CAS applications and copied their 9 resumes. Still to
+do by hand: redeploy the webhook so new submissions get their resumes again
+(`supabase functions deploy recruiting-jotform-webhook --no-verify-jwt`); until then it imports
+the application and logs the file as failed. No submission arrived between the guard's deploy
+and this fix, so nothing is missing; a plain `npm run backfill` (no `--refresh`) would pick up
+stragglers if any appear, and `--refresh --form <id>` re-copies files for a form.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps

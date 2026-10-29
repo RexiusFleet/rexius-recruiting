@@ -215,6 +215,22 @@ export function isUploadUrl(v) {
   } catch { return false; }
 }
 
+/**
+ * Where Jotform sends an authorised upload request: a short-lived signed URL on
+ * files.jotform.com (`/jufs/<path>?md5=...&expires=...`). The signature is the credential, so
+ * nothing else is sent there.
+ */
+export function isSignedFileUrl(v) {
+  if (typeof v !== "string") return false;
+  try {
+    const url = new URL(v.trim());
+    return url.protocol === "https:" && url.hostname === "files.jotform.com" &&
+      url.port === "" && url.username === "" && url.password === "" &&
+      url.hash === "" && url.pathname.startsWith("/jufs/") &&
+      url.pathname.length > "/jufs/".length;
+  } catch { return false; }
+}
+
 /** Signature images are never imported, whatever question they came from. */
 export function isSignatureUrl(v) {
   return typeof v === "string" && /_signature_/i.test(v);

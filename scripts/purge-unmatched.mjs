@@ -5,7 +5,8 @@
 //
 // "Unmatched" is the Positions page's definition: position_id is null and position_text is
 // neither blank nor "Any" (blank and "Any" applications stay; they cannot be linked and are
-// not what the clean-up list shows). For every such application the script
+// not what the clean-up list shows). CAS applications are never unmatched: the CAS form has
+// no position dropdown, so their position stays as typed (2026-10-29). For every such application the script
 //   1. removes its files from the recruiting-files bucket through the Storage API (deleting
 //      storage.objects rows by SQL would strand the bytes),
 //   2. records its Jotform submission ID in recruiting.purged_submissions so the backfill and
@@ -32,7 +33,7 @@ const missing = ["SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
 if (missing.length) { console.error(`Missing in .env: ${missing.join(", ")}`); process.exit(1); }
 
 const BUCKET = "recruiting-files";
-const WHERE = `a.position_id is null and nullif(trim(a.position_text), '') is not null and lower(trim(a.position_text)) <> 'any'`;
+const WHERE = `a.position_id is null and nullif(trim(a.position_text), '') is not null and lower(trim(a.position_text)) <> 'any' and coalesce(a.location, '') <> 'CAS'`;
 const REASON = "Position answer matched no position; removed in the Positions page clean-up";
 
 const cfg = { connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: !!process.env.SUPABASE_DB_SSL_CA } };
