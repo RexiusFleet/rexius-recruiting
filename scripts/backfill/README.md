@@ -79,8 +79,8 @@ ID. The exit code is 1 if anything failed, so a wrapper notices.
 the trigger that creates `application_status` (stage "Applied", `stage_since` = submission
 time) and the first `status_history` row; the script never touches those tables.
 
-`application_files` and bucket `recruiting-files`: one object per upload URL found anywhere in
-the answers that is not a signature image, under
+`application_files` and bucket `recruiting-files`: one object per approved upload URL in a
+mapped resume or portfolio file-upload question, under
 `applications/<form id>/<submission id>/<safe file name>`, with the original name, kind
 (`resume` for the form's resume question, `portfolio` for its portfolio question, otherwise
 `other`), content type and size recorded. Objects are private; the frontend asks for signed

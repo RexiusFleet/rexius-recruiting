@@ -77,6 +77,11 @@ test("upload and signature URL detection", () => {
   assert.ok(isUploadUrl("https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000001/Resume march 2026.docx"));
   assert.ok(isUploadUrl("https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000001/x.png?nc=1"));
   assert.ok(!isUploadUrl("https://rexius.com/blogs/careers"));
+  assert.ok(!isUploadUrl("https://example.invalid/uploads/x.pdf"));
+  assert.ok(!isUploadUrl("http://www.jotform.com/uploads/x.pdf"));
+  assert.ok(!isUploadUrl("https://www.jotform.com.evil.invalid/uploads/x.pdf"));
+  assert.ok(!isUploadUrl("https://www.jotform.com:444/uploads/x.pdf"));
+  assert.ok(!isUploadUrl("https://user@www.jotform.com/uploads/x.pdf"));
   assert.equal(fileNameFromUrl("https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000001/Resume march 2026.docx"), "Resume march 2026.docx");
   assert.ok(isSignatureUrl("https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000001/6000000000000000001_signature_369.png"));
   assert.equal(storageSafeName("Résumé (final) v2.pdf", 0), "Resume_final_v2.pdf");
@@ -149,6 +154,20 @@ test("English submission: fields, position link, files, never-import", () => {
   assert.equal(files.length, 2);
   assert.deepEqual(files.map((f) => f.kind).sort(), ["portfolio", "resume"]);
   assert.equal(files.find((f) => f.kind === "resume").storage_name, "6000000000000000001_resume.pdf");
+});
+
+test("only mapped upload questions create files", () => {
+  const sub = {
+    id: "6000000000000000002", created_at: "2026-10-23 00:56:12",
+    answers: a({
+      9: { first: "Test", last: "Applicant" },
+      384: "https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000002/not-a-file.pdf",
+      9999: "https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000002/unknown.pdf",
+      387: ["https://www.jotform.com/uploads/rexius/260115636145148/6000000000000000002/resume.pdf"],
+    }),
+  };
+  const { files } = buildApplication(sub, forms.en, positions);
+  assert.deepEqual(files.map((f) => f.qid), ["387"]);
 });
 
 test("Spanish submission: bilingual values, location alias, position keeps inner slash", () => {

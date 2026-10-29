@@ -201,12 +201,18 @@ export function submittedAt(submission, timeZone) {
 // Files
 // ---------------------------------------------------------------------------------------------
 
-// Jotform returns upload URLs with the original file name unencoded, spaces included, and
-// sometimes a `?nc=1` suffix; fetch() and new URL() percent-encode the spaces when downloading.
-const UPLOAD_URL = /^https?:\/\/[^\s"'<>]+\/uploads\/[^"'<>]+$/i;
+// File answers are only accepted from the Jotform upload endpoint. Jotform sometimes returns
+// unencoded spaces in file names; URL() normalizes those before the downloader uses them.
 
 export function isUploadUrl(v) {
-  return typeof v === "string" && UPLOAD_URL.test(v.trim());
+  if (typeof v !== "string") return false;
+  try {
+    const url = new URL(v.trim());
+    return url.protocol === "https:" && url.hostname === "www.jotform.com" &&
+      url.port === "" && url.username === "" && url.password === "" &&
+      url.hash === "" && url.pathname.startsWith("/uploads/") &&
+      url.pathname.length > "/uploads/".length;
+  } catch { return false; }
 }
 
 /** Signature images are never imported, whatever question they came from. */
@@ -392,17 +398,14 @@ export function buildApplication(submission, form, positions, { timeZone = "Amer
   if (!submitted) warnings.push(`unparseable submission time: ${submission.created_at ?? submission.subtitle}`);
   const availableStart = jotformDateToIso(get(fm.available_start));
 
-  // Files: any upload URL anywhere in the answers that is not a signature image.
+  // Files: only mapped, configured file-upload questions may supply download URLs.
   const kindByQid = new Map();
   if (fm.resume) kindByQid.set(String(fm.resume), "resume");
   if (fm.portfolio_file) kindByQid.set(String(fm.portfolio_file), "portfolio");
   const files = [];
   const seen = new Set();
   for (const [qid, item] of Object.entries(raw)) {
-    if (!/^\d+$/.test(qid)) continue;
-    // Never-import questions and signature fields are not even looked at: one real submission
-    // had a signature stored as a malformed upload URL without `_signature_` in it.
-    if (neverImport.has(qid) || questionType(qid, item, form) === "control_signature") continue;
+    if (!kindByQid.has(qid) || neverImport.has(qid) || form.questions?.[qid]?.type !== "control_fileupload") continue;
     const values = [];
     const walk = (v) => {
       if (typeof v === "string") values.push(v);

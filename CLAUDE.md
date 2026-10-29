@@ -103,7 +103,7 @@ Treat the employer-column IDs as "verify against `reference/jotform-forms.json`"
 - English and CAS forms: strip only a trailing "/".
 - Normalize email to lower case and phone to digits (compare on the last 10) for duplicate detection; keep the originals too.
 - Parse `subtitle` with the pattern `Mon D, YYYY H:MM AM/PM`; do not rely on `Date.parse`.
-- Treat any `https://…/uploads/…` URL that is not a `_signature_` PNG as a file to copy, whatever question it came from.
+- Copy files only from mapped resume/portfolio questions whose stored Jotform question type is `control_fileupload`. Accept only approved HTTPS Jotform upload URLs and validate redirects before sending the API key.
 
 The English form's three position dropdowns are what applicants choose from. The Positions feature should compare open positions against those options and flag drift in both directions ("dropdown still lists a closed role", "open role not on the form").
 

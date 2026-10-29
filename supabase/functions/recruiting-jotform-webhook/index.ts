@@ -45,11 +45,11 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { buildApplication } from "../_shared/clean.mjs";
+import { downloadJotformUpload } from "../_shared/download.mjs";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const BUCKET = "recruiting-files";
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const FUNCTION = "recruiting-jotform-webhook";
 
 type Json = Record<string, unknown>;
@@ -130,26 +130,6 @@ async function jotformSubmission(base: string, apiKey: string, submissionId: str
   if (!res.ok || code !== 200) throw new Error(`Jotform HTTP ${res.status} responseCode ${code}: ${String(body.message ?? "").slice(0, 200)}`);
   if (!body.content || typeof body.content !== "object") throw new Error("Jotform response has no content");
   return body.content as Json;
-}
-
-async function jotformDownload(apiKey: string, url: string): Promise<{ ok: true; bytes: Uint8Array; contentType: string | null } | { ok: false; reason: string }> {
-  let res = await fetchWithRetry(url, { headers: { APIKEY: apiKey }, redirect: "follow" });
-  if (res.status === 401 || res.status === 403) {
-    await res.body?.cancel();
-    const u = new URL(url);
-    u.searchParams.set("apiKey", apiKey);
-    res = await fetchWithRetry(u, { redirect: "follow" });
-  }
-  if (!res.ok) { await res.body?.cancel(); return { ok: false, reason: `download HTTP ${res.status}` }; }
-  const contentType = (res.headers.get("content-type") || "").split(";")[0].trim() || null;
-  if (contentType === "text/html" && !/\.html?$/i.test(new URL(url).pathname)) {
-    await res.body?.cancel();
-    return { ok: false, reason: "received HTML instead of the file (not authorised?)" };
-  }
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.length === 0) return { ok: false, reason: "empty file" };
-  if (bytes.length > MAX_FILE_BYTES) return { ok: false, reason: `${bytes.length} bytes exceeds the ${MAX_FILE_BYTES} byte limit` };
-  return { ok: true, bytes, contentType };
 }
 
 function guessContentType(name: string): string {
@@ -289,7 +269,7 @@ async function copyFiles(
   for (const f of files) {
     const storagePath = `applications/${formId}/${submissionId}/${f.storage_name}`;
     try {
-      const dl = await jotformDownload(apiKey, f.url);
+      const dl = await downloadJotformUpload(f.url, apiKey);
       if (!dl.ok) { warn(`form ${formId} submission ${submissionId}: file ${f.storage_name}: ${dl.reason}`); continue; }
       const contentType = dl.contentType && dl.contentType !== "application/octet-stream" ? dl.contentType : guessContentType(f.original_name);
       const up = await supabase.storage.from(BUCKET).upload(storagePath, dl.bytes, { contentType, upsert: true });

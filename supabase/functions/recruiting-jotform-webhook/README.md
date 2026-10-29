@@ -5,6 +5,12 @@ forms and inserts each new submission into `recruiting.applications` with the sa
 backfill. Setup, deployment and the local test are README step 14 at the repo root; the rules
 themselves are in `../_shared/clean.mjs`, shared with `scripts/backfill/`.
 
+Attachment URLs are accepted only from configured resume/portfolio upload questions. The shared
+downloader in `../_shared/download.mjs` permits HTTPS uploads on `www.jotform.com`, checks each
+redirect before transmitting the API key, and stops oversized/slow responses. If Jotform changes
+the legitimate download host, review and test that host before adding it to the allowlist; a
+rejected attachment is logged and can be retried after the configuration is updated.
+
 ## Request
 
 Jotform posts `multipart/form-data` with `formID`, `submissionID`, `rawRequest` (the answers as

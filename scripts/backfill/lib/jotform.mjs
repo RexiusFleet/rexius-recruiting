@@ -6,6 +6,7 @@
 // plus one download per file.
 
 const DEFAULT_BASE = "https://api.jotform.com";
+import { downloadJotformUpload } from "../../../supabase/functions/_shared/download.mjs";
 
 async function fetchWithRetry(url, init, { tries = 5, label = url } = {}) {
   let delay = 1500;
@@ -83,23 +84,12 @@ export class JotformClient {
 
   /**
    * Download an upload URL. Jotform serves upload files to the owning account; the API key is
-   * sent as a header first and, if that is refused, as a query parameter.
+   * sent only to an approved Jotform upload URL, as a header first and then (if refused)
+   * as a query parameter. Redirects are checked before any credentials are sent.
    * Returns { ok, status, buffer, contentType } and never throws for HTTP errors.
    */
   async download(url) {
-    let res = await fetchWithRetry(url, { headers: { APIKEY: this.apiKey }, redirect: "follow" }, { label: url });
-    if (res.status === 401 || res.status === 403) {
-      const u = new URL(url);
-      u.searchParams.set("apiKey", this.apiKey);
-      res = await fetchWithRetry(u, { redirect: "follow" }, { label: url });
-    }
-    if (!res.ok) return { ok: false, status: res.status };
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const contentType = (res.headers.get("content-type") || "").split(";")[0].trim() || null;
-    // A sign-in page instead of the file comes back as HTML.
-    if (contentType === "text/html" && !/\.html?$/i.test(new URL(url).pathname)) {
-      return { ok: false, status: res.status, reason: "received HTML instead of the file (not authorised?)" };
-    }
-    return { ok: true, status: res.status, buffer, contentType };
+    const result = await downloadJotformUpload(url, this.apiKey);
+    return result.ok ? { ok: true, status: 200, buffer: Buffer.from(result.bytes), contentType: result.contentType } : result;
   }
 }

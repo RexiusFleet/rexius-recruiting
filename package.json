@@ -13,7 +13,7 @@
     "db:make-admin": "node scripts/make-admin.mjs",
     "db:print": "node scripts/db-migrate.mjs --print",
     "backfill": "node scripts/backfill/backfill.mjs",
-    "backfill:test": "node --test scripts/backfill/clean.test.mjs",
+    "backfill:test": "node --test scripts/backfill/clean.test.mjs scripts/backfill/download.test.mjs",
     "webhook:stub": "node scripts/webhook-test/stub-jotform.mjs"
   },
   "devDependencies": {
