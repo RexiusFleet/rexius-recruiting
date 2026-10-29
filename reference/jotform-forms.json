@@ -36,9 +36,8 @@
     "type": "control_dropdown",
     "order": "6",
     "options": {
-     "Residential Landscape Construction Manager": "Residential Landscape Construction Manager",
      "Irrigation Installation Crew Member": "Irrigation Installation Crew Member",
-     "Commercial Landcape Project Lead": "Commercial Landcape Project Lead",
+     "Commercial Landscape Project Lead": "Commercial Landscape Project Lead",
      "Commercial Landscape Crew Member": "Commercial Landscape Crew Member",
      "Digital Marketer": "Digital Marketer",
      "Landscape Maintenance Crew Member": "Landscape Maintenance Crew Member",
@@ -46,6 +45,7 @@
      "Flatbed Truck Driver": "Flatbed Truck Driver",
      "Experienced Irrigation Technician": "Experienced Irrigation Technician",
      "Landscape Maintenance Crew Leader": "Landscape Maintenance Crew Leader",
+     "Heavy Diesel Truck Mechanic": "Heavy Diesel Truck Mechanic",
      "Any": "Any"
     },
     "name": "whatPosition340"
