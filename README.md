@@ -456,6 +456,28 @@ submission in Jotform via the drawer's link.
 Deploy order: merge, then apply the migration to the hosted project (`npm run db:migrate`). The
 purge runs inside the migration; there is nothing to run afterwards.
 
+## What the unmatched-purge change created
+
+Applications whose position answer matched no position leave the tracker (2026-10-28). The
+Positions page listed 55 of them (old dropdown labels such as "Specialty Production Worker
+Level One" and free-text CAS titles); all were Archived or Not selected with no notes, contacts
+or offers. Rather than link each old label to a current position, HR chose to delete them.
+Jotform keeps every submission.
+
+- Migration `20261104000100_purged_submissions.sql`: table `recruiting.purged_submissions`
+  (`jotform_submission_id`, `reason`, `purged_at`), RLS on with no policies, so only the
+  service role reads or writes it. It holds IDs, never applicant data.
+- `scripts/backfill/backfill.mjs` and the webhook skip any submission listed there (the backfill
+  report gains a `purged` column; the webhook answers `{status: "skipped", reason: "purged"}`).
+  Without this, a backfill re-run or a Jotform redelivery would bring deleted rows back.
+- `scripts/purge-unmatched.mjs` (`npm run purge:unmatched`): dry run by default; `--yes`
+  removes the files from the bucket through the Storage API, records the submission IDs, and
+  deletes the applications in one transaction. Safe to re-run.
+
+Deploy order: merge, `npm run db:migrate`, then `npm run purge:unmatched` to see the list and
+`npm run purge:unmatched -- --yes` to delete. Redeploy the webhook so it reads the new table
+(`supabase functions deploy recruiting-jotform-webhook --no-verify-jwt`).
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
