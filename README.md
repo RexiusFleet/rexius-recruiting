@@ -343,7 +343,8 @@ manager feedback are left out: it is a hand-off document, not an HR record):
 
 - Header: name, applied date and form (or "paper application received" for a manual entry),
   location, and the Rexius mark.
-- Contact: email, phone, alternate phone, phone type, preferred contact method, address.
+- Contact: email, phone, alternate phone, phone type, preferred contact method, city and state
+  (the street address is not stored; see "What the street-address change created").
 - Application: position (and the matched opening when it differs), location, form, source,
   referred by, available start, education, worked at Rexius before, applied before, student,
   forklift experience, herbicide licence, driver licence class, skills, portfolio link, and the
@@ -434,6 +435,26 @@ the account changes. There are no recovery codes; the admin reset is the recover
 signed in at that moment keeps its `aal1` token and loses access until the person signs out
 and in again, which takes them through enrolment. Apply the migration after the Pages deploy
 has finished, not before, or the page cannot show the enrolment screen.
+
+## What the street-address change created
+
+Street addresses leave the tracker (2026-10-28). The address question on each form (263) carries
+the street, apartment line, postal code, city and state. Nothing in the tracker needs more than
+city and state, so the rest is now never stored; anyone who needs the full address opens the
+submission in Jotform via the drawer's link.
+
+- Migration `20261103000100_drop_street_address.sql`: adds `"263"` to `never_import` in every
+  form's `field_map` (the `address` key stays, so the importer still reads city and state from
+  it into `applications.city` and `applications.state`), and removes key 263 from `answers` on
+  every application already imported. Jotform keeps the original submission, so nothing is lost.
+- `supabase/functions/_shared/clean.mjs` needed no logic change: city and state were already read
+  from the raw answer before the never-import filter. The backfill tests assert that 263 is
+  absent from `answers` and that city and state still arrive.
+- The drawer's Contact section and the application PDF drop the "Address" line; both keep "City".
+  Managers never saw the street address (the curated view has only city and state).
+
+Deploy order: merge, then apply the migration to the hosted project (`npm run db:migrate`). The
+purge runs inside the migration; there is nothing to run afterwards.
 
 ## What Phase 5 created
 
@@ -959,7 +980,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
-| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials | No column exists for them; the importer drops the licence number and expiry, signature and initials answers before writing `answers` (CLAUDE.md section 5). The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
+| Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials, street addresses | No column exists for them; the importer drops the licence number and expiry, signature, initials and street-address answers before writing `answers` (CLAUDE.md section 5); only the applicant's city and state are kept. The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above
 
