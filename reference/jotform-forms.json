@@ -36,7 +36,6 @@
     "type": "control_dropdown",
     "order": "6",
     "options": {
-     "Residential Landscape Construction Manager": "Residential Landscape Construction Manager",
      "Irrigation Installation Crew Member": "Irrigation Installation Crew Member",
      "Commercial Landscape Project Lead": "Commercial Landscape Project Lead",
      "Commercial Landscape Crew Member": "Commercial Landscape Crew Member",
