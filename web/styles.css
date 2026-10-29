@@ -167,6 +167,11 @@ body[data-role="manager"] .staff-only { display: none !important; }
 body:not([data-page="applications"]) .apps-only { display: none !important; }
 #page-applications .layout { border-top: 0; }
 .page.pad { padding: 14px 24px 40px; }
+.prose { max-width: 720px; margin-bottom: 14px; }
+.prose h2 { margin: 6px 0 6px; font-size: 18px; }
+.prose p { margin: 0 0 6px; }
+.modal-card .qr { margin: 0 auto 4px; }
+#secTable td:last-child { text-align: right; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar input[type="search"], .toolbar select { padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); }
 .toolbar input[type="search"] { min-width: 220px; }

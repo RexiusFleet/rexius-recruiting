@@ -429,7 +429,19 @@ delete from auth.mfa_factors where user_id = '<the user id from the Users page>'
 ```
 
 The user signs in with their password and is taken through enrolment again. Nothing else about
-the account changes. There are no recovery codes; the admin reset is the recovery path.
+the account changes. There are no recovery codes; a second device on the Security page (below)
+or the admin reset is the recovery path.
+
+**Security page: more than one device (2026-10-29).** The **Security** tab lists the signed-in
+user's own authenticators and lets them add another (a work phone with Duo Mobile, a personal
+phone, a password manager) or remove one, so a lost or replaced phone does not lock them out.
+`web/security.js` uses `auth.mfa.listFactors`, `enroll` (the device name is fixed at enrolment;
+Supabase has no rename) and `unenroll`; a cancelled enrolment is unenrolled at once, and the
+last remaining device cannot be removed. Each device has its own secret, so when more than one
+is enrolled the sign-in screen asks which device the code is from (the choice is remembered in
+the browser). Duo Mobile holds these codes as a "third-party account"; its push approvals only
+work for services connected to Duo, which Supabase Auth is not. Supabase only lets a session
+manage its own factors, so nothing here reaches another user.
 
 **Deploying it.** Merge (Pages redeploys `web/`), then apply the migration. Any session that is
 signed in at that moment keeps its `aal1` token and loses access until the person signs out
