@@ -205,6 +205,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json(200, { status: "exists", application_id: existing.data[0].id });
     }
 
+    // 3b. Deleted from the tracker on purpose: stays out (recruiting.purged_submissions).
+    const purged = await db.from("purged_submissions").select("jotform_submission_id").eq("jotform_submission_id", submissionId).limit(1);
+    if (purged.error) throw new Error(`select purged_submissions: ${purged.error.message}`);
+    if (purged.data?.length) {
+      log(`${tag}: purged from the tracker; not re-imported`);
+      return json(200, { status: "skipped", reason: "purged" });
+    }
+
     // 4. The real submission, from Jotform, not from the posted body.
     const base = (env("JOTFORM_API_BASE") ?? "https://api.jotform.com").replace(/\/$/, "");
     let submission: Json;

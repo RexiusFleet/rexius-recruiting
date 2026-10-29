@@ -175,7 +175,9 @@ async function main() {
     existing.set(a.jotform_submission_id, a.id);
   }
   const existingFiles = new Set((await selectAll("application_files", "storage_path", "storage_path")).map((f) => f.storage_path));
-  console.log(`Database has ${existing.size} application(s) and ${existingFiles.size} file(s) already.`);
+  // Deleted on purpose (recruiting.purged_submissions); never re-imported.
+  const purged = new Set((await selectAll("purged_submissions", "jotform_submission_id", "jotform_submission_id")).map((p) => p.jotform_submission_id));
+  console.log(`Database has ${existing.size} application(s) and ${existingFiles.size} file(s) already; ${purged.size} purged submission(s) will be skipped.`);
 
   if (!opts.dryRun && !opts.skipFiles) await ensureBucket();
 
@@ -205,7 +207,7 @@ async function ensureBucket() {
 async function importForm(form, positions, existing, existingFiles) {
   const c = {
     form: form.jotform_form_id, label: form.label,
-    fetched: 0, inserted: 0, updated: 0, skippedExisting: 0, skippedDeleted: 0, skippedOld: 0, failed: 0,
+    fetched: 0, inserted: 0, updated: 0, skippedExisting: 0, skippedDeleted: 0, skippedPurged: 0, skippedOld: 0, failed: 0,
     filesFound: 0, filesCopied: 0, filesSkipped: 0, filesFailed: 0,
     positionMatched: 0, withResume: 0, warnings: [],
   };
@@ -220,6 +222,7 @@ async function importForm(form, positions, existing, existingFiles) {
   })) {
     c.fetched++;
     if (sub.status && String(sub.status).toUpperCase() === "DELETED") { c.skippedDeleted++; continue; }
+    if (purged.has(String(sub.id))) { c.skippedPurged++; continue; }
 
     const { row, files, warnings } = buildApplication(sub, form, positions, { timeZone: env.timeZone });
     for (const w of warnings) c.warnings.push(`${row.jotform_submission_id}: ${w}`);
@@ -318,9 +321,9 @@ function guessContentType(name) {
 function printReport() {
   console.log("\n== Report");
   const pad = (s, n) => String(s).padEnd(n);
-  console.log(`  ${pad("form", 42)} ${pad("fetched", 8)} ${pad("inserted", 9)} ${pad("updated", 8)} ${pad("existing", 9)} ${pad("deleted", 8)} ${pad("old", 6)} ${pad("failed", 7)} ${pad("pos match", 10)} ${pad("w/ resume", 10)} ${pad("files", 6)} ${pad("copied", 7)} ${pad("f.skip", 7)} f.fail`);
+  console.log(`  ${pad("form", 42)} ${pad("fetched", 8)} ${pad("inserted", 9)} ${pad("updated", 8)} ${pad("existing", 9)} ${pad("deleted", 8)} ${pad("purged", 7)} ${pad("old", 6)} ${pad("failed", 7)} ${pad("pos match", 10)} ${pad("w/ resume", 10)} ${pad("files", 6)} ${pad("copied", 7)} ${pad("f.skip", 7)} f.fail`);
   for (const c of totals.forms) {
-    console.log(`  ${pad(c.label.slice(0, 41), 42)} ${pad(c.fetched, 8)} ${pad(c.inserted, 9)} ${pad(c.updated, 8)} ${pad(c.skippedExisting, 9)} ${pad(c.skippedDeleted, 8)} ${pad(c.skippedOld, 6)} ${pad(c.failed, 7)} ${pad(c.positionMatched, 10)} ${pad(c.withResume, 10)} ${pad(c.filesFound, 6)} ${pad(c.filesCopied, 7)} ${pad(c.filesSkipped, 7)} ${c.filesFailed}`);
+    console.log(`  ${pad(c.label.slice(0, 41), 42)} ${pad(c.fetched, 8)} ${pad(c.inserted, 9)} ${pad(c.updated, 8)} ${pad(c.skippedExisting, 9)} ${pad(c.skippedDeleted, 8)} ${pad(c.skippedPurged, 7)} ${pad(c.skippedOld, 6)} ${pad(c.failed, 7)} ${pad(c.positionMatched, 10)} ${pad(c.withResume, 10)} ${pad(c.filesFound, 6)} ${pad(c.filesCopied, 7)} ${pad(c.filesSkipped, 7)} ${c.filesFailed}`);
   }
   const all = totals.forms.reduce((a, c) => ({
     fetched: a.fetched + c.fetched, inserted: a.inserted + c.inserted, updated: a.updated + c.updated,
