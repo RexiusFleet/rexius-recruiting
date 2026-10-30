@@ -743,7 +743,7 @@ same statement with the role as a third value.
 | `JOTFORM_API_KEY` | Phase 4 (backfill) and 5 (webhook) | For the backfill: `.env` at the repo root (step 10). For the webhook: an Edge Function secret (step 14): Dashboard → **Edge Functions** → **Secrets**, or `npx supabase secrets set --env-file supabase/functions/.env` with the key in that gitignored file (an org Administrator; a Developer can view secrets but not create them) |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Phase 4 (backfill) | `.env` at the repo root. The service-role key is in **Project Settings** → **API Keys**; it bypasses RLS and never goes near the frontend |
 | `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as the webhook's `JOTFORM_API_KEY`. Any long random string you make up (`openssl rand -hex 32`); it goes on the webhook URL in Jotform and nowhere else |
-| `ANTHROPIC_API_KEY` | Phase 9 | Same as above |
+| `ANTHROPIC_API_KEY_RECRUITING` | Phase 9 | Same as the webhook's `JOTFORM_API_KEY` (set 2026-10-30). Created in the Claude Console (platform.claude.com) inside the `recruiting` workspace, which carries its own monthly spend cap; linked to a service account, not a person. The suffix says which app on the shared project owns it |
 
 `supabase/.env` and every `.env*` file are gitignored. Jotform's API key comes from Jotform →
 account settings → API (a read-only key is enough for the backfill).
