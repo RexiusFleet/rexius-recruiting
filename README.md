@@ -563,6 +563,58 @@ after an outage (it skips what the webhook already imported) and for `--refresh`
 its tests and its README are otherwise unchanged. `scripts/webhook-test/stub-jotform.mjs` and
 `supabase/functions/.env.example` support the local test in step 14.
 
+## What Phase 9a created
+
+The per-position market check (CLAUDE.md section 8, "Phase 9 decisions"). One run asks Claude,
+with its server-side web search tool, what others in the position's area are advertising for
+the same role and who else is hiring for it right now. Claude summarises; it never scores or
+ranks anything, and nothing about an applicant is sent. The result is a sample from search
+results, never a complete count; the useful signal is the change from run to run.
+
+- `supabase/migrations/20261106000100_market_checks.sql`: `positions.market_tracking` (off by
+  default) and `positions.market_interval_days` (7 or 30); table `market_checks`, one row per
+  run (`position_id`, `ran_at`, `trigger` manual/schedule/opened, `requested_by`, `summary`,
+  `pay_ranges`, `postings`, `sources`, `comparison`, `below_market`, `input_tokens`,
+  `output_tokens`, `searches`, `model`, `error`, `finished_at`), never overwritten; RLS: admin
+  and hr read and write, managers read, no profile nothing. It also enables `pg_net` and
+  `pg_cron`, adds `request_market_check(position_id, trigger)` (posts to the function through
+  pg_net with the URL and shared secret read from Supabase Vault), `run_due_market_checks()`
+  (open, tracked positions whose last successful run is older than their interval, skipping any
+  position with a run in the last day), a trigger that checks a position the moment it becomes
+  open with tracking on (or tracking is turned on while open), and the daily pg_cron job
+  `recruiting-market-checks` at 13:00 UTC (6 am Pacific). Until the two vault secrets exist
+  (step 15) the schedule and the trigger do nothing but write a warning to the Postgres logs.
+- `supabase/functions/recruiting-market-check/index.ts`: the Edge Function. Two callers: the
+  tracker's **Check now** button sends the user's JWT, and the function checks admin or hr with
+  a two-factor session through `recruiting.current_role()`, exactly like the table policies;
+  Postgres (the cron job and the trigger) sends the header `x-market-check-secret` matching the
+  function secret `MARKET_CHECK_SECRET` and is refused for positions that are not open. The
+  gateway's JWT check is off (`verify_jwt = false`, `--no-verify-jwt`) because pg_net cannot
+  send a Supabase JWT. The function inserts the `market_checks` row, answers at once
+  (`202 {check_id}`) and does the work in the background: it reads the position (title,
+  location, department, pay range, the linked job description's text if it has one), calls
+  `claude-opus-5-5` with `web_search_20260209` (at most `MARKET_CHECK_MAX_SEARCHES` searches,
+  default 6, with the search area set to Eugene/Springfield, Bend or Lake Oswego), resumes a
+  `pause_turn`, parses the JSON answer, collects the sources from the tool results (not from
+  the model's text), converts the ranges found to the position's pay unit and compares them:
+  `below_market` is true when the top of the position's advertised range is below the median
+  low end others advertise. Usage from the response (`input_tokens`, `output_tokens`,
+  `searches`) is stored on the row so real cost replaces estimates. Every failure after the row
+  exists is stored in `market_checks.error`, never swallowed; the page shows it.
+- `web/positions.js`: a **Market check** section in the position drawer: the latest run
+  (summary, below-market flag, the medians against Rexius' range, the pay ranges found with
+  links, who else is hiring, sources, usage), earlier runs under **Earlier runs**, and for staff
+  the **Track on a schedule while open** toggle with Weekly/Monthly and **Check now**, which
+  calls the function and refreshes the section every few seconds until the run finishes.
+  Managers see the results read-only.
+- `scripts/test-policies.sql`: 22 more checks (hr and manager access, the 7/30 constraint, the
+  cron job, the helpers refusing to post without vault secrets and being uncallable by app
+  users). `supabase/seed.sql` adds one made-up finished run for the local stack.
+
+Cost: about fifty cents a run at 2026-10 list prices (six searches at a cent each plus
+tokens). The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
+it is reached the run ends with "rate limit or spend cap reached" on the row.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
@@ -744,6 +796,7 @@ same statement with the role as a third value.
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Phase 4 (backfill) | `.env` at the repo root. The service-role key is in **Project Settings** → **API Keys**; it bypasses RLS and never goes near the frontend |
 | `JOTFORM_WEBHOOK_SECRET` | Phase 5 | Same as the webhook's `JOTFORM_API_KEY`. Any long random string you make up (`openssl rand -hex 32`); it goes on the webhook URL in Jotform and nowhere else |
 | `ANTHROPIC_API_KEY_RECRUITING` | Phase 9 | Same as the webhook's `JOTFORM_API_KEY` (set 2026-10-30). Created in the Claude Console (platform.claude.com) inside the `recruiting` workspace, which carries its own monthly spend cap; linked to a service account, not a person. The suffix says which app on the shared project owns it |
+| `MARKET_CHECK_SECRET` | Phase 9a (step 15) | Same as `JOTFORM_WEBHOOK_SECRET`: any long random string you make up. It is also stored in Supabase Vault as `recruiting_market_check_secret` (with the function URL as `recruiting_market_check_url`) so the daily job can send it; nowhere else |
 
 `supabase/.env` and every `.env*` file are gitignored. Jotform's API key comes from Jotform →
 account settings → API (a read-only key is enough for the backfill).
@@ -1001,6 +1054,74 @@ repeat; the row ("Test Webhook", Eugene/Springfield, Landscape Maintenance Crew 
 the local tracker in Applied with `resume.pdf` attached, and its `answers` hold no `30`, `238`
 or `324` key. Without `?secret=` the answer is 401; with `formID=123456` it is 400 "unknown
 form". Checked this way on 2026-10-27.
+
+### 15. Turn on the market check (Phase 9a)
+
+The migration and the function are deployed like every other change; the schedule needs two
+vault secrets and one function secret on top. Tracking is off for every position until HR
+turns it on, so nothing runs (and nothing is spent) before step 4.
+
+1. **Apply the migration and deploy the function** (Developer is enough; the CLI must be
+   linked, step 3):
+
+   ```sh
+   npm run db:migrate
+   ```
+
+   ```sh
+   npx supabase functions deploy recruiting-market-check --no-verify-jwt
+   ```
+
+   The function's URL is `https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-market-check`.
+   The migration enables `pg_cron` and `pg_net`; Dashboard → **Integrations** → **Cron** lists
+   the job `recruiting-market-checks` once it has run, and **Database** → **Extensions** shows
+   both enabled. No dashboard step is needed for either.
+2. **Set the shared secret** (Administrator) in two places with the same value, any long random
+   string (`openssl rand -hex 32`). As the function secret: Dashboard → **Edge Functions** →
+   **Secrets** → `MARKET_CHECK_SECRET` (or `npx supabase secrets set` with the gitignored
+   `supabase/functions/.env`). And in the vault, so Postgres can send it: Dashboard → **SQL
+   Editor**, run (the two values are the only things to edit; the URL is not secret, it just
+   lives beside the secret so one place holds both):
+
+   ```sql
+   select vault.create_secret('https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-market-check', 'recruiting_market_check_url', 'Phase 9a: the market-check function');
+   select vault.create_secret('<the same random string>', 'recruiting_market_check_secret', 'Phase 9a: value of the function secret MARKET_CHECK_SECRET');
+   ```
+
+   `ANTHROPIC_API_KEY_RECRUITING` is already set (step 8). Nothing is pasted into chat, a
+   file in this repo, or a commit.
+3. **Run one check by hand and read its cost.** Open the tracker → **Positions** → an open
+   position → **Market check** → **Check now**. The section shows "Running…" and, after one to
+   two minutes, the summary, the ranges found, the postings and the sources, with the usage line
+   (searches, tokens, model, seconds) at the bottom. In the Claude Console
+   (platform.claude.com) → **Usage**, filter by the `recruiting` workspace: the run appears
+   as one request with the same token counts; **Cost** shows what it cost in dollars. If the
+   row says "Anthropic rejected the API key", the secret is wrong or belongs to another
+   workspace; "rate limit or spend cap reached" means the workspace cap is hit. The function's
+   **Logs** carry the position and run IDs and the outcome, never the content.
+4. **Turn tracking on** for the roles that are urgent: the same section → **Track on a schedule
+   while open** → Weekly or Monthly. An open position is checked at once when tracking is turned
+   on, then again each morning once its last successful run is older than the cadence. Closing
+   the position stops the schedule; **Check now** keeps working on any position. A few roles
+   weekly is under $10 a month; all open positions weekly would be about $35.
+5. **Test the schedule without waiting**: SQL Editor → `select recruiting.run_due_market_checks();`
+   returns how many checks it requested (0 when every tracked position was checked in the last
+   day). Dashboard → **Integrations** → **Cron** → the job → **Logs** shows each daily run.
+
+**Test it locally** (no real key), with the local stack running (step 9): copy
+`supabase/functions/.env.example` to `supabase/functions/.env` (its dummy
+`ANTHROPIC_API_KEY_RECRUITING` is the point), start `npx supabase functions serve --env-file
+supabase/functions/.env`, sign in to the local tracker as `hr@local.test` and press **Check
+now** on any position: the run ends within seconds with "Anthropic rejected the API key" stored
+on the row and shown in the section, which is the error path end to end. From a shell, the
+Postgres path:
+
+```sh
+curl -X POST http://127.0.0.1:54321/functions/v1/recruiting-market-check -H 'content-type: application/json' -H 'x-market-check-secret: local-market-secret' -d '{"position_id":"<an open position id>"}'
+```
+
+Expect `{"status":"started","check_id":...}`; without the header 401, with a closed position
+`{"status":"skipped",...}`. Checked this way on 2026-10-30.
 
 ## Two repos, one project
 

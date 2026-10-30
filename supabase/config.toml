@@ -398,8 +398,15 @@ allow_dynamic_registration = false
 # URL) instead. HOSTED PROJECT TOO: deploy with `--no-verify-jwt` (README.md step 14).
 [functions.recruiting-jotform-webhook]
 verify_jwt = false
-# Secrets (JOTFORM_API_KEY, JOTFORM_WEBHOOK_SECRET, later ANTHROPIC_API_KEY) are never written
-# here; set them with `npx supabase secrets set` or in the dashboard. See README.md step 8.
+# Phase 9a: the market check. The tracker calls it with the user's JWT, which the function
+# checks itself through recruiting.current_role(); the daily pg_cron job calls it through pg_net
+# with the shared secret MARKET_CHECK_SECRET, and pg_net cannot send a Supabase JWT, so the
+# gateway's check is off here too. HOSTED PROJECT TOO: deploy with `--no-verify-jwt` (README.md step 15).
+[functions.recruiting-market-check]
+verify_jwt = false
+# Secrets (JOTFORM_API_KEY, JOTFORM_WEBHOOK_SECRET, ANTHROPIC_API_KEY_RECRUITING,
+# MARKET_CHECK_SECRET) are never written here; set them with `npx supabase secrets set` or in
+# the dashboard. See README.md step 8.
 # Locally, `supabase functions serve --env-file supabase/functions/.env` (gitignored; see
 # supabase/functions/.env.example).
 

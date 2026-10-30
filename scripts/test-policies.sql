@@ -552,3 +552,79 @@ select pg_temp.check('storage: even an admin cannot see a documents/ object with
 select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
 select pg_temp.check('storage: no profile sees no document objects', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
 rollback;
+
+-- ----- Phase 9a: market checks --------------------------------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hr: reads the seeded market check', (select count(*) from recruiting.market_checks) = 1);
+select pg_temp.check('hr: reads market tracking columns', (select count(*) from recruiting.positions where market_tracking and market_interval_days = 7) = 1);
+insert into recruiting.market_checks (position_id, trigger, requested_by)
+  select id, 'manual', '22222222-2222-2222-2222-222222222222' from recruiting.positions where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can add a market check row', (select count(*) from recruiting.market_checks) = 2);
+update recruiting.market_checks set error = 'test' where summary is null;
+select pg_temp.check('hr: can change a market check row', (select count(*) from recruiting.market_checks where error = 'test') = 1);
+delete from recruiting.market_checks where error = 'test';
+select pg_temp.check('hr: can remove a market check row', (select count(*) from recruiting.market_checks) = 1);
+update recruiting.positions set market_tracking = true, market_interval_days = 30 where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can turn tracking on', (select count(*) from recruiting.positions where market_tracking) = 2);
+savepoint sp;
+do $$ begin
+  update recruiting.positions set market_interval_days = 14 where market_tracking;
+  raise notice 'UNEXPECTED: interval 14 accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('market: interval is 7 or 30 only', (select count(*) from recruiting.positions where market_interval_days = 14) = 0);
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: reads market checks', (select count(*) from recruiting.market_checks) = 1);
+select pg_temp.check('manager: reads the usage figures too (not applicant data)', (select input_tokens from recruiting.market_checks limit 1) is not null);
+savepoint sp;
+do $$ begin
+  insert into recruiting.market_checks (position_id, trigger) select id, 'manual' from recruiting.positions limit 1;
+  raise notice 'UNEXPECTED: manager inserted a market check';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('manager: cannot add a market check', (select count(*) from recruiting.market_checks) = 1);
+update recruiting.market_checks set summary = 'edited';
+select pg_temp.check('manager: cannot change a market check', (select count(*) from recruiting.market_checks where summary = 'edited') = 0);
+delete from recruiting.market_checks;
+select pg_temp.check('manager: cannot remove a market check', (select count(*) from recruiting.market_checks) = 1);
+update recruiting.positions set market_tracking = true;
+select pg_temp.check('manager: cannot turn tracking on', (select count(*) from recruiting.positions where market_tracking) = 1);
+rollback;
+
+begin;
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: sees no market checks', (select count(*) from recruiting.market_checks) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('hr at aal1: sees no market checks', (select count(*) from recruiting.market_checks) = 0);
+select pg_temp.as_user(null);
+savepoint sp;
+do $$ begin
+  perform count(*) from recruiting.market_checks;
+  raise notice 'UNEXPECTED: anon read market_checks';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+rollback;
+
+begin;
+-- The schedule and trigger plumbing, as postgres. Without vault secrets nothing is posted.
+select pg_temp.check('cron: the daily job exists', (select count(*) from cron.job where jobname = 'recruiting-market-checks' and schedule = '0 13 * * *') = 1);
+select pg_temp.check('market: request_market_check returns null without vault secrets', recruiting.request_market_check((select id from recruiting.positions limit 1), 'manual') is null);
+select pg_temp.check('market: run_due_market_checks requests nothing without vault secrets', recruiting.run_due_market_checks() = 0);
+select pg_temp.check('market: helpers are not callable by app users',
+  not has_function_privilege('authenticated', 'recruiting.request_market_check(uuid, recruiting.market_check_trigger)', 'execute')
+  and not has_function_privilege('authenticated', 'recruiting.run_due_market_checks()', 'execute'));
+-- Due logic: the seeded position (weekly, last run 3 days ago) is not due; a position with no run is.
+select pg_temp.check('market: a weekly position checked 3 days ago is not due',
+  not exists (select 1 from recruiting.positions p where p.market_tracking and p.status = 'open'
+    and not exists (select 1 from recruiting.market_checks c where c.position_id = p.id and c.error is null and c.ran_at > now() - make_interval(days => p.market_interval_days))));
+rollback;
