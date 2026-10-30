@@ -10,7 +10,7 @@ these docs. In the dashboard it is currently named **Apparel** (ref `hibjqcgitqt
 the rename to am-projects waits on an organization Administrator and changes nothing that
 runs, since every tool here connects by ref, not by name. This app owns the
 Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally during development and
-published to GitHub Pages at https://andy-rexius.github.io/rexius-recruiting/ (step 13).
+published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (step 13).
 
 ## Repo layout
 
@@ -687,13 +687,13 @@ after saving and retry.
 
 Dashboard → **Authentication** → **URL Configuration**:
 
-- **Site URL**: `https://andy-rexius.github.io/rexius-recruiting/` once the site is published
+- **Site URL**: `https://rexiusfleet.github.io/rexius-recruiting/` once the site is published
   (step 13); `http://localhost:3000` until then. Invite and reset emails sent from the dashboard
   link to the Site URL, so it has to be the page people should land on. This setting is shared
   with the inventory app, whose code only uses password sign-in; the one effect is that a
   password-recovery email sent from the dashboard for one of its users would open the recruiter
   page, where the person can still set their password.
-- **Redirect URLs**: add `https://andy-rexius.github.io/rexius-recruiting/**`,
+- **Redirect URLs**: add `https://rexiusfleet.github.io/rexius-recruiting/**`,
   `http://localhost:3000/**` and `http://127.0.0.1:3000/**`. The page's "Forgot your password?"
   link names the page's own address as the return address, and Supabase only honours addresses
   on this list.
@@ -876,8 +876,11 @@ Nothing in Phase 7 is imported; these are typed in through the app by admin or h
 ### 13. Host on GitHub Pages and invite users (Phase 8)
 
 The site is the same `web/` folder the workflow in `.github/workflows/pages.yml` uploads; nothing
-is built. Its address is `https://andy-rexius.github.io/rexius-recruiting/` (the rexius-apparel
-site lives beside it). GitHub Pages sites are public pages: anyone with the address sees the
+is built. Its address is `https://rexiusfleet.github.io/rexius-recruiting/` (the rexius-apparel
+site lives beside it). The repository moved from the personal account `andy-rexius` to the
+`RexiusFleet` organization on 2026-10-30; GitHub redirects the old Git URL but not the old Pages
+address, and only the organization's owners hold admin on the repository, so Pages settings,
+repository variables and branch protection are theirs to change (an owner can also grant admin). GitHub Pages sites are public pages: anyone with the address sees the
 sign-in card, and nothing else, because every piece of data is behind Supabase Auth and
 row-level security and the page ships only the public key.
 
