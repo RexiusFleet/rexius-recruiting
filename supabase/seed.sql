@@ -120,3 +120,24 @@ from recruiting.positions where title = 'Landscape Maintenance Crew Member' and 
 insert into recruiting.channel_spend (posting_id, period_start, period_end, spend, views, applies)
 select id, date_trunc('month', current_date)::date - interval '1 month', date_trunc('month', current_date)::date - 1, 240.00, 1850, 31
 from recruiting.postings;
+
+-- Phase 9a: one finished market check so the position page has something to show locally.
+-- Figures and employers are invented.
+update recruiting.positions set market_tracking = true, market_interval_days = 7
+where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+
+insert into recruiting.market_checks
+  (position_id, ran_at, finished_at, trigger, summary, pay_ranges, postings, sources, comparison, below_market,
+   input_tokens, output_tokens, searches, model)
+select id, now() - interval '3 days', now() - interval '3 days' + interval '70 seconds', 'manual',
+  'Three employers in the Eugene/Springfield area advertised landscape maintenance crew roles in the last month, at $18 to $23 an hour. Two mention seasonal work starting in spring. The figures are a sample from search results, not a count of every posting.',
+  '[{"employer":"Example Lawn Co","title":"Landscape Crew Member","min":18,"max":21,"unit":"hour","url":"https://example.com/jobs/1"},
+    {"employer":"Sample Grounds","title":"Grounds Maintenance","min":20,"max":23,"unit":"hour","url":"https://example.com/jobs/2"}]',
+  '[{"employer":"Example Lawn Co","title":"Landscape Crew Member","pay_text":"$18–$21/hr","location":"Eugene, OR","posted":"2026-10-20","url":"https://example.com/jobs/1"},
+    {"employer":"Sample Grounds","title":"Grounds Maintenance","pay_text":"$20–$23/hr","location":"Springfield, OR","posted":"2026-10-12","url":"https://example.com/jobs/2"},
+    {"employer":"Demo Landscapes","title":"Maintenance Crew","pay_text":null,"location":"Eugene, OR","posted":null,"url":"https://example.com/jobs/3"}]',
+  '[{"url":"https://example.com/jobs/1","title":"Landscape Crew Member - Example Lawn Co","age":"1 week ago"},
+    {"url":"https://example.com/jobs/2","title":"Grounds Maintenance - Sample Grounds","age":null}]',
+  '{"unit":"hour","position_min":17,"position_max":20,"market_low_median":19,"market_high_median":22,"ranges_compared":2}',
+  false, 4120, 980, 4, 'claude-opus-5-5'
+from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';

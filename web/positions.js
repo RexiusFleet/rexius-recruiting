@@ -24,8 +24,8 @@
     show: show,
     hide: function () {},
     appsChanged: function () { renderAll(); if (openId && openId !== "new") openPosition(openId); },
-    drawerClosed: function () { openId = null; history.replaceState(null, "", "#/positions"); },
-    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; }
+    drawerClosed: function () { openId = null; stopMarketPoll(); history.replaceState(null, "", "#/positions"); },
+    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; stopMarketPoll(); }
   });
 
   async function show(param) {
@@ -324,6 +324,9 @@
       // Postings and spend
       sec = RR.section(body, "Postings" + (st.staff ? " and spend" : ""));
       renderPostings(sec, p);
+      // Market check (Phase 9a)
+      sec = RR.section(body, "Market check");
+      renderMarket(sec, p);
       // Applicants
       sec = RR.section(body, "Applicants");
       renderApplicants(sec, p);
@@ -584,6 +587,185 @@
     [ps, pe, sp, vw, ap, btn].forEach(function (x) { row.appendChild(x); });
     box.appendChild(row);
     return box;
+  }
+
+  // ---------- Market check (Phase 9a) ----------
+  // One run = one market_checks row, written by the Edge Function recruiting-market-check:
+  // summary and error both null while it runs. The section shows the latest run, the history,
+  // and for staff the tracking toggle and the Check now button. The result is a sample from web
+  // search results, never a complete count.
+  var marketPoll = null;
+  var MARKET_COLS = "id, position_id, ran_at, finished_at, trigger, requested_by, summary, pay_ranges, postings, sources, comparison, below_market, input_tokens, output_tokens, searches, model, error";
+  var TRIGGER_LABEL = { manual: "Check now", schedule: "scheduled", opened: "opened with tracking on" };
+  function stopMarketPoll() { if (marketPoll) { clearTimeout(marketPoll); marketPoll = null; } }
+  async function loadMarket(positionId) {
+    var r = await sb.from("market_checks").select(MARKET_COLS).eq("position_id", positionId).order("ran_at", { ascending: false }).limit(24);
+    if (r.error) { RR.notice("Could not load market checks: " + RR.errText(r.error)); return []; }
+    return r.data || [];
+  }
+  function isRunning(c) { return c.summary == null && c.error == null && (Date.now() - new Date(c.ran_at).getTime()) < 15 * 60 * 1000; }
+  function money(n) { return n == null ? "—" : "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  function unitSuffix(u) { return u === "year" ? "/yr" : "/hr"; }
+  function rangeText(lo, hi, unit) {
+    if (lo == null && hi == null) return "—";
+    return (lo != null && hi != null && Number(lo) !== Number(hi) ? money(lo) + "–" + money(hi) : money(lo != null ? lo : hi)) + unitSuffix(unit);
+  }
+  function extLink(url, text) { var a = el("a", null, text || url); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
+
+  async function renderMarket(sec, p) {
+    var st = RR.state();
+    stopMarketPoll();
+    sec.querySelectorAll(".market").forEach(function (n) { n.remove(); });
+    var box = el("div", "market"); sec.appendChild(box);
+    box.appendChild(el("div", "hint", "Loading…"));
+    var checks = await loadMarket(p.id);
+    if (openId !== p.id) return;
+    drawMarket(box, p, checks);
+    if (checks.some(isRunning)) scheduleMarketPoll(box, p);
+  }
+  function scheduleMarketPoll(box, p) {
+    stopMarketPoll();
+    marketPoll = setTimeout(async function () {
+      if (openId !== p.id || !box.isConnected) return;
+      var checks = await loadMarket(p.id);
+      if (openId !== p.id || !box.isConnected) return;
+      drawMarket(box, p, checks);
+      if (checks.some(isRunning)) scheduleMarketPoll(box, p);
+    }, 4000);
+  }
+  function drawMarket(box, p, checks) {
+    var st = RR.state();
+    box.innerHTML = "";
+    var latest = checks[0] || null;
+    var running = latest && isRunning(latest);
+    // Controls (staff): tracking toggle, cadence, Check now.
+    if (st.staff) {
+      var row = el("div", "row market-controls");
+      var lt = el("label", "check"); var cb = el("input"); cb.type = "checkbox"; cb.checked = !!p.market_tracking;
+      lt.appendChild(cb); lt.appendChild(document.createTextNode(" Track on a schedule while open")); row.appendChild(lt);
+      var sel = el("select"); sel.setAttribute("aria-label", "Cadence");
+      [[7, "Weekly"], [30, "Monthly"]].forEach(function (o) { var opt = el("option", null, o[1]); opt.value = String(o[0]); if (Number(p.market_interval_days || 30) === o[0]) opt.selected = true; sel.appendChild(opt); });
+      sel.disabled = !cb.checked; row.appendChild(sel);
+      var saveTracking = async function () {
+        cb.disabled = true; sel.disabled = true;
+        var r = await sb.from("positions").update({ market_tracking: cb.checked, market_interval_days: Number(sel.value) }).eq("id", p.id);
+        cb.disabled = false; sel.disabled = !cb.checked;
+        if (r.error) { RR.notice("Could not save tracking: " + RR.errText(r.error)); cb.checked = !!p.market_tracking; sel.disabled = !cb.checked; return; }
+        await RR.reloadPositions();
+        var np = RR.state().positionById[p.id]; if (np) { p.market_tracking = np.market_tracking; p.market_interval_days = np.market_interval_days; }
+        if (cb.checked && p.status === "open") { // the trigger may have started a run
+          setTimeout(async function () { if (openId !== p.id || !box.isConnected) return; var cs = await loadMarket(p.id); drawMarket(box, p, cs); if (cs.some(isRunning)) scheduleMarketPoll(box, p); }, 2500);
+        }
+      };
+      cb.addEventListener("change", saveTracking); sel.addEventListener("change", saveTracking);
+      var btn = el("button", "btn small", running ? "Running…" : "Check now"); btn.type = "button"; btn.disabled = !!running;
+      btn.addEventListener("click", async function () {
+        btn.disabled = true; btn.textContent = "Starting…";
+        var r = await sb.functions.invoke("recruiting-market-check", { body: { position_id: p.id } });
+        var payload = r.data || null;
+        if (r.error && r.error.context && typeof r.error.context.json === "function") { try { payload = await r.error.context.json(); } catch (e) { payload = null; } }
+        if (r.error && !(payload && payload.status === "running")) {
+          RR.notice("Could not start the market check: " + ((payload && payload.error) || RR.errText(r.error)));
+          btn.disabled = false; btn.textContent = "Check now"; return;
+        }
+        var cs = await loadMarket(p.id);
+        if (openId !== p.id || !box.isConnected) return;
+        drawMarket(box, p, cs);
+        if (cs.some(isRunning)) scheduleMarketPoll(box, p);
+      });
+      row.appendChild(btn);
+      box.appendChild(row);
+      box.appendChild(el("div", "hint", p.status === "open"
+        ? "A scheduled check runs the morning after the last successful one is older than the cadence. Each run costs about fifty cents in the Claude Console; the figures below are a sample from web search results, not a complete count."
+        : "Scheduled checks only run while the position is open. Check now works on any position."));
+    } else if (p.market_tracking) {
+      box.appendChild(el("div", "hint", "Tracked " + (Number(p.market_interval_days) === 7 ? "weekly" : "monthly") + " while open."));
+    }
+    if (!latest) { box.appendChild(el("div", "hint", "No market check yet." + (st.staff ? " Use Check now to run one." : ""))); return; }
+    box.appendChild(renderRun(latest, p, true));
+    var earlier = checks.slice(1);
+    if (earlier.length) {
+      var det = el("details", "market-history");
+      det.appendChild(el("summary", null, "Earlier runs (" + earlier.length + (checks.length >= 24 ? "+" : "") + ")"));
+      earlier.forEach(function (c) {
+        var d = el("details", "market-run");
+        var sm = el("summary", null, RR.fmtDateTime(new Date(c.ran_at)) + " · " + runOutcome(c));
+        d.appendChild(sm); d.appendChild(renderRun(c, p, false));
+        det.appendChild(d);
+      });
+      box.appendChild(det);
+    }
+  }
+  function runOutcome(c) {
+    if (isRunning(c)) return "running";
+    if (c.error) return "failed";
+    if (c.summary == null) return "did not finish";
+    var n = (c.pay_ranges || []).length, m = (c.postings || []).length;
+    var cmp = c.comparison;
+    return m + " posting" + (m === 1 ? "" : "s") + ", " + n + " with pay" + (cmp && cmp.market_low_median != null ? " · others " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : "") + (c.below_market ? " · below market" : "");
+  }
+  function renderRun(c, p, isLatest) {
+    var st = RR.state();
+    var wrap = el("div", "market-run-body");
+    var who = c.requested_by ? (st.profileNames[c.requested_by] || "a removed user") : null;
+    var head = (isLatest ? "Latest run: " : "") + RR.fmtDateTime(new Date(c.ran_at)) + " · " + (TRIGGER_LABEL[c.trigger] || c.trigger) + (who ? " by " + who : "");
+    wrap.appendChild(el("div", "meta", head));
+    if (isRunning(c)) { wrap.appendChild(el("div", "hint", "Running… started " + RR.relTime(new Date(c.ran_at)) + ". This page refreshes on its own; a run takes one to two minutes.")); return wrap; }
+    if (c.error) {
+      var n = el("div", "notice-inline"); n.appendChild(el("span", "tag", "Failed")); n.appendChild(document.createTextNode(c.error));
+      wrap.appendChild(n);
+      if (!c.summary) return wrap;
+    }
+    if (c.summary == null) { wrap.appendChild(el("div", "notice-inline", "The run did not finish (the function was interrupted). Run it again.")); return wrap; }
+    if (c.below_market) { var b = el("div", "notice-inline"); b.appendChild(el("span", "tag", "Below market")); b.appendChild(document.createTextNode("The top of the advertised range is below the median low end others advertise.")); wrap.appendChild(b); }
+    wrap.appendChild(el("p", "market-summary", c.summary));
+    var cmp = c.comparison;
+    if (cmp && cmp.market_low_median != null) {
+      wrap.appendChild(el("div", "meta", "Others advertise " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) + " (medians of " + cmp.ranges_compared + " range" + (cmp.ranges_compared === 1 ? "" : "s") + ")" +
+        (cmp.position_min != null || cmp.position_max != null ? " · Rexius advertises " + rangeText(cmp.position_min, cmp.position_max, cmp.unit) : " · no Rexius range set")));
+    }
+    var pr = c.pay_ranges || [];
+    if (pr.length) {
+      var tbl = el("table", "mini");
+      var thead = el("thead"); var trh = el("tr"); ["Employer", "Title", "Pay"].forEach(function (h) { trh.appendChild(el("th", null, h)); }); thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = el("tbody");
+      pr.forEach(function (r) {
+        var tr = el("tr");
+        var td = el("td"); if (r.url) td.appendChild(extLink(r.url, r.employer || "—")); else td.textContent = r.employer || "—"; tr.appendChild(td);
+        tr.appendChild(el("td", null, r.title || "—"));
+        tr.appendChild(el("td", "num", rangeText(r.min, r.max, r.unit)));
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); wrap.appendChild(tbl);
+    }
+    var po = c.postings || [];
+    if (po.length) {
+      wrap.appendChild(el("div", "q", "Who else is hiring (" + po.length + " found)"));
+      var ul = el("ul", "log");
+      po.forEach(function (x) {
+        var li = el("li");
+        var label = (x.employer || "Unknown") + (x.title ? " · " + x.title : "");
+        if (x.url) li.appendChild(extLink(x.url, label)); else li.appendChild(document.createTextNode(label));
+        var bits = [x.pay_text, x.location, x.posted ? "posted " + RR.fmtDay(x.posted) : null].filter(Boolean);
+        if (bits.length) li.appendChild(el("span", "meta", " · " + bits.join(" · ")));
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+    } else wrap.appendChild(el("div", "hint", "No competing postings found in this run."));
+    var src = c.sources || [];
+    if (src.length) {
+      var det = el("details"); det.appendChild(el("summary", "hint", "Sources (" + src.length + " pages the search returned)"));
+      var sl = el("ul", "log");
+      src.forEach(function (s) { var li = el("li"); li.appendChild(extLink(s.url, s.title || s.url)); if (s.age) li.appendChild(el("span", "meta", " · " + s.age)); sl.appendChild(li); });
+      det.appendChild(sl); wrap.appendChild(det);
+    }
+    var usage = [];
+    if (c.searches != null) usage.push(c.searches + " search" + (c.searches === 1 ? "" : "es"));
+    if (c.input_tokens != null || c.output_tokens != null) usage.push(Number(c.input_tokens || 0).toLocaleString() + " in / " + Number(c.output_tokens || 0).toLocaleString() + " out tokens");
+    if (c.model) usage.push(c.model);
+    if (c.finished_at) usage.push(Math.round((new Date(c.finished_at) - new Date(c.ran_at)) / 1000) + " s");
+    if (usage.length) wrap.appendChild(el("div", "meta", usage.join(" · ")));
+    return wrap;
   }
 
   function renderApplicants(sec, p) {
