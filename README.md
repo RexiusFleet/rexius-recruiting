@@ -611,8 +611,15 @@ results, never a complete count; the useful signal is the change from run to run
   cron job, the helpers refusing to post without vault secrets and being uncallable by app
   users). `supabase/seed.sql` adds one made-up finished run for the local stack.
 
+Search depth per position (migration `20261107000100_market_search_depth.sql`, 2026-10-30):
+`positions.market_max_searches` (null = the standard limit, at most 20) overrides the secret for
+one position; the drawer offers Standard (6), Deeper (10) and Deepest (15) next to the cadence.
+Rare titles (Blower Truck Operator at Lake Oswego found one pay range in six searches) are the
+reason; common crew roles find fifteen postings at Standard. The function logs the limit it used
+and the row's `searches` shows what the run actually spent.
+
 Cost: about fifty cents a run at 2026-10 list prices (six searches at a cent each plus
-tokens). The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
+tokens; the first hosted run was $0.56), about $0.85 at Deeper and $1.30 at Deepest. The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
 it is reached the run ends with "rate limit or spend cap reached" on the row.
 
 ## Manual steps in Supabase (do these in order)
