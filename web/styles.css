@@ -222,6 +222,7 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .market-history { border-top: 1px solid var(--line); padding-top: 8px; }
 .market-run { margin: 6px 0 0 8px; }
 .market-run-body { display: grid; gap: 6px; padding: 4px 0 8px; }
+.market-share { align-items: center; gap: 10px; margin-top: 2px; }
 .spend-add input { padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); width: auto; flex: 1; min-width: 70px; }
 .review .row .check { flex: 0 0 auto; margin-top: 18px; }
 .review .link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font: inherit; }

@@ -618,6 +618,16 @@ Rare titles (Blower Truck Operator at Lake Oswego found one pay range in six sea
 reason; common crew roles find fifteen postings at Standard. The function logs the limit it used
 and the row's `searches` shows what the run actually spent.
 
+Sharing a run (`web/market-report.js`, 2026-10-30): every finished run has **Download report
+(PDF)** and **Copy as text**. The PDF (one to three pages, built in the browser with jsPDF like
+the application PDF, named `<title>-<location>-market-check-<date>.pdf`) has an at-a-glance block
+(Rexius' range as it was at the run, the medians others advertise, the below-market verdict,
+counts), the summary, the pay table, who else is hiring with links, the sources, and the same
+caveat as the page: a sample from search results, no Rexius wage in it, which model and how
+many searches. The text version is the same report for an email. Managers can use both too,
+since they can read the runs. Nothing is written to Supabase; the file exists only as the
+download.
+
 Cost: about fifty cents a run at 2026-10 list prices (six searches at a cent each plus
 tokens; the first hosted run was $0.56), about $0.85 at Deeper and $1.30 at Deepest. The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
 it is reached the run ends with "rate limit or spend cap reached" on the row.

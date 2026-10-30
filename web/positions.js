@@ -779,6 +779,24 @@
     if (c.model) usage.push(c.model);
     if (c.finished_at) usage.push(Math.round((new Date(c.finished_at) - new Date(c.ran_at)) / 1000) + " s");
     if (usage.length) wrap.appendChild(el("div", "meta", usage.join(" · ")));
+    // Share: a PDF for a hiring manager, or the same report as text for an email.
+    var share = el("div", "row market-share");
+    var me = st.profile && st.profile.name ? st.profile.name : null;
+    var dl = el("button", "btn small", "Download report (PDF)"); dl.type = "button";
+    dl.title = "A one-to-three page report of this run, named " + (RR.marketReport ? RR.marketReport.fileName(p, c) : "market-check.pdf") + ", to send to the hiring manager.";
+    dl.addEventListener("click", async function () {
+      if (!RR.marketReport) { RR.notice("The report module did not load. Reload the page and try again."); return; }
+      dl.disabled = true; dl.textContent = "Building…";
+      try { await RR.marketReport.download(p, c, me); } catch (e) { RR.notice("Could not build the report: " + RR.errText(e)); }
+      dl.disabled = false; dl.textContent = "Download report (PDF)";
+    });
+    share.appendChild(dl);
+    share.appendChild(linkBtn("Copy as text", async function () {
+      if (!RR.marketReport) { RR.notice("The report module did not load. Reload the page and try again."); return; }
+      var ok = false; try { ok = await RR.marketReport.copyText(p, c, me); } catch (e) { ok = false; }
+      RR.notice(ok ? "Report copied. Paste it into an email or message." : "Could not copy; your browser blocked clipboard access.");
+    }));
+    wrap.appendChild(share);
     return wrap;
   }
 
