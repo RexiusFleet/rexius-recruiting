@@ -326,7 +326,7 @@
     var r = await Promise.all([
       sb.from("stages").select("id, name, sort_order, is_terminal, is_hired").order("sort_order"),
       sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map"),
-      sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, created_at, updated_at").order("location").order("title"),
+      sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, market_max_searches, created_at, updated_at").order("location").order("title"),
       sb.from("profiles").select("user_id, name, role")
     ]);
     var failed = r.filter(function (x) { return x.error; });
@@ -1340,7 +1340,7 @@
     state: function () { return { session: session, profile: profile, role: role, staff: staff, stages: stages, stageById: stageById, forms: forms, formById: formById, positions: positions, positionById: positionById, profileNames: profileNames, apps: apps, appById: appById, lastLoaded: lastLoaded }; },
     // Re-read positions (after an edit on the Positions page) and refresh the applications' matched titles.
     reloadPositions: async function () {
-      var r = await sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, created_at, updated_at").order("location").order("title");
+      var r = await sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, market_max_searches, created_at, updated_at").order("location").order("title");
       if (r.error) { notice("Could not reload positions: " + errText(r.error)); return positions; }
       positions = r.data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
       apps.forEach(function (a) { var p = positionById[a.positionId]; a.positionTitle = p ? p.title : ""; });

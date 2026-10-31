@@ -36,7 +36,8 @@
 //   MARKET_CHECK_SECRET            required for the Postgres path; any long random string, the
 //                                  same value as vault secret recruiting_market_check_secret
 //   MARKET_CHECK_MODEL             optional; default claude-opus-5-5
-//   MARKET_CHECK_MAX_SEARCHES      optional; web searches per run, default 6
+//   MARKET_CHECK_MAX_SEARCHES      optional; standard web searches per run, default 6. A position's
+//                                  own positions.market_max_searches (1-20) overrides it.
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY   injected by Supabase
 
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
@@ -92,6 +93,7 @@ interface Position {
   pay_unit: "hour" | "year" | null;
   status: "draft" | "open" | "closed";
   description_doc_id: string | null;
+  market_max_searches: number | null;
 }
 
 interface PayRange { employer: string; title: string; min: number | null; max: number | null; unit: "hour" | "year"; url: string | null }
@@ -146,7 +148,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   try {
     const pos = await db.from("positions")
-      .select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, description_doc_id")
+      .select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, description_doc_id, market_max_searches")
       .eq("id", positionId).maybeSingle();
     if (pos.error) throw new Error(`select positions: ${pos.error.message}`);
     if (!pos.data) return json(404, { error: "no such position" });
@@ -215,7 +217,8 @@ async function runCheck(
 
   try {
     const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 5 * 60 * 1000 });
-    const maxSearches = Math.max(1, Math.min(20, Number(env("MARKET_CHECK_MAX_SEARCHES")) || DEFAULT_MAX_SEARCHES));
+    const standard = Number(env("MARKET_CHECK_MAX_SEARCHES")) || DEFAULT_MAX_SEARCHES;
+    const maxSearches = Math.max(1, Math.min(20, Number(position.market_max_searches) || standard));
     const area = searchArea(position.location);
     const tools = [{
       type: "web_search_20260209" as const,
@@ -269,7 +272,7 @@ async function runCheck(
       summary: parsed.summary, pay_ranges: parsed.pay_ranges, postings: parsed.postings, sources,
       comparison, below_market: comparison ? comparison.below_market : null, error: null,
     });
-    console.log(`[${FUNCTION}] ${tag}: done, ${parsed.pay_ranges.length} pay range(s), ${parsed.postings.length} posting(s), ${usage.searches} search(es), ${usage.input_tokens}/${usage.output_tokens} tokens`);
+    console.log(`[${FUNCTION}] ${tag}: done (limit ${maxSearches}), ${parsed.pay_ranges.length} pay range(s), ${parsed.postings.length} posting(s), ${usage.searches} search(es), ${usage.input_tokens}/${usage.output_tokens} tokens`);
   } catch (err) {
     let message: string;
     if (err instanceof Anthropic.AuthenticationError) message = "Anthropic rejected the API key (ANTHROPIC_API_KEY_RECRUITING).";

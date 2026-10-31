@@ -628,3 +628,22 @@ select pg_temp.check('market: a weekly position checked 3 days ago is not due',
   not exists (select 1 from recruiting.positions p where p.market_tracking and p.status = 'open'
     and not exists (select 1 from recruiting.market_checks c where c.position_id = p.id and c.error is null and c.ran_at > now() - make_interval(days => p.market_interval_days))));
 rollback;
+
+-- ----- Market check search depth per position -----------------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.positions set market_max_searches = 15 where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can set a position''s search depth', (select count(*) from recruiting.positions where market_max_searches = 15) = 1);
+savepoint sp;
+do $$ begin
+  update recruiting.positions set market_max_searches = 25 where market_max_searches = 15;
+  raise notice 'UNEXPECTED: depth 25 accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('market: search depth is capped at 20', (select count(*) from recruiting.positions where market_max_searches > 20) = 0);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+update recruiting.positions set market_max_searches = 10;
+select pg_temp.check('manager: cannot change search depth', (select count(*) from recruiting.positions where market_max_searches = 10) = 0);
+rollback;

@@ -658,6 +658,20 @@
         }
       };
       cb.addEventListener("change", saveTracking); sel.addEventListener("change", saveTracking);
+      // Search depth: how many web searches one run may use for this position (null = standard).
+      var depth = el("select"); depth.setAttribute("aria-label", "Search depth"); depth.title = "Web searches per run. Each costs about a cent plus tokens; a run is about $0.55 at Standard, $0.85 at Deeper, $1.30 at Deepest.";
+      [["", "Standard (6 searches)"], ["10", "Deeper (10)"], ["15", "Deepest (15)"]].forEach(function (o) { var opt = el("option", null, o[1]); opt.value = o[0]; depth.appendChild(opt); });
+      depth.value = p.market_max_searches == null ? "" : String(p.market_max_searches);
+      if (depth.value !== String(p.market_max_searches == null ? "" : p.market_max_searches)) { var oc = el("option", null, "Custom (" + p.market_max_searches + ")"); oc.value = String(p.market_max_searches); oc.selected = true; depth.appendChild(oc); }
+      depth.addEventListener("change", async function () {
+        depth.disabled = true;
+        var v = depth.value === "" ? null : Number(depth.value);
+        var r = await sb.from("positions").update({ market_max_searches: v }).eq("id", p.id);
+        depth.disabled = false;
+        if (r.error) { RR.notice("Could not save the search depth: " + RR.errText(r.error)); depth.value = p.market_max_searches == null ? "" : String(p.market_max_searches); return; }
+        p.market_max_searches = v; await RR.reloadPositions();
+      });
+      row.appendChild(depth);
       var btn = el("button", "btn small", running ? "Running…" : "Check now"); btn.type = "button"; btn.disabled = !!running;
       btn.addEventListener("click", async function () {
         btn.disabled = true; btn.textContent = "Starting…";
@@ -676,8 +690,8 @@
       row.appendChild(btn);
       box.appendChild(row);
       box.appendChild(el("div", "hint", p.status === "open"
-        ? "A scheduled check runs the morning after the last successful one is older than the cadence. Each run costs about fifty cents in the Claude Console; the figures below are a sample from web search results, not a complete count."
-        : "Scheduled checks only run while the position is open. Check now works on any position."));
+        ? "A scheduled check runs the morning after the last successful one is older than the cadence. A run costs about fifty cents at the standard depth; use Deeper or Deepest for rare titles that run out of searches. The figures below are a sample from web search results, not a complete count."
+        : "Scheduled checks only run while the position is open. Check now works on any position; Deeper and Deepest give rare titles more searches."));
     } else if (p.market_tracking) {
       box.appendChild(el("div", "hint", "Tracked " + (Number(p.market_interval_days) === 7 ? "weekly" : "monthly") + " while open."));
     }
