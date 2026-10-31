@@ -859,11 +859,12 @@ is the archive for everything the tracker has purged. On 2026-10-31 (branch
 - **Carried over by the clone** (checked on a throwaway clone first, then on the real one): the
   thank-you redirect, now pointed at the Spanish page
   `https://rexius.com/pages/solicitud-de-empleo-de-rexius-gracias` so analytics conversions keep
-  working; the webhook into the tracker, with its secret; and the three emails of the English form
-  (the notification to the recruiting addresses, and the two auto-replies, which the English form
-  has set to not send on submit). The 2025 Spanish form's auto-reply did send on submit and
-  mentioned a questionnaire; if HR wants Spanish applicants to get a reply, turn the autoresponder on
-  in the new form's **Settings → Emails**.
+  working (both thank-you pages load the same Google Ads tag, so the conversion fires as before);
+  the webhook into the tracker, with its secret; and the English form's emails. The English form's
+  two auto-replies (switched off there) still describe the questionnaire that was dropped, so they
+  were deleted from the new form on 2026-10-31; only the notification to the recruiting addresses
+  remains. If HR wants Spanish applicants to get a reply, add a fresh autoresponder in the new
+  form's **Settings → Emails**. The English form still carries the two stale auto-replies.
 - **Migration `20261110000100_spanish_form_2026.sql`** inserts the `recruiting.forms` row (label
   "Employment Application-ESP 2026 (Spanish)", language `es`, the form's question list, the field
   map copied from the English row). Until it is applied the webhook rejects the form's submissions
