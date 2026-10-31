@@ -17,14 +17,15 @@
  *       { title, items: [{ q, a }] }                       question/answer list
  *       { title, text }                                    a paragraph
  *     ], note }
- * Empty values are skipped, so callers can pass every field without checking it first. Four
- * rows of the "Application" section (Position, Location, Can start, Heard from) are lifted
- * into the at-a-glance tiles under the title; the rest stay in the section.
+ * Empty values are skipped, so callers can pass every field without checking it first. The
+ * Position and Location rows of the "Application" section are lifted into the two at-a-glance
+ * tiles under the title (Position gets three fifths of the width, Location two); the rest of
+ * the section, including source and start date, stays in the Application block below.
  */
 (function () {
   "use strict";
 
-  var TILE_ROWS = { "Position": "Position", "Location": "Location", "Can start": "Can start", "Heard from": "Source" };
+  var TILE_ROWS = { "Position": { label: "Position", span: 3 }, "Location": { label: "Location", span: 2 } };
 
   function has(v) { return v != null && String(v).trim() !== ""; }
 
@@ -53,12 +54,13 @@
     });
     var w = doc.w;
 
-    // At a glance: the four facts a manager asks first, lifted out of the Application section.
+    // At a glance: the two facts a manager asks first, lifted out of the Application section.
     var tiles = [], lifted = {};
     (model.sections || []).forEach(function (s) {
       if (s.title !== "Application") return;
       (s.rows || []).forEach(function (r) {
-        if (TILE_ROWS[r[0]] && has(r[1]) && !lifted[r[0]]) { lifted[r[0]] = true; tiles.push({ label: TILE_ROWS[r[0]], value: r[1], span: r[0] === "Position" ? 2 : 1 }); }
+        var t = TILE_ROWS[r[0]];
+        if (t && has(r[1]) && !lifted[r[0]]) { lifted[r[0]] = true; tiles.push({ label: t.label, value: r[1], span: t.span }); }
       });
     });
     if (tiles.length) w.tiles(tiles);
