@@ -314,6 +314,51 @@ position. Hosted now holds 1,405 applications, the oldest from 2026-01-04. The b
 `scripts/backfill/README.md`. The Phase 5 webhook only ever sees new submissions and needs no
 change.
 
+## What the October cutoff did
+
+Decided 2026-10-30. The 1,232 applications from January to September 2026 had all been imported
+by the backfill and bulk-archived by `archive_before`, with no notes, contacts, offers, referrals,
+manager feedback or filled position among them. Half-logged rows at that volume confused the
+people the tracker was shown to: totals and source counts were mostly archived imports, and
+opening an old record gave a picture with no history behind it. Nearly every question anyone asks
+is about recent applicants, Jotform keeps every original submission and the previous log covers
+the earlier months, so the tracker now starts clean on **October 1, 2026** (Oregon time) and
+builds complete records from there.
+
+What was done, once, on the hosted project (`scripts/` holds no copy; the statements are here so
+the local stack can be brought in line the same way):
+
+1. The 943 resume files belonging to those applications were removed from the `recruiting-files`
+   bucket through the Storage API with the service-role key, in batches of 100, and the
+   `storage.objects` rows were checked gone before anything else ran. The row cascade would not
+   have touched the bucket, and orphaned resumes are a privacy problem as much as a tidy-up one.
+2. Then one statement deleted the rows; status, history and file rows cascaded:
+
+   ```sql
+   delete from recruiting.applications a
+    where a.submitted_at < timestamptz '2026-10-01 00:00 America/Los_Angeles'
+      and exists (select 1 from recruiting.application_status st
+                    join recruiting.stages s on s.id = st.stage_id
+                   where st.application_id = a.id and s.is_archive);
+   ```
+
+   The `is_archive` condition is deliberate: one application submitted at 9:47 PM on September 30
+   had been moved to Sent to manager on 2026-10-28, so it is in use and was kept. Hosted now holds
+   142 applications (that one plus 141 from October) and 109 bucket objects, with no orphaned file
+   rows.
+3. `scripts/backfill/backfill.mjs`: `DEFAULT_SINCE` is `2026-10-01` (it was `2026-01-01`), so a
+   re-run or `--refresh` leaves the deleted months out. Passing an earlier `--since` would bring
+   them back on purpose. The webhook only ever sees new submissions and needs no change, and
+   `purged_submissions` is not involved: that table is for individual submissions removed by hand.
+4. `web/index.html`: a line under the pipeline strip, "Records start October 1, 2026. Earlier
+   applications are in Jotform and the previous log.", and one under each report title saying the
+   figures cover applications received from that date. `web/styles.css` places the first.
+
+Consequences to know about: the "Applied more than once" filter and the duplicate flag in the
+drawer only see repeat applicants from October on (Jotform still shows earlier ones), and the
+seasonality reports will show the spring peak for the first time in 2027. The Archived stage
+stays for its original purpose, setting an application aside without an outcome.
+
 ## What the application-download change created
 
 HR hands a candidate to a hiring manager by email, and until now that meant opening the Jotform
