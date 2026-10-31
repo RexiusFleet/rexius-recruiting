@@ -110,7 +110,7 @@ through Supabase Auth, session persisted in the browser. After sign-in the app r
   `application_files`, `forms`, `positions`): pipeline strip with clickable stage counts, filters
   (stage, form, location, position, source, date range, has resume, applied more than once, free
   text over name/email/phone/position), dense table sorted by submitted date with "Show more"
-  paging at 250 rows, detail drawer with contact, application, education, skills and employment
+  paging at 100 rows, detail drawer with contact, application, education, skills and employment
   history read from `answers` through the form's `field_map`, resumes and portfolios opened through
   5-minute signed URLs from bucket `recruiting-files`, link to the Jotform submission, status change
   inline (the trigger writes `status_history`, shown in the drawer), assignee, tags and notes

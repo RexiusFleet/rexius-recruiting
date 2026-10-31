@@ -33,7 +33,7 @@
   var sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { db: { schema: "recruiting" } });
 
   var PAGE = 1000;              // PostgREST max rows per request (config.toml max_rows)
-  var SHOW_STEP = 250;          // "Show more" step, as in the prototype
+  var SHOW_STEP = 100;          // "Show more" step (the prototype used 250; 100 keeps the scroll short, 2026-10-30)
   var SIGNED_URL_SECONDS = 300; // resumes open through short-lived signed URLs
   var BUCKET = "recruiting-files";
   var STAGE_COLORS = ["var(--s-new)", "var(--s-rev)", "var(--s-sent)", "var(--s-int)", "var(--s-offer)", "var(--s-hired)", "var(--s-no)", "var(--s-x)", "var(--s-arch)"];
