@@ -171,8 +171,12 @@ async function main() {
 
   // Everything already imported, so re-runs skip instead of re-inserting.
   const existing = new Map();
-  for (const a of await selectAll("applications", "id, jotform_submission_id", "jotform_submission_id")) {
+  // Applications whose files the six-month retention removed: never re-copied (the database
+  // refuses the row anyway; skipping saves the upload).
+  const filesPurged = new Set();
+  for (const a of await selectAll("applications", "id, jotform_submission_id, files_purged_at", "jotform_submission_id")) {
     existing.set(a.jotform_submission_id, a.id);
+    if (a.files_purged_at) filesPurged.add(a.id);
   }
   const existingFiles = new Set((await selectAll("application_files", "storage_path", "storage_path")).map((f) => f.storage_path));
   // Deleted on purpose (recruiting.purged_submissions); never re-imported.
@@ -265,6 +269,7 @@ async function importForm(form, positions, existing, existingFiles, purged) {
     }
 
     if (opts.skipFiles) continue;
+    if (filesPurged.has(applicationId)) { c.filesSkipped += files.length; continue; }
     for (const f of files) {
       const storagePath = `applications/${form.jotform_form_id}/${row.jotform_submission_id}/${f.storage_name}`;
       if (existingFiles.has(storagePath) && !opts.refresh) { c.filesSkipped++; continue; }

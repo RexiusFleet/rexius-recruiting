@@ -713,3 +713,25 @@ select pg_temp.check('retention: a purged row cannot get its contact details bac
 select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
 select pg_temp.check('retention: manager view exposes contact_purged_at', (select count(*) from recruiting.applications_for_managers where contact_purged_at is not null) >= 1);
 rollback;
+
+-- File retention (20261109000200): the pg_net helper is out of reach, the cron job exists,
+-- and a purged application takes no new file.
+begin;
+select pg_temp.check('retention: file-purge helper is not callable by app users', not has_function_privilege('authenticated', 'recruiting.request_file_purge()', 'execute'));
+select pg_temp.check('retention: file-purge cron job exists', (select count(*) from cron.job where jobname = 'recruiting-purge-files') = 1);
+update recruiting.applications set files_purged_at = now(), has_resume = false where id = (select id from recruiting.applications order by submitted_at limit 1);
+savepoint sp;
+do $$ begin
+  insert into recruiting.application_files (application_id, storage_path, original_name, kind)
+    select id, 'applications/test/' || id || '/late.pdf', 'late.pdf', 'resume' from recruiting.applications where files_purged_at is not null limit 1;
+  raise notice 'UNEXPECTED: a file was attached to a purged application';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('retention: a purged application takes no new file', (select count(*) from recruiting.application_files af join recruiting.applications a on a.id = af.application_id where a.files_purged_at is not null) = 0);
+update recruiting.applications set has_resume = true where files_purged_at is not null;
+select pg_temp.check('retention: has_resume stays false once files are purged', (select count(*) from recruiting.applications where files_purged_at is not null and has_resume) = 0);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('retention: manager view exposes files_purged_at', (select count(*) from recruiting.applications_for_managers where files_purged_at is not null) >= 1);
+rollback;
