@@ -24,8 +24,8 @@
     show: show,
     hide: function () {},
     appsChanged: function () { renderAll(); if (openId && openId !== "new") openPosition(openId); },
-    drawerClosed: function () { openId = null; stopMarketPoll(); history.replaceState(null, "", "#/positions"); },
-    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; stopMarketPoll(); }
+    drawerClosed: function () { openId = null; stopMarketPoll(); stopNationalPoll(); history.replaceState(null, "", "#/positions"); },
+    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; stopMarketPoll(); stopNationalPoll(); }
   });
 
   async function show(param) {
@@ -327,6 +327,9 @@
       // Market check (Phase 9a)
       sec = RR.section(body, "Market check");
       renderMarket(sec, p);
+      // National market check with cost-of-living adjustment
+      sec = RR.section(body, "National market check");
+      renderNational(sec, p);
       // Applicants
       sec = RR.section(body, "Applicants");
       renderApplicants(sec, p);
@@ -797,6 +800,178 @@
       RR.notice(ok ? "Report copied. Paste it into an email or message." : "Could not copy; your browser blocked clipboard access.");
     }));
     wrap.appendChild(share);
+    return wrap;
+  }
+
+  // ---------- National market check (cost-of-living adjusted) ----------
+  // One run = one national_checks row written by recruiting-national-check in two passes:
+  // pass 1 postings and BLS, pass 2 cost of living and the adjustment. pass < 2 with no error
+  // = still running. On demand only; no schedule.
+  var nationalPoll = null;
+  var NATIONAL_COLS = "id, position_id, ran_at, finished_at, requested_by, pass, summary, pay_samples, bls, cost_of_living, adjusted, comparison, below_market, sources, input_tokens, output_tokens, searches, model, error";
+  function stopNationalPoll() { if (nationalPoll) { clearTimeout(nationalPoll); nationalPoll = null; } }
+  async function loadNational(positionId) {
+    var r = await sb.from("national_checks").select(NATIONAL_COLS).eq("position_id", positionId).order("ran_at", { ascending: false }).limit(12);
+    if (r.error) { RR.notice("Could not load national checks: " + RR.errText(r.error)); return []; }
+    return r.data || [];
+  }
+  function isNationalRunning(c) { return c.pass < 2 && c.error == null && (Date.now() - new Date(c.ran_at).getTime()) < 20 * 60 * 1000; }
+  async function renderNational(sec, p) {
+    stopNationalPoll();
+    sec.querySelectorAll(".market").forEach(function (n) { n.remove(); });
+    var box = el("div", "market national"); sec.appendChild(box);
+    box.appendChild(el("div", "hint", "Loading…"));
+    var checks = await loadNational(p.id);
+    if (openId !== p.id) return;
+    drawNational(box, p, checks);
+    if (checks.some(isNationalRunning)) scheduleNationalPoll(box, p);
+  }
+  function scheduleNationalPoll(box, p) {
+    stopNationalPoll();
+    nationalPoll = setTimeout(async function () {
+      if (openId !== p.id || !box.isConnected) return;
+      var checks = await loadNational(p.id);
+      if (openId !== p.id || !box.isConnected) return;
+      drawNational(box, p, checks);
+      if (checks.some(isNationalRunning)) scheduleNationalPoll(box, p);
+    }, 5000);
+  }
+  function drawNational(box, p, checks) {
+    var st = RR.state();
+    box.innerHTML = "";
+    var latest = checks[0] || null, running = latest && isNationalRunning(latest);
+    if (st.staff) {
+      var row = el("div", "row market-controls");
+      var depth = el("select"); depth.setAttribute("aria-label", "National search depth"); depth.title = "Web searches per run across both passes. About $1.50 a run at Standard, $2.50 at Deepest.";
+      [["", "Standard (15 searches)"], ["10", "Lighter (10)"], ["20", "Deepest (20)"]].forEach(function (o) { var opt = el("option", null, o[1]); opt.value = o[0]; depth.appendChild(opt); });
+      depth.value = p.national_max_searches == null ? "" : String(p.national_max_searches);
+      if (depth.value !== String(p.national_max_searches == null ? "" : p.national_max_searches)) { var oc = el("option", null, "Custom (" + p.national_max_searches + ")"); oc.value = String(p.national_max_searches); oc.selected = true; depth.appendChild(oc); }
+      depth.addEventListener("change", async function () {
+        depth.disabled = true;
+        var v = depth.value === "" ? null : Number(depth.value);
+        var r = await sb.from("positions").update({ national_max_searches: v }).eq("id", p.id);
+        depth.disabled = false;
+        if (r.error) { RR.notice("Could not save the search depth: " + RR.errText(r.error)); depth.value = p.national_max_searches == null ? "" : String(p.national_max_searches); return; }
+        p.national_max_searches = v; await RR.reloadPositions();
+      });
+      row.appendChild(depth);
+      var btn = el("button", "btn small", running ? "Running…" : "Run national check"); btn.type = "button"; btn.disabled = !!running;
+      btn.addEventListener("click", async function () {
+        if (!confirm("Run a national market check for “" + p.title + "”? It takes three to six minutes and costs about $1.50 to $2.50 in the Claude Console.")) return;
+        btn.disabled = true; btn.textContent = "Starting…";
+        var r = await sb.functions.invoke("recruiting-national-check", { body: { position_id: p.id } });
+        var payload = r.data || null;
+        if (r.error && r.error.context && typeof r.error.context.json === "function") { try { payload = await r.error.context.json(); } catch (e) { payload = null; } }
+        if (r.error && !(payload && payload.status === "running")) {
+          RR.notice("Could not start the national check: " + ((payload && payload.error) || RR.errText(r.error)));
+          btn.disabled = false; btn.textContent = "Run national check"; return;
+        }
+        var cs = await loadNational(p.id);
+        if (openId !== p.id || !box.isConnected) return;
+        drawNational(box, p, cs);
+        if (cs.some(isNationalRunning)) scheduleNationalPoll(box, p);
+      });
+      row.appendChild(btn);
+      box.appendChild(row);
+    }
+    box.appendChild(el("div", "hint", "For specialised roles: what the role pays across the United States (postings and the Bureau of Labor Statistics), scaled to the " + p.location + " cost of living. On demand only; a sample from search results, not a complete count."));
+    if (!latest) { box.appendChild(el("div", "hint", "No national check yet.")); return; }
+    box.appendChild(renderNationalRun(latest, p, true));
+    var earlier = checks.slice(1);
+    if (earlier.length) {
+      var det = el("details", "market-history");
+      det.appendChild(el("summary", null, "Earlier runs (" + earlier.length + ")"));
+      earlier.forEach(function (c) {
+        var d = el("details", "market-run");
+        d.appendChild(el("summary", null, RR.fmtDateTime(new Date(c.ran_at)) + " · " + nationalOutcome(c)));
+        d.appendChild(renderNationalRun(c, p, false)); det.appendChild(d);
+      });
+      box.appendChild(det);
+    }
+  }
+  function nationalOutcome(c) {
+    if (isNationalRunning(c)) return "running";
+    if (c.error) return c.pass >= 1 ? "first pass only" : "failed";
+    var cmp = c.comparison;
+    return (c.pay_samples || []).length + " postings" + (cmp && cmp.adjusted_low_median != null ? " · adjusted " + rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, cmp.unit) : "") + (c.below_market ? " · below market" : "");
+  }
+  function renderNationalRun(c, p, isLatest) {
+    var st = RR.state();
+    var wrap = el("div", "market-run-body");
+    var who = c.requested_by ? (st.profileNames[c.requested_by] || "a removed user") : null;
+    wrap.appendChild(el("div", "meta", (isLatest ? "Latest run: " : "") + RR.fmtDateTime(new Date(c.ran_at)) + (who ? " by " + who : "")));
+    if (isNationalRunning(c)) { wrap.appendChild(el("div", "hint", (c.pass === 0 ? "Searching postings and BLS figures… " : "Postings found; looking up cost of living… ") + "started " + RR.relTime(new Date(c.ran_at)) + ". This page refreshes on its own; a run takes three to six minutes.")); return wrap; }
+    if (c.error) { var n = el("div", "notice-inline"); n.appendChild(el("span", "tag", c.pass >= 1 ? "Incomplete" : "Failed")); n.appendChild(document.createTextNode(c.error)); wrap.appendChild(n); if (c.pass < 1) return wrap; }
+    if (c.summary == null) { wrap.appendChild(el("div", "notice-inline", "The run did not finish (the function was interrupted). Run it again.")); return wrap; }
+    if (c.below_market) { var b = el("div", "notice-inline"); b.appendChild(el("span", "tag", "Below market")); b.appendChild(document.createTextNode("The top of the advertised range is below the median low end of the cost-of-living-adjusted national postings.")); wrap.appendChild(b); }
+    wrap.appendChild(el("p", "market-summary", c.summary));
+    var cmp = c.comparison;
+    if (cmp && cmp.adjusted_low_median != null) {
+      wrap.appendChild(el("div", "meta", "Adjusted to " + p.location + ": " + rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, cmp.unit) + " (medians of " + cmp.samples_compared + ")" +
+        (cmp.raw_low_median != null ? " · as advertised elsewhere " + rangeText(cmp.raw_low_median, cmp.raw_high_median, cmp.unit) : "") +
+        (cmp.bls_national_median_adjusted != null ? " · BLS national median adjusted " + money(cmp.bls_national_median_adjusted) + unitSuffix(cmp.unit) : "") +
+        (cmp.position_min != null || cmp.position_max != null ? " · Rexius advertises " + rangeText(cmp.position_min, cmp.position_max, cmp.unit) : " · no Rexius range set")));
+    }
+    if (c.bls) {
+      var bl = c.bls;
+      var bt = "BLS " + bl.occupation + (bl.soc_code ? " (" + bl.soc_code + ")" : "") + (bl.year ? ", " + bl.year : "") + ": national median " + (bl.national_median != null ? money(bl.national_median) + unitSuffix(bl.unit) : "—") +
+        (bl.p25 != null || bl.p75 != null ? ", 25th–75th " + rangeText(bl.p25, bl.p75, bl.unit) : "") + (bl.area_median != null ? "; " + (bl.area_name || "area") + " " + money(bl.area_median) + unitSuffix(bl.unit) : "");
+      var bd = el("div", "meta"); if (bl.source_url) bd.appendChild(extLink(bl.source_url, bt)); else bd.textContent = bt; wrap.appendChild(bd);
+    }
+    var adj = c.adjusted || [];
+    if (adj.length) {
+      var tbl = el("table", "mini");
+      var thead = el("thead"); var trh = el("tr"); ["Employer", "Metro", "Index", "As posted", "Adjusted"].forEach(function (h) { trh.appendChild(el("th", null, h)); }); thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = el("tbody");
+      adj.forEach(function (r) {
+        var src = (c.pay_samples || []).filter(function (s) { return s.employer === r.employer && s.metro === r.metro; })[0];
+        var tr = el("tr");
+        var td = el("td"); if (src && src.url) td.appendChild(extLink(src.url, r.employer || "—")); else td.textContent = r.employer || "—"; if (r.title) td.appendChild(el("small", null, r.title)); tr.appendChild(td);
+        tr.appendChild(el("td", null, r.metro || "—"));
+        tr.appendChild(el("td", "num", r.index == null ? "—" : String(r.index)));
+        tr.appendChild(el("td", "num", rangeText(r.min, r.max, r.unit)));
+        tr.appendChild(el("td", "num", r.adjusted_min == null ? "—" : rangeText(r.adjusted_min, r.adjusted_max, r.unit)));
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); wrap.appendChild(tbl);
+    } else if ((c.pay_samples || []).length) {
+      var ul = el("ul", "log");
+      c.pay_samples.forEach(function (s) { var li = el("li"); var label = (s.employer || "Unknown") + (s.title ? " · " + s.title : ""); if (s.url) li.appendChild(extLink(s.url, label)); else li.appendChild(document.createTextNode(label)); li.appendChild(el("span", "meta", " · " + rangeText(s.min, s.max, s.unit) + (s.metro ? " · " + s.metro : ""))); ul.appendChild(li); });
+      wrap.appendChild(ul);
+    }
+    var col = c.cost_of_living;
+    if (col) {
+      var ct = "Cost of living: " + col.source_name + (col.year ? " " + col.year : "") + " · " + (col.rexius_metro || p.location) + " " + (col.rexius_index == null ? "—" : col.rexius_index) + " (US average 100)" + (col.notes ? " · " + col.notes : "");
+      var cd = el("div", "meta"); if (col.source_url) cd.appendChild(extLink(col.source_url, ct)); else cd.textContent = ct; wrap.appendChild(cd);
+    }
+    var src2 = c.sources || [];
+    if (src2.length) {
+      var det = el("details"); det.appendChild(el("summary", "hint", "Sources (" + src2.length + " pages the search returned)"));
+      var sl = el("ul", "log"); src2.forEach(function (s) { var li = el("li"); li.appendChild(extLink(s.url, s.title || s.url)); if (s.age) li.appendChild(el("span", "meta", " · " + s.age)); sl.appendChild(li); });
+      det.appendChild(sl); wrap.appendChild(det);
+    }
+    var usage = [];
+    if (c.searches != null) usage.push(c.searches + " search" + (c.searches === 1 ? "" : "es"));
+    if (c.input_tokens != null || c.output_tokens != null) usage.push(Number(c.input_tokens || 0).toLocaleString() + " in / " + Number(c.output_tokens || 0).toLocaleString() + " out tokens");
+    if (c.model) usage.push(c.model);
+    if (c.finished_at) usage.push(Math.round((new Date(c.finished_at) - new Date(c.ran_at)) / 1000) + " s");
+    if (usage.length) wrap.appendChild(el("div", "meta", usage.join(" · ")));
+    if (c.pass >= 2 && RR.marketReport && RR.marketReport.downloadNational) {
+      var share = el("div", "row market-share");
+      var me = st.profile && st.profile.name ? st.profile.name : null;
+      var dl = el("button", "btn small", "Download report (PDF)"); dl.type = "button";
+      dl.addEventListener("click", async function () {
+        dl.disabled = true; dl.textContent = "Building…";
+        try { await RR.marketReport.downloadNational(p, c, me); } catch (e) { RR.notice("Could not build the report: " + RR.errText(e)); }
+        dl.disabled = false; dl.textContent = "Download report (PDF)";
+      });
+      share.appendChild(dl);
+      share.appendChild(linkBtn("Copy as text", async function () {
+        var ok = false; try { ok = await RR.marketReport.copyNationalText(p, c, me); } catch (e) { ok = false; }
+        RR.notice(ok ? "Report copied. Paste it into an email or message." : "Could not copy; your browser blocked clipboard access.");
+      }));
+      wrap.appendChild(share);
+    }
     return wrap;
   }
 

@@ -647,3 +647,52 @@ select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
 update recruiting.positions set market_max_searches = 10;
 select pg_temp.check('manager: cannot change search depth', (select count(*) from recruiting.positions where market_max_searches = 10) = 0);
 rollback;
+
+-- ----- National market check ------------------------------------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hr: reads the seeded national check', (select count(*) from recruiting.national_checks) = 1);
+insert into recruiting.national_checks (position_id, requested_by)
+  select id, '22222222-2222-2222-2222-222222222222' from recruiting.positions where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can add a national check row', (select count(*) from recruiting.national_checks) = 2);
+update recruiting.national_checks set error = 'test', pass = 1 where summary is null;
+select pg_temp.check('hr: can change a national check row', (select count(*) from recruiting.national_checks where error = 'test') = 1);
+delete from recruiting.national_checks where error = 'test';
+select pg_temp.check('hr: can remove a national check row', (select count(*) from recruiting.national_checks) = 1);
+update recruiting.positions set national_max_searches = 20 where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can set a position''s national search depth', (select count(*) from recruiting.positions where national_max_searches = 20) = 1);
+savepoint sp;
+do $$ begin
+  update recruiting.positions set national_max_searches = 3 where national_max_searches = 20;
+  raise notice 'UNEXPECTED: depth 3 accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('national: search depth is 4 to 20', (select count(*) from recruiting.positions where national_max_searches < 4) = 0);
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: reads national checks', (select count(*) from recruiting.national_checks) = 1);
+savepoint sp;
+do $$ begin
+  insert into recruiting.national_checks (position_id) select id from recruiting.positions limit 1;
+  raise notice 'UNEXPECTED: manager inserted a national check';
+exception when others then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('manager: cannot add a national check', (select count(*) from recruiting.national_checks) = 1);
+update recruiting.national_checks set summary = 'edited';
+select pg_temp.check('manager: cannot change a national check', (select count(*) from recruiting.national_checks where summary = 'edited') = 0);
+delete from recruiting.national_checks;
+select pg_temp.check('manager: cannot remove a national check', (select count(*) from recruiting.national_checks) = 1);
+rollback;
+
+begin;
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: sees no national checks', (select count(*) from recruiting.national_checks) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('hr at aal1: sees no national checks', (select count(*) from recruiting.national_checks) = 0);
+rollback;
