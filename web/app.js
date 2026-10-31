@@ -340,7 +340,7 @@
   }
 
   // ---------- Applications ----------
-  var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, origin, entered_by, entered_at, " +
+  var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, contact_purged_at, files_purged_at, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, origin, entered_by, entered_at, " +
     "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at), application_files(id, storage_path, original_name, kind), status_history(to_stage_id)";
 
   async function fetchAll(table, columns) {
@@ -367,7 +367,7 @@
     (row.status_history || []).forEach(function (h) { var s = stageById[h.to_stage_id]; if (s && (!s.is_terminal || s.is_hired) && s.sort_order > furthest) furthest = s.sort_order; });
     var manual = row.origin === "manual";
     return finish({
-      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "",
+      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
       emailNorm: row.email_norm || "", phoneNorm: row.phone_norm || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: pos ? pos.title : "",
       source: row.source || "", sourceDetail: row.source_detail || "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
@@ -385,7 +385,7 @@
     var files = (row.files || []).slice();
     var manual = row.origin === "manual";
     return finish({
-      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "",
+      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
       emailNorm: normalizeEmail(row.email) || "", phoneNorm: normalizePhone(row.phone) || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: row.position_title || "",
       source: row.source || "", sourceDetail: "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
@@ -615,7 +615,7 @@
       var tdN = el("td", "name");
       tdN.appendChild(document.createTextNode(a.name));
       if (a.dups && a.dups.length) { var dup = el("span", "dup", "×" + (a.dups.length + 1)); dup.title = "Applied " + (a.dups.length + 1) + " times (same email or phone)"; tdN.appendChild(dup); }
-      tdN.appendChild(el("small", null, a.email || a.phone || ""));
+      tdN.appendChild(el("small", null, a.contactPurged ? "contact details removed" : (a.email || a.phone || "")));
       tr.appendChild(tdN);
       var tdD = el("td", "date", fmtDate(a.when)); tdD.title = fmtDateTime(a.when); tr.appendChild(tdD);
       tr.appendChild(el("td", "col-loc", a.location || "—"));
@@ -730,6 +730,7 @@
 
     // Contact
     sec = section(body, "Contact");
+    if (a.contactPurged) sec.appendChild(el("p", "hint", "Email and phone were removed after six months (contact-detail retention). The original submission in Jotform still has them."));
     var dl = el("dl", "kv"); dl.id = "contactKv";
     kv(dl, "Email", a.email, a.email ? "mailto:" + a.email : null);
     kv(dl, "Phone", a.phone, a.phone ? "tel:" + digits(a.phone) : null);
@@ -755,7 +756,7 @@
     sec = section(body, "Files and links");
     var links = el("div", "links");
     a.files.forEach(function (f) { links.appendChild(fileButton(f, fileIcon(f) + " " + fileLabel(f))); });
-    if (!a.files.length) links.appendChild(el("div", "meta", manual ? "No scan or resume attached." : "No resume uploaded."));
+    if (!a.files.length) links.appendChild(el("div", "meta", a.filesPurged ? "Files were removed after six months (retention). The original submission in Jotform still has them." : manual ? "No scan or resume attached." : "No resume uploaded."));
     var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
     if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
     sec.appendChild(links);
@@ -1122,7 +1123,7 @@
     var manual = a.origin === "manual";
     var sections = [];
     sections.push({ title: "Contact", rows: [
-      ["Email", a.email], ["Phone", a.phone], ["Alternate phone", d.altPhone], ["Phone type", d.phoneType], ["Prefers", d.contactMethod],
+      ["Email", a.contactPurged ? "removed after six months" : a.email], ["Phone", a.contactPurged ? "removed after six months" : a.phone], ["Alternate phone", d.altPhone], ["Phone type", d.phoneType], ["Prefers", d.contactMethod],
       ["City", [a.city, a.state].filter(Boolean).join(", ")]
     ] });
     sections.push({ title: "Application", rows: [
@@ -1136,7 +1137,7 @@
     ] });
     sections.push({ title: "Employment history", jobs: (d.employers || []).slice() });
     var fileNames = a.files.map(fileLabel);
-    sections.push({ title: "Files", text: fileNames.length ? "Sent separately from the tracker: " + fileNames.join("; ") + "." : "" });
+    sections.push({ title: "Files", text: fileNames.length ? "Sent separately from the tracker: " + fileNames.join("; ") + "." : a.filesPurged ? "Removed after six months (retention)." : "" });
     if (staff && !manual) {
       // Everything else the applicant answered, minus the questions already shown above.
       var f = formById[a.formId]; var fm = (f && f.field_map) || {}; var used = {};

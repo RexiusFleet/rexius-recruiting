@@ -75,6 +75,7 @@ button:disabled { cursor: default; opacity: .55; }
 .notice .btn { border-color: currentColor; background: transparent; color: inherit; }
 
 .pipeline { padding: 0 24px 14px; }
+.records-note { margin: -6px 0 0; padding: 0 24px 12px; }
 .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin-bottom: 8px; }
 .bar span { display: block; height: 100%; transition: width .25s ease; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -276,7 +277,7 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 
 @media (max-width: 860px) {
   .top { padding: 16px 16px 10px; }
-  .notice, .pipeline { margin-left: 16px; margin-right: 16px; padding-left: 0; padding-right: 0; }
+  .notice, .pipeline, .records-note { margin-left: 16px; margin-right: 16px; padding-left: 0; padding-right: 0; }
   .layout { grid-template-columns: 1fr; }
   .filters { display: none; border-right: 0; border-bottom: 1px solid var(--line); }
   .filters.open { display: block; }

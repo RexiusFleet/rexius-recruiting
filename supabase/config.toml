@@ -407,6 +407,9 @@ verify_jwt = false
 # The national check (same auth scheme, tracker only; README "What the national check created").
 [functions.recruiting-national-check]
 verify_jwt = false
+
+[functions.recruiting-retention]
+verify_jwt = false
 # Secrets (JOTFORM_API_KEY, JOTFORM_WEBHOOK_SECRET, ANTHROPIC_API_KEY_RECRUITING,
 # MARKET_CHECK_SECRET) are never written here; set them with `npx supabase secrets set` or in
 # the dashboard. See README.md step 8.

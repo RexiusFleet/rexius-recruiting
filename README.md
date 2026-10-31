@@ -21,6 +21,7 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `supabase/seed.sql` | Local-only seed: four test sign-ins and sample applications for `db reset` | 3 |
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform's webhook for each new submission, fetches the submission from Jotform's API and inserts it with the backfill's rules (step 14; its README has the request and response shapes) | 5 |
 | `supabase/functions/_shared/clean.mjs` | The cleanup, field-map and never-import rules, one submission in and one `applications` row plus its files out. Canonical copy, used by the webhook and re-exported by `scripts/backfill/lib/clean.mjs` | 4, 5 |
+| `supabase/functions/recruiting-retention/` | Edge Function the daily job calls to delete the files of applications past the six-month retention ("What the contact-retention change created") | retention |
 | `supabase/functions/.env.example` | Names of the webhook's local variables; copy to the gitignored `supabase/functions/.env` for `functions serve` | 5 |
 | `scripts/webhook-test/stub-jotform.mjs` | Stand-in for api.jotform.com (one made-up submission and resume) so the webhook can be tested on the local stack with no key and no real data (`npm run webhook:stub`) | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
@@ -314,6 +315,51 @@ position. Hosted now holds 1,405 applications, the oldest from 2026-01-04. The b
 `scripts/backfill/README.md`. The Phase 5 webhook only ever sees new submissions and needs no
 change.
 
+## What the October cutoff did
+
+Decided 2026-10-30. The 1,232 applications from January to September 2026 had all been imported
+by the backfill and bulk-archived by `archive_before`, with no notes, contacts, offers, referrals,
+manager feedback or filled position among them. Half-logged rows at that volume confused the
+people the tracker was shown to: totals and source counts were mostly archived imports, and
+opening an old record gave a picture with no history behind it. Nearly every question anyone asks
+is about recent applicants, Jotform keeps every original submission and the previous log covers
+the earlier months, so the tracker now starts clean on **October 1, 2026** (Oregon time) and
+builds complete records from there.
+
+What was done, once, on the hosted project (`scripts/` holds no copy; the statements are here so
+the local stack can be brought in line the same way):
+
+1. The 943 resume files belonging to those applications were removed from the `recruiting-files`
+   bucket through the Storage API with the service-role key, in batches of 100, and the
+   `storage.objects` rows were checked gone before anything else ran. The row cascade would not
+   have touched the bucket, and orphaned resumes are a privacy problem as much as a tidy-up one.
+2. Then one statement deleted the rows; status, history and file rows cascaded:
+
+   ```sql
+   delete from recruiting.applications a
+    where a.submitted_at < timestamptz '2026-10-01 00:00 America/Los_Angeles'
+      and exists (select 1 from recruiting.application_status st
+                    join recruiting.stages s on s.id = st.stage_id
+                   where st.application_id = a.id and s.is_archive);
+   ```
+
+   The `is_archive` condition is deliberate: one application submitted at 9:47 PM on September 30
+   had been moved to Sent to manager on 2026-10-28, so it is in use and was kept. Hosted now holds
+   142 applications (that one plus 141 from October) and 109 bucket objects, with no orphaned file
+   rows.
+3. `scripts/backfill/backfill.mjs`: `DEFAULT_SINCE` is `2026-10-01` (it was `2026-01-01`), so a
+   re-run or `--refresh` leaves the deleted months out. Passing an earlier `--since` would bring
+   them back on purpose. The webhook only ever sees new submissions and needs no change, and
+   `purged_submissions` is not involved: that table is for individual submissions removed by hand.
+4. `web/index.html`: a line under the pipeline strip, "Records start October 1, 2026. Earlier
+   applications are in Jotform and the previous log.", and one under each report title saying the
+   figures cover applications received from that date. `web/styles.css` places the first.
+
+Consequences to know about: the "Applied more than once" filter and the duplicate flag in the
+drawer only see repeat applicants from October on (Jotform still shows earlier ones), and the
+seasonality reports will show the spring peak for the first time in 2027. The Archived stage
+stays for its original purpose, setting an application aside without an outcome.
+
 ## What the application-download change created
 
 HR hands a candidate to a hiring manager by email, and until now that meant opening the Jotform
@@ -530,6 +576,72 @@ do by hand: redeploy the webhook so new submissions get their resumes again
 the application and logs the file as failed. No submission arrived between the guard's deploy
 and this fix, so nothing is missing; a plain `npm run backfill` (no `--refresh`) would pick up
 stragglers if any appear, and `--refresh --form <id>` re-copies files for a form.
+
+## What the contact-retention change created
+
+Email and phone are kept for six months (decided 2026-10-30). After that the tracker has no use
+for them: the applicant was hired, passed over, withdrew or was archived, and Jotform keeps the
+original submission for the rare case someone needs it. A candidate who applies again arrives as
+a new row with fresh contact details.
+
+- Migration `20261109000100_contact_retention.sql`: `applications.contact_purged_at`;
+  `recruiting.purge_contact_details(retention interval default '6 months')`, security definer,
+  executable by `service_role` only (never by a browser session), which nulls `email`,
+  `email_norm`, `phone` and `phone_norm`, drops the email, phone and alternate-phone keys from
+  `answers`, and stamps `contact_purged_at` on every application submitted more than six months
+  ago whose stage is terminal or has not changed in six months; a before-update trigger
+  (`keep_contact_purged`) so a `--refresh` backfill, a webhook redelivery or an edit cannot bring
+  the details back; a daily pg_cron job `recruiting-purge-contact-details` at 10:20 UTC; and
+  `applications_for_managers` gains `contact_purged_at` (appended, as views require).
+- `web/app.js`: the table's contact line reads "contact details removed", the drawer's Contact
+  section explains the retention, and the PDF prints "removed after six months" for email and
+  phone. Nothing else changes: name, city, state, position, source, stage, history, files and
+  the rest of the application stay, so Reports are unaffected. A purged row no longer takes part
+  in the duplicate check (its normalised email and phone are null).
+- `scripts/test-policies.sql`: nine checks across both migrations (neither helper callable by
+  `authenticated`, both cron jobs exist, a purged row cannot be un-purged, a purged application
+  takes no new file and keeps `has_resume` false, the manager view carries both flags).
+
+**Files follow, the same day** (migration `20261109000200_file_retention.sql` and the Edge
+Function `supabase/functions/recruiting-retention/`). A resume carries the address, phone and
+email the tracker no longer keeps, and a scan of a paper application shows the whole form, so
+once an application's contact details are gone its files go too: every `application_files` row
+and the objects behind them in `recruiting-files`, for every applicant including hires (the
+personnel record lives in HR's own system). Deleting a `storage.objects` row from SQL leaves the
+bytes behind, so the deletion runs through the Storage API in the function:
+
+- `recruiting.request_file_purge()` (security definer, not callable by app users) posts to the
+  function through pg_net with the vault entries the market-check jobs already use
+  (`recruiting_market_check_url` with the function name swapped, and
+  `recruiting_market_check_secret`); it returns at once when nothing is due. The daily pg_cron
+  job `recruiting-purge-files` runs it at 10:40 UTC, twenty minutes after the contact purge.
+  Until the vault entries exist (step 15) the job logs a warning and does nothing.
+- The function checks `x-market-check-secret` against `MARKET_CHECK_SECRET` (the same Edge
+  Function secret as the market checks; nothing new to set), removes each due application's
+  files from Storage, confirms they are gone, deletes the rows, sets `has_resume` false and
+  stamps `applications.files_purged_at`. It has no browser route.
+- A before-insert trigger on `application_files` refuses a file for a purged application
+  (a `--refresh` backfill would otherwise re-copy it; the backfill skips those too), and the
+  update guard keeps `files_purged_at` and `has_resume` as they are.
+- The drawer says "Files were removed after six months (retention)" where the file links were,
+  the PDF's Files section says the same, and `applications_for_managers` gains `files_purged_at`.
+- Deploy: `npx supabase functions deploy recruiting-retention --no-verify-jwt`, then the
+  migration. Tested locally with `functions serve`: a seeded file on a purged application was
+  removed from Storage, its row deleted, the stamp set, a wrong secret got 401, and a later
+  insert of a file for that application was refused.
+
+To run the contact purge by hand, or with a different window, as the database owner in the SQL
+Editor (the files follow at the next 10:40 UTC run, or at once with
+`select recruiting.request_file_purge();`):
+
+```sql
+select recruiting.purge_contact_details();                 -- six months
+select recruiting.purge_contact_details(interval '1 year'); -- a longer window, one off
+```
+
+The Jotform submission (drawer link) still has the contact details for anyone who truly needs
+them after six months. As of the hosted apply on 2026-10-30 the oldest application was submitted
+on 2026-10-01, so the first purge happens around 2027-04-01.
 
 ## What Phase 5 created
 
@@ -1282,6 +1394,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
+| Contact details and files | Email, phone, resumes, portfolios and scans are held for six months, then removed | A daily pg_cron job calls `recruiting.purge_contact_details()`, which nulls email, phone and their normalised forms and drops the alternate phone from `answers` on applications submitted more than six months ago that are in a terminal stage or have not changed stage in six months, stamping `contact_purged_at`. A trigger keeps a purged row purged through a `--refresh` backfill or a webhook redelivery. The same day the Edge Function `recruiting-retention` (called through pg_net with the market-check vault secret) deletes the application's files from Storage and their rows, and a trigger refuses new ones. Neither helper is callable by app users. Name, city, state, position, source, stage and history stay, so reports are unchanged; the drawer and PDF say "removed after six months" ("What the contact-retention change created") |
 | Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials, street addresses | No column exists for them; the importer drops the licence number and expiry, signature, initials and street-address answers before writing `answers` (CLAUDE.md section 5); only the applicant's city and state are kept. The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above

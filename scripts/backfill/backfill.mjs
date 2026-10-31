@@ -16,9 +16,9 @@
 //   --skip-files     import rows but do not download or upload files
 //   --sample         print one cleaned row per form (answers truncated) and stop; implies --dry-run
 //   --since <date>   import only submissions made on or after this date (YYYY-MM-DD, in the
-//                    Jotform account's time zone); default 2026-01-01. Older submissions are
-//                    counted as "old" and never written. The tracker keeps nothing from before
-//                    2026 (candidates re-apply after a year; Jotform keeps the originals).
+//                    Jotform account's time zone); default 2026-10-01. Older submissions are
+//                    counted as "old" and never written. The tracker's records start on
+//                    2026-10-01 (decision of 2026-10-30; Jotform keeps the originals).
 //
 // Environment (shell, or a gitignored .env at the repo root; never committed, never pasted
 // into chat):
@@ -46,9 +46,9 @@ import { JotformClient } from "./lib/jotform.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BUCKET = "recruiting-files";
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
-// Submissions before this date are never imported (decision of 2026-10-28; see README). Override
-// per run with --since.
-const DEFAULT_SINCE = "2026-01-01";
+// Submissions before this date are never imported (decision of 2026-10-30, "What the October
+// cutoff did" in the README; it was 2026-01-01 from 2026-10-28). Override per run with --since.
+const DEFAULT_SINCE = "2026-10-01";
 
 // ---------------------------------------------------------------------------------------------
 // Arguments and environment
@@ -171,8 +171,12 @@ async function main() {
 
   // Everything already imported, so re-runs skip instead of re-inserting.
   const existing = new Map();
-  for (const a of await selectAll("applications", "id, jotform_submission_id", "jotform_submission_id")) {
+  // Applications whose files the six-month retention removed: never re-copied (the database
+  // refuses the row anyway; skipping saves the upload).
+  const filesPurged = new Set();
+  for (const a of await selectAll("applications", "id, jotform_submission_id, files_purged_at", "jotform_submission_id")) {
     existing.set(a.jotform_submission_id, a.id);
+    if (a.files_purged_at) filesPurged.add(a.id);
   }
   const existingFiles = new Set((await selectAll("application_files", "storage_path", "storage_path")).map((f) => f.storage_path));
   // Deleted on purpose (recruiting.purged_submissions); never re-imported.
@@ -190,7 +194,7 @@ async function main() {
 }
 
 // The cutoff is a calendar date in the Jotform account's zone; compare on the local date of the
-// submission there, so "2026-01-01" keeps a 12:30 AM New Year's submission in Oregon.
+// submission there, so "2026-10-01" keeps a 12:30 AM October 1 submission in Oregon.
 const sinceDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: env.timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
 function isBeforeSince(submittedAtIso) {
   return sinceDateFmt.format(new Date(submittedAtIso)) < opts.since;
@@ -265,6 +269,7 @@ async function importForm(form, positions, existing, existingFiles, purged) {
     }
 
     if (opts.skipFiles) continue;
+    if (filesPurged.has(applicationId)) { c.filesSkipped += files.length; continue; }
     for (const f of files) {
       const storagePath = `applications/${form.jotform_form_id}/${row.jotform_submission_id}/${f.storage_name}`;
       if (existingFiles.has(storagePath) && !opts.refresh) { c.filesSkipped++; continue; }

@@ -701,3 +701,37 @@ begin;
 select pg_temp.check('national: request_national_check returns null without vault secrets', recruiting.request_national_check((select id from recruiting.positions limit 1)) is null);
 select pg_temp.check('national: helper is not callable by app users', not has_function_privilege('authenticated', 'recruiting.request_national_check(uuid)', 'execute'));
 rollback;
+
+-- Contact-detail retention (20261109000100): the purge function is out of reach of app users,
+-- a purged row stays purged, and the manager view carries the flag.
+begin;
+select pg_temp.check('retention: purge function is not callable by app users', not has_function_privilege('authenticated', 'recruiting.purge_contact_details(interval)', 'execute'));
+select pg_temp.check('retention: pg_cron job exists', (select count(*) from cron.job where jobname = 'recruiting-purge-contact-details') = 1);
+update recruiting.applications set contact_purged_at = now(), email = null, email_norm = null, phone = null, phone_norm = null where id = (select id from recruiting.applications order by submitted_at limit 1);
+update recruiting.applications set email = 'back@example.com', phone = '5415550000' where contact_purged_at is not null;
+select pg_temp.check('retention: a purged row cannot get its contact details back', (select count(*) from recruiting.applications where contact_purged_at is not null and (email is not null or phone is not null)) = 0);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('retention: manager view exposes contact_purged_at', (select count(*) from recruiting.applications_for_managers where contact_purged_at is not null) >= 1);
+rollback;
+
+-- File retention (20261109000200): the pg_net helper is out of reach, the cron job exists,
+-- and a purged application takes no new file.
+begin;
+select pg_temp.check('retention: file-purge helper is not callable by app users', not has_function_privilege('authenticated', 'recruiting.request_file_purge()', 'execute'));
+select pg_temp.check('retention: file-purge cron job exists', (select count(*) from cron.job where jobname = 'recruiting-purge-files') = 1);
+update recruiting.applications set files_purged_at = now(), has_resume = false where id = (select id from recruiting.applications order by submitted_at limit 1);
+savepoint sp;
+do $$ begin
+  insert into recruiting.application_files (application_id, storage_path, original_name, kind)
+    select id, 'applications/test/' || id || '/late.pdf', 'late.pdf', 'resume' from recruiting.applications where files_purged_at is not null limit 1;
+  raise notice 'UNEXPECTED: a file was attached to a purged application';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('retention: a purged application takes no new file', (select count(*) from recruiting.application_files af join recruiting.applications a on a.id = af.application_id where a.files_purged_at is not null) = 0);
+update recruiting.applications set has_resume = true where files_purged_at is not null;
+select pg_temp.check('retention: has_resume stays false once files are purged', (select count(*) from recruiting.applications where files_purged_at is not null and has_resume) = 0);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('retention: manager view exposes files_purged_at', (select count(*) from recruiting.applications_for_managers where files_purged_at is not null) >= 1);
+rollback;

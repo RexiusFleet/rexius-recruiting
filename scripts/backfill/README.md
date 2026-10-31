@@ -50,7 +50,7 @@ npm run backfill -- --refresh                       # re-clean rows already impo
 | `--refresh` | Update rows that already exist and re-upload their files. Status, notes and history are untouched |
 | `--skip-files` | Rows only; no file downloads or uploads |
 | `--sample` | Print one cleaned row per form and stop (implies `--dry-run`); useful for checking a form's mapping |
-| `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in the Jotform account's time zone. Default `2026-01-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |
+| `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in the Jotform account's time zone. Default `2026-10-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |
 
 Re-running without `--refresh` changes nothing already imported: submissions are matched on
 `jotform_submission_id` and files on their object key, and both are skipped when present. A run
