@@ -864,7 +864,7 @@ is the archive for everything the tracker has purged. On 2026-10-31 (branch
   two auto-replies (switched off there) still describe the questionnaire that was dropped, so they
   were deleted from the new form on 2026-10-31; only the notification to the recruiting addresses
   remains. If HR wants Spanish applicants to get a reply, add a fresh autoresponder in the new
-  form's **Settings → Emails**. The English form still carries the two stale auto-replies.
+  form's **Settings → Emails**. The same two auto-replies were deleted from the English form the same day, so neither form mentions the questionnaire any more.
 - **Migration `20261110000100_spanish_form_2026.sql`** inserts the `recruiting.forms` row (label
   "Employment Application-ESP 2026 (Spanish)", language `es`, the form's question list, the field
   map copied from the English row). Until it is applied the webhook rejects the form's submissions
