@@ -576,6 +576,41 @@ the application and logs the file as failed. No submission arrived between the g
 and this fix, so nothing is missing; a plain `npm run backfill` (no `--refresh`) would pick up
 stragglers if any appear, and `--refresh --form <id>` re-copies files for a form.
 
+## What the contact-retention change created
+
+Email and phone are kept for six months (decided 2026-10-30). After that the tracker has no use
+for them: the applicant was hired, passed over, withdrew or was archived, and Jotform keeps the
+original submission for the rare case someone needs it. A candidate who applies again arrives as
+a new row with fresh contact details.
+
+- Migration `20261109000100_contact_retention.sql`: `applications.contact_purged_at`;
+  `recruiting.purge_contact_details(retention interval default '6 months')`, security definer,
+  executable by `service_role` only (never by a browser session), which nulls `email`,
+  `email_norm`, `phone` and `phone_norm`, drops the email, phone and alternate-phone keys from
+  `answers`, and stamps `contact_purged_at` on every application submitted more than six months
+  ago whose stage is terminal or has not changed in six months; a before-update trigger
+  (`keep_contact_purged`) so a `--refresh` backfill, a webhook redelivery or an edit cannot bring
+  the details back; a daily pg_cron job `recruiting-purge-contact-details` at 10:20 UTC; and
+  `applications_for_managers` gains `contact_purged_at` (appended, as views require).
+- `web/app.js`: the table's contact line reads "contact details removed", the drawer's Contact
+  section explains the retention, and the PDF prints "removed after six months" for email and
+  phone. Nothing else changes: name, city, state, position, source, stage, history, files and
+  the rest of the application stay, so Reports are unaffected. A purged row no longer takes part
+  in the duplicate check (its normalised email and phone are null).
+- `scripts/test-policies.sql`: four checks (function not callable by `authenticated`, the cron
+  job exists, a purged row cannot be un-purged, the manager view carries the flag).
+
+To run the purge by hand, or with a different window, as the database owner in the SQL Editor:
+
+```sql
+select recruiting.purge_contact_details();                 -- six months
+select recruiting.purge_contact_details(interval '1 year'); -- a longer window, one off
+```
+
+The Jotform submission (drawer link) still has the contact details for anyone who truly needs
+them after six months. As of the hosted apply on 2026-10-30 the oldest application was submitted
+on 2026-10-01, so the first purge happens around 2027-04-01.
+
 ## What Phase 5 created
 
 `supabase/functions/recruiting-jotform-webhook/index.ts`: the Edge Function that keeps
@@ -1327,6 +1362,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
+| Contact details | Email and phone are held for six months, then removed | A daily pg_cron job calls `recruiting.purge_contact_details()`, which nulls email, phone and their normalised forms and drops the alternate phone from `answers` on applications submitted more than six months ago that are in a terminal stage or have not changed stage in six months, stamping `contact_purged_at`. A trigger keeps a purged row purged through a `--refresh` backfill or a webhook redelivery. The function is not callable by app users. Name, city, state, position, source, stage and history stay, so reports are unchanged; the drawer and PDF say "removed after six months" ("What the contact-retention change created") |
 | Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials, street addresses | No column exists for them; the importer drops the licence number and expiry, signature, initials and street-address answers before writing `answers` (CLAUDE.md section 5); only the applicant's city and state are kept. The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above
