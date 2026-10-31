@@ -15,9 +15,11 @@
     "backfill": "node scripts/backfill/backfill.mjs",
     "backfill:test": "node --test scripts/backfill/clean.test.mjs scripts/backfill/download.test.mjs",
     "webhook:stub": "node scripts/webhook-test/stub-jotform.mjs",
-    "purge:unmatched": "node scripts/purge-unmatched.mjs"
+    "purge:unmatched": "node scripts/purge-unmatched.mjs",
+    "pdf:samples": "node scripts/pdf-samples/render.mjs"
   },
   "devDependencies": {
+    "jspdf": "3.0.3",
     "pg": "8.23.1"
   },
   "dependencies": {

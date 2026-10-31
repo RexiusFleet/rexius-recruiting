@@ -1,34 +1,22 @@
-/* Market check report: one run of the per-position market check (Phase 9a) as a PDF to send
- * to a hiring manager, or as plain text to paste into an email. Built here in the browser from
- * the market_checks row the page already holds, with jsPDF (pinned in index.html), the same
- * way application-pdf.js builds the application PDF. Nothing is fetched and nothing is written
- * to Supabase; the file exists only as the download in the user's browser.
+/* Market check report: one run of the per-position market check (Phase 9a), or of the national
+ * check, as a PDF to send to a hiring manager, or as plain text to paste into an email. Built
+ * here in the browser from the row the page already holds, with the shared kit in pdf-kit.js
+ * (jsPDF, Public Sans, the Rexius wordmark), the same way application-pdf.js builds the
+ * application PDF. Nothing is fetched and nothing is written to Supabase; the file exists only
+ * as the download in the user's browser.
  *
  * The report says what the run found and how it compares with Rexius' advertised range. It
  * carries the same caveat as the page: a sample from web search results, not a complete count.
- * Pay figures are what other employers advertise; no Rexius wage is in it.
+ * Pay figures are what other employers advertise; no Rexius wage is in it. Page titles that the
+ * search returned are stripped of any HTML before they are printed.
  */
 (function () {
   "use strict";
 
-  var PAGE = { w: 612, h: 792 };
-  var M = { top: 54, right: 54, bottom: 60, left: 54 };
-  var INK = [23, 32, 25], MUTE = [95, 107, 99], LINE = [185, 195, 186], ACCENT = [47, 107, 63], LINK = [36, 84, 140];
-  var logoPromise = null;
-
-  function safeText(s) {
-    return String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(/[^\n\x20-\x7E\xA0-\xFF–—‘’“”•…]/g, "?");
-  }
-  function loadLogo() {
-    if (logoPromise) return logoPromise;
-    logoPromise = fetch("assets/rexius-mark.png").then(function (r) { if (!r.ok) throw new Error("logo " + r.status); return r.blob(); })
-      .then(function (b) { return new Promise(function (resolve, reject) { var fr = new FileReader(); fr.onload = function () { resolve(fr.result); }; fr.onerror = reject; fr.readAsDataURL(b); }); })
-      .catch(function () { return null; });
-    return logoPromise;
-  }
+  function K() { var k = window.RR && RR.pdfKit; if (!k) throw new Error("The PDF module did not load. Reload the page and try again."); return k; }
 
   // ---------- Shared wording (PDF and text) ----------
-  function money(n) { return n == null ? "—" : "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  function money(n) { if (n == null) return "—"; var v = Number(n), whole = Math.abs(v - Math.round(v)) < 0.005; return "$" + v.toLocaleString(undefined, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }); }
   function unitSuffix(u) { return u === "year" ? "/yr" : "/hr"; }
   function rangeText(lo, hi, unit) {
     if (lo == null && hi == null) return "—";
@@ -36,34 +24,46 @@
   }
   function fmtDateTime(d) { return d.toLocaleString(undefined, { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
   function fmtDay(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); if (!m) return s || ""; return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); }
+  function today() { return new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); }
+  function clean(s) { return window.RR && RR.pdfKit ? RR.pdfKit.stripHtml(s) : String(s == null ? "" : s); }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
   var TRIGGER = { manual: "run by hand", schedule: "scheduled run", opened: "run when the position opened" };
 
-  // Everything the report says, in one structure both renderers walk.
+  // Verdict wording shared by both reports. `what` names the market side of the comparison.
+  function verdict(below, what) {
+    if (below === true) return { chip: "Below market", tone: "warn", text: "The top of Rexius' range is below the median low end " + what + "." };
+    if (below === false) return { chip: "At or above market", tone: "good", text: "The top of Rexius' range is at or above the median low end " + what + "." };
+    return { chip: "Nothing to compare", tone: "neutral", text: "Rexius has no advertised range to compare, or no pay figures were found." };
+  }
+
+  // Everything the local report says, in one structure both renderers walk.
   function model(position, check, preparedBy) {
     var cmp = check.comparison || null;
     var ranges = check.pay_ranges || [], postings = check.postings || [], sources = check.sources || [];
     var ran = new Date(check.ran_at);
-    var figures = [];
     // Rexius' range as it was when the run compared it (the comparison keeps a copy), else today's.
     var rMin = cmp && cmp.position_min != null ? cmp.position_min : position.pay_min;
     var rMax = cmp && cmp.position_max != null ? cmp.position_max : position.pay_max;
     var rUnit = cmp && cmp.unit ? cmp.unit : (position.pay_unit || "hour");
+    var hasMarket = cmp && cmp.market_low_median != null;
+    var v = verdict(hasMarket ? check.below_market : null, "others advertise");
+    var figures = [];
     figures.push(["Rexius advertises", rMin != null || rMax != null ? rangeText(rMin, rMax, rUnit) : "no range set"]);
-    if (cmp && cmp.market_low_median != null) {
-      figures.push(["Others advertise", rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) + " (medians of " + cmp.ranges_compared + " range" + (cmp.ranges_compared === 1 ? "" : "s") + " found)"]);
-      figures.push(["Against the market", check.below_market === true ? "Below market: the top of Rexius' range is below the median low end others advertise."
-        : check.below_market === false ? "Not below market: the top of Rexius' range is at or above the median low end others advertise."
-        : "Rexius has no advertised range to compare."]);
-    } else figures.push(["Against the market", "No pay figures were found to compare."]);
+    if (hasMarket) figures.push(["Others advertise", rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) + " (medians of " + plural(cmp.ranges_compared, "range", "ranges") + " found)"]);
+    figures.push(["Against the market", v.chip + ": " + v.text]);
     figures.push(["Postings found", postings.length + (ranges.length ? ", " + ranges.length + " with pay shown" : "")]);
     return {
       title: position.title + " · " + position.location,
-      subtitle: "Market check " + fmtDateTime(ran) + " · " + (TRIGGER[check.trigger] || check.trigger),
+      subtitle: "Run " + fmtDateTime(ran) + " · " + (TRIGGER[check.trigger] || check.trigger),
+      rexius: rMin != null || rMax != null ? rangeText(rMin, rMax, rUnit) : "No range set",
+      market: hasMarket ? rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : null,
+      marketSub: hasMarket ? "Medians of " + plural(cmp.ranges_compared, "pay range", "pay ranges") + " found" : "No pay figures found",
+      verdict: v,
       figures: figures,
       summary: check.summary || "",
       ranges: ranges, postings: postings, sources: sources,
-      caveat: "This is a sample drawn from web search results on " + fmtDateTime(ran) + ", not a complete count of openings. Pay figures are what other employers advertised on the pages found; none is a Rexius wage. Generated by Rexius Recruiter with Claude (" + (check.model || "Claude") + ", " + (check.searches != null ? check.searches + " web searches" : "web search") + ").",
-      byline: (preparedBy ? "Prepared by " + preparedBy + " · " : "") + "Rexius Recruiter · " + new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+      caveat: "This is a sample drawn from web search results on " + fmtDateTime(ran) + ", not a complete count of openings. Pay figures are what other employers advertised on the pages found; none is a Rexius wage. Generated by Rexius Recruiter with Claude (" + (check.model || "Claude") + ", " + (check.searches != null ? plural(check.searches, "web search", "web searches") : "web search") + ").",
+      byline: (preparedBy ? "Prepared by " + preparedBy + " · " : "") + "Rexius Recruiter · " + today(),
       ran: ran
     };
   }
@@ -71,170 +71,79 @@
   // ---------- Plain text ----------
   function text(position, check, preparedBy) {
     var m = model(position, check, preparedBy);
-    var out = [m.title, m.subtitle, ""];
+    var out = [m.title, "Market check · " + m.subtitle, ""];
     m.figures.forEach(function (f) { out.push(f[0] + ": " + f[1]); });
     out.push("", m.summary, "");
     if (m.ranges.length) {
       out.push("Pay others advertise");
-      m.ranges.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + r.title : "") + ": " + rangeText(r.min, r.max, r.unit) + (r.url ? " (" + r.url + ")" : "")); });
+      m.ranges.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + ": " + rangeText(r.min, r.max, r.unit) + (r.url ? " (" + r.url + ")" : "")); });
       out.push("");
     }
     if (m.postings.length) {
       out.push("Who else is hiring");
       m.postings.forEach(function (p) {
         var bits = [p.pay_text, p.location, p.posted ? "posted " + fmtDay(p.posted) : null].filter(Boolean);
-        out.push("- " + (p.employer || "Unknown") + (p.title ? ", " + p.title : "") + (bits.length ? " (" + bits.join(", ") + ")" : "") + (p.url ? " " + p.url : ""));
+        out.push("- " + (p.employer || "Unknown") + (p.title ? ", " + clean(p.title) : "") + (bits.length ? " (" + bits.join(", ") + ")" : "") + (p.url ? " " + p.url : ""));
       });
       out.push("");
     }
-    if (m.sources.length) { out.push("Sources"); m.sources.forEach(function (s) { out.push("- " + (s.title ? s.title + " " : "") + s.url); }); out.push(""); }
+    if (m.sources.length) { out.push("Sources"); m.sources.forEach(function (s) { out.push("- " + (clean(s.title) ? clean(s.title) + " " : "") + s.url); }); out.push(""); }
     out.push(m.caveat, m.byline);
     return out.join("\n");
   }
 
   // ---------- PDF ----------
-  function Writer(pdf, logo, title) {
-    this.pdf = pdf; this.logo = logo; this.title = title; this.y = M.top; this.width = PAGE.w - M.left - M.right;
-  }
-  Writer.prototype.need = function (h) {
-    if (this.y + h <= PAGE.h - M.bottom) return;
-    this.pdf.addPage(); this.y = M.top;
-    this.pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(MUTE[0], MUTE[1], MUTE[2]);
-    this.pdf.text(safeText(this.title) + " · market check (continued)", M.left, this.y);
-    this.y += 16;
-  };
-  Writer.prototype.rule = function () { this.pdf.setDrawColor(LINE[0], LINE[1], LINE[2]).setLineWidth(0.6); this.pdf.line(M.left, this.y, PAGE.w - M.right, this.y); };
-  Writer.prototype.heading = function (t) {
-    this.need(30); this.y += 10;
-    this.pdf.setFont("helvetica", "bold").setFontSize(10.5).setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
-    this.pdf.text(safeText(t).toUpperCase(), M.left, this.y);
-    this.y += 5; this.rule(); this.y += 12;
-  };
-  Writer.prototype.paragraph = function (t, x, width, size, style, color, link) {
-    this.pdf.setFont("helvetica", style || "normal").setFontSize(size).setTextColor(color[0], color[1], color[2]);
-    var lines = this.pdf.splitTextToSize(safeText(t), width), lh = size * 1.32;
-    for (var i = 0; i < lines.length; i++) {
-      this.need(lh);
-      if (link) this.pdf.textWithLink(lines[i], x, this.y, { url: link }); else this.pdf.text(lines[i], x, this.y);
-      this.y += lh;
-    }
-    return lines.length * lh;
-  };
-  Writer.prototype.kv = function (label, value) {
-    var size = 10, lh = size * 1.32, lw = 132;
-    var vl = this.pdf.setFont("helvetica", "normal").setFontSize(size).splitTextToSize(safeText(value), this.width - lw - 8);
-    this.need(Math.min(vl.length, 3) * lh);
-    var top = this.y;
-    this.pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(MUTE[0], MUTE[1], MUTE[2]);
-    this.pdf.text(safeText(label), M.left, top);
-    this.pdf.setFont("helvetica", "normal").setFontSize(size).setTextColor(INK[0], INK[1], INK[2]);
-    for (var j = 0; j < vl.length; j++) { this.pdf.text(vl[j], M.left + lw, top + j * lh); }
-    this.y = top + vl.length * lh + 4;
-  };
-  // A simple table: columns [{label, width}] and rows of strings; the last column is right-aligned when `numLast`.
-  Writer.prototype.table = function (cols, rows, numLast) {
-    var size = 9.5, lh = size * 1.32;
-    var self = this;
-    function row(cells, bold, color) {
-      var wrapped = cells.map(function (c, i) { return self.pdf.setFont("helvetica", bold ? "bold" : "normal").setFontSize(size).splitTextToSize(safeText(c), cols[i].width - 6); });
-      var n = Math.max.apply(null, wrapped.map(function (w) { return w.length; }));
-      self.need(n * lh + 4);
-      var x = M.left;
-      self.pdf.setFont("helvetica", bold ? "bold" : "normal").setFontSize(size).setTextColor(color[0], color[1], color[2]);
-      wrapped.forEach(function (w, i) {
-        var right = numLast && i === cols.length - 1;
-        for (var k = 0; k < w.length; k++) self.pdf.text(w[k], right ? x + cols[i].width - 6 : x, self.y + k * lh, right ? { align: "right" } : undefined);
-        x += cols[i].width;
-      });
-      self.y += n * lh + 3;
-    }
-    row(cols.map(function (c) { return c.label; }), true, MUTE);
-    this.rule(); this.y += 6;
-    rows.forEach(function (r) { row(r, false, INK); });
-    this.y += 4;
-  };
-  Writer.prototype.header = function (m) {
-    var x = M.left;
-    if (this.logo) { try { this.pdf.addImage(this.logo, "PNG", M.left, M.top - 14, 34, 34); x += 44; } catch (e) { /* no logo */ } }
-    this.pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(MUTE[0], MUTE[1], MUTE[2]);
-    this.pdf.text("Rexius · Market check", x, this.y - 2);
-    this.y += 14;
-    this.pdf.setFont("helvetica", "bold").setFontSize(17).setTextColor(INK[0], INK[1], INK[2]);
-    var lines = this.pdf.splitTextToSize(safeText(m.title), this.width - (x - M.left));
-    for (var i = 0; i < lines.length; i++) { this.pdf.text(lines[i], x, this.y); this.y += 19; }
-    this.pdf.setFont("helvetica", "normal").setFontSize(10).setTextColor(MUTE[0], MUTE[1], MUTE[2]);
-    this.pdf.text(safeText(m.subtitle), x, this.y - 3);
-    this.y = Math.max(this.y + 8, M.top + 30);
-    this.rule(); this.y += 6;
-  };
-  Writer.prototype.footers = function (m) {
-    var n = this.pdf.getNumberOfPages();
-    for (var p = 1; p <= n; p++) {
-      this.pdf.setPage(p);
-      this.pdf.setFont("helvetica", "normal").setFontSize(8).setTextColor(MUTE[0], MUTE[1], MUTE[2]);
-      var y = PAGE.h - M.bottom + 24;
-      this.pdf.text(this.pdf.splitTextToSize(safeText(m.byline), this.width - 70)[0], M.left, y);
-      this.pdf.text("Page " + p + " of " + n, PAGE.w - M.right, y, { align: "right" });
-    }
-  };
+  function linkCell(textValue, url, style) { return { text: textValue, link: url || null, style: style }; }
 
   async function build(position, check, preparedBy) {
-    var jspdf = window.jspdf;
-    if (!jspdf || !jspdf.jsPDF) throw new Error("The PDF library did not load. Check your connection and reload the page.");
+    var kit = K();
     var m = model(position, check, preparedBy);
-    var logo = await loadLogo();
-    var pdf = new jspdf.jsPDF({ unit: "pt", format: "letter", compress: true });
-    pdf.setProperties({ title: safeText(m.title) + " - market check", subject: "Market check", creator: "Rexius Recruiter" });
-    var w = new Writer(pdf, logo, position.title);
-    w.header(m);
-    w.heading("At a glance");
-    m.figures.forEach(function (f) { w.kv(f[0], f[1]); });
+    var doc = await kit.create({ kind: "Market check", title: m.title, subtitle: m.subtitle, date: today(), byline: m.byline, docTitle: m.title + " - market check" });
+    var w = doc.w;
+    w.tiles([
+      { label: "Rexius advertises", value: m.rexius },
+      { label: "Others advertise", value: m.market || "—", sub: m.marketSub },
+      { label: "Against the market", chip: m.verdict.chip, tone: m.verdict.tone, sub: m.verdict.text },
+      { label: "Postings found", value: String(m.postings.length), sub: m.ranges.length ? plural(m.ranges.length, "shows pay", "show pay") : "none shows pay" }
+    ]);
     w.heading("What the search found");
-    w.paragraph(m.summary, M.left, w.width, 10.5, "normal", INK);
+    w.paragraph(m.summary || "The run returned no summary.", { size: 10.5, leading: 1.45 });
     if (m.ranges.length) {
-      w.heading("Pay others advertise");
-      w.table([{ label: "Employer", width: 150 }, { label: "Title as posted", width: 264 }, { label: "Pay", width: 90 }],
-        m.ranges.map(function (r) { return [r.employer || "Unknown", r.title || "", rangeText(r.min, r.max, r.unit)]; }), true);
+      w.heading("Pay others advertise", 50);
+      w.table([{ label: "Employer", width: 30 }, { label: "Title as posted", width: 52 }, { label: "Pay", width: 18, align: "right" }],
+        m.ranges.map(function (r) { return [linkCell(r.employer || "Unknown", r.url, "semibold"), clean(r.title), rangeText(r.min, r.max, r.unit)]; }));
     }
     if (m.postings.length) {
-      w.heading("Who else is hiring");
-      m.postings.forEach(function (p) {
-        w.need(30);
-        w.paragraph((p.employer || "Unknown") + (p.title ? " · " + p.title : ""), M.left, w.width, 10, "bold", INK);
-        var bits = [p.pay_text, p.location, p.posted ? "posted " + fmtDay(p.posted) : null].filter(Boolean);
-        if (bits.length) w.paragraph(bits.join(" · "), M.left, w.width, 9.5, "normal", MUTE);
-        if (p.url) w.paragraph(p.url, M.left, w.width, 8, "normal", LINK, p.url);
-        w.y += 4;
-      });
+      w.heading("Who else is hiring", 50);
+      w.table([{ label: "Employer", width: 25 }, { label: "Title as posted", width: 32 }, { label: "Location", width: 16 }, { label: "Pay shown", width: 17 }, { label: "Posted", width: 15, align: "right" }],
+        m.postings.map(function (p) { return [linkCell(p.employer || "Unknown", p.url, "semibold"), clean(p.title), p.location || "", p.pay_text || "—", p.posted ? fmtDay(p.posted) : "—"]; }), { size: 9 });
     }
     if (m.sources.length) {
-      w.heading("Sources");
-      m.sources.forEach(function (s) {
-        w.paragraph((s.title ? s.title + " — " : "") + s.url, M.left, w.width, 8, "normal", LINK, s.url);
-      });
+      w.heading("Sources", 40);
+      w.paragraph("Pages the web search returned, in the order found. Employer names in the tables above link to the posting.", { size: 8.5, color: kit.C.mute, after: 8 });
+      w.sources(m.sources);
     }
-    w.y += 12; w.need(40);
-    w.paragraph(m.caveat, M.left, w.width, 8.5, "italic", MUTE);
-    w.footers(m);
-    return pdf;
+    w.note(m.caveat);
+    w.footers();
+    return doc.pdf;
   }
 
   function fileName(position, check) {
-    var clean = function (s) { return String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); };
+    var kit = K();
     var day = String(check.ran_at || "").slice(0, 10) || "undated";
-    return [clean(position.title), clean(position.location), "market-check", day].filter(Boolean).join("-") + ".pdf";
+    return [kit.slug(position.title), kit.slug(position.location), "market-check", day].filter(Boolean).join("-") + ".pdf";
   }
   async function download(position, check, preparedBy) {
     var pdf = await build(position, check, preparedBy);
     pdf.save(fileName(position, check));
   }
-  async function copyText(position, check, preparedBy) {
-    var t = text(position, check, preparedBy);
+  async function copy(t) {
     if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(t); return true; }
     var ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
     var ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
     ta.remove(); return ok;
   }
+  async function copyText(position, check, preparedBy) { return copy(text(position, check, preparedBy)); }
 
   // ---------- National check (cost-of-living adjusted) ----------
   function nationalModel(position, check, preparedBy) {
@@ -243,87 +152,98 @@
     var rMin = cmp && cmp.position_min != null ? cmp.position_min : position.pay_min;
     var rMax = cmp && cmp.position_max != null ? cmp.position_max : position.pay_max;
     var unit = cmp && cmp.unit ? cmp.unit : (position.pay_unit || "hour");
+    var hasAdj = cmp && cmp.adjusted_low_median != null;
+    var v = verdict(hasAdj ? check.below_market : null, "of the adjusted postings");
     var figures = [["Rexius advertises", rMin != null || rMax != null ? rangeText(rMin, rMax, unit) : "no range set"]];
-    if (cmp && cmp.adjusted_low_median != null) {
-      figures.push(["Adjusted to " + position.location, rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, unit) + " (medians of " + cmp.samples_compared + " postings, scaled by cost of living)"]);
+    if (hasAdj) {
+      figures.push(["Adjusted to " + position.location, rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, unit) + " (medians of " + plural(cmp.samples_compared, "posting", "postings") + ", scaled by cost of living)"]);
       if (cmp.raw_low_median != null) figures.push(["As advertised elsewhere", rangeText(cmp.raw_low_median, cmp.raw_high_median, unit)]);
-      figures.push(["Against the adjusted market", check.below_market === true ? "Below market: the top of Rexius' range is below the adjusted median low end." : check.below_market === false ? "Not below market: the top of Rexius' range is at or above the adjusted median low end." : "Rexius has no advertised range to compare."]);
-    } else figures.push(["Against the adjusted market", "No comparable postings could be adjusted."]);
-    if (bls) figures.push(["BLS " + bls.occupation + (bls.soc_code ? " (" + bls.soc_code + ")" : ""), "national median " + (bls.national_median != null ? money(bls.national_median) + unitSuffix(bls.unit) : "—") + (bls.p25 != null || bls.p75 != null ? ", 25th–75th " + rangeText(bls.p25, bls.p75, bls.unit) : "") + (bls.area_median != null ? "; " + (bls.area_name || "area") + " " + money(bls.area_median) + unitSuffix(bls.unit) : "") + (cmp && cmp.bls_national_median_adjusted != null ? "; national median adjusted to " + position.location + " " + money(cmp.bls_national_median_adjusted) + unitSuffix(unit) : "") + (bls.year ? " (" + bls.year + ")" : "")]);
-    if (col) figures.push(["Cost of living", col.source_name + (col.year ? " " + col.year : "") + ": " + (col.rexius_metro || position.location) + " " + (col.rexius_index == null ? "—" : col.rexius_index) + " against 100 for the US average" + (col.notes ? ". " + col.notes : "")]);
+    }
+    figures.push(["Against the adjusted market", v.chip + ": " + v.text]);
+    var method = [];
+    if (bls) {
+      method.push(["BLS occupation", bls.occupation + (bls.soc_code ? " (SOC " + bls.soc_code + ")" : "") + (bls.year ? ", " + bls.year + " wage data" : "")]);
+      var figs = [];
+      if (bls.national_median != null) figs.push("national median " + money(bls.national_median) + unitSuffix(bls.unit));
+      if (bls.p25 != null || bls.p75 != null) figs.push("25th–75th percentile " + rangeText(bls.p25, bls.p75, bls.unit));
+      if (bls.area_median != null) figs.push((bls.area_name || "area") + " median " + money(bls.area_median) + unitSuffix(bls.unit));
+      if (cmp && cmp.bls_national_median_adjusted != null) figs.push("national median adjusted to " + position.location + " " + money(cmp.bls_national_median_adjusted) + unitSuffix(unit));
+      if (figs.length) method.push(["BLS figures", figs.join("; ")]);
+    }
+    if (col) {
+      method.push(["Cost-of-living index", col.source_name + (col.year ? ", " + col.year : "") + ". " + (col.rexius_metro || position.location) + " is " + (col.rexius_index == null ? "—" : col.rexius_index) + " against 100 for the US average; each posting's pay is multiplied by that index over its own metro's."]);
+      if (col.notes) method.push(["Notes", col.notes]);
+    }
     return {
       title: position.title + " · " + position.location,
-      subtitle: "National market check " + fmtDateTime(ran) + (check.pass < 2 ? " · first pass only" : ""),
-      figures: figures, summary: check.summary || "",
-      adjusted: check.adjusted || [], samples: check.pay_samples || [], sources: check.sources || [], bls: bls, col: col,
-      caveat: "A sample drawn from web search results on " + fmtDateTime(ran) + ", not a complete count. Pay figures are what other employers advertised or what the Bureau of Labor Statistics publishes; none is a Rexius wage. The cost-of-living adjustment multiplies each figure by the Rexius metro's index over the posting metro's index" + (col ? " (" + col.source_name + ")" : "") + " and is approximate. Generated by Rexius Recruiter with Claude (" + (check.model || "Claude") + ", " + (check.searches != null ? check.searches + " web searches" : "web search") + ").",
-      byline: (preparedBy ? "Prepared by " + preparedBy + " · " : "") + "Rexius Recruiter · " + new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+      subtitle: "Run " + fmtDateTime(ran) + (check.pass < 2 ? " · first pass only" : ""),
+      rexius: rMin != null || rMax != null ? rangeText(rMin, rMax, unit) : "No range set",
+      adjusted: hasAdj ? rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, unit) : null,
+      adjustedSub: hasAdj ? "Medians of " + plural(cmp.samples_compared, "posting", "postings") + ", scaled by cost of living" : "No comparable postings could be adjusted",
+      raw: hasAdj && cmp.raw_low_median != null ? rangeText(cmp.raw_low_median, cmp.raw_high_median, unit) : null,
+      verdict: v,
+      figures: figures, method: method, summary: check.summary || "",
+      rows: check.adjusted || [], samples: check.pay_samples || [], sources: check.sources || [], bls: bls, col: col,
+      caveat: "A sample drawn from web search results on " + fmtDateTime(ran) + ", not a complete count. Pay figures are what other employers advertised or what the Bureau of Labor Statistics publishes; none is a Rexius wage. The cost-of-living adjustment multiplies each figure by the Rexius metro's index over the posting metro's index" + (col ? " (" + col.source_name + ")" : "") + " and is approximate. Generated by Rexius Recruiter with Claude (" + (check.model || "Claude") + ", " + (check.searches != null ? plural(check.searches, "web search", "web searches") : "web search") + ").",
+      byline: (preparedBy ? "Prepared by " + preparedBy + " · " : "") + "Rexius Recruiter · " + today()
     };
   }
   function urlFor(m, r) { var s = m.samples.filter(function (x) { return x.employer === r.employer && x.metro === r.metro; })[0]; return s && s.url ? s.url : null; }
   function nationalText(position, check, preparedBy) {
     var m = nationalModel(position, check, preparedBy);
-    var out = [m.title, m.subtitle, ""];
+    var out = [m.title, "National market check · " + m.subtitle, ""];
     m.figures.forEach(function (f) { out.push(f[0] + ": " + f[1]); });
+    m.method.forEach(function (f) { out.push(f[0] + ": " + f[1]); });
     out.push("", m.summary, "");
-    if (m.adjusted.length) {
+    if (m.rows.length) {
       out.push("Postings across the country, scaled to " + position.location);
-      m.adjusted.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + r.title : "") + " (" + r.metro + (r.index != null ? ", index " + r.index : "") + "): " + rangeText(r.min, r.max, r.unit) + " as posted" + (r.adjusted_min != null ? ", " + rangeText(r.adjusted_min, r.adjusted_max, r.unit) + " adjusted" : "") + (urlFor(m, r) ? " " + urlFor(m, r) : "")); });
+      m.rows.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + " (" + r.metro + (r.index != null ? ", index " + r.index : "") + "): " + rangeText(r.min, r.max, r.unit) + " as posted" + (r.adjusted_min != null ? ", " + rangeText(r.adjusted_min, r.adjusted_max, r.unit) + " adjusted" : "") + (urlFor(m, r) ? " " + urlFor(m, r) : "")); });
       out.push("");
     } else if (m.samples.length) {
       out.push("Postings across the country");
-      m.samples.forEach(function (s) { out.push("- " + (s.employer || "Unknown") + (s.title ? ", " + s.title : "") + " (" + s.metro + "): " + rangeText(s.min, s.max, s.unit) + (s.url ? " " + s.url : "")); });
+      m.samples.forEach(function (s) { out.push("- " + (s.employer || "Unknown") + (s.title ? ", " + clean(s.title) : "") + " (" + s.metro + "): " + rangeText(s.min, s.max, s.unit) + (s.url ? " " + s.url : "")); });
       out.push("");
     }
-    if (m.sources.length) { out.push("Sources"); m.sources.forEach(function (s) { out.push("- " + (s.title ? s.title + " " : "") + s.url); }); out.push(""); }
+    if (m.sources.length) { out.push("Sources"); m.sources.forEach(function (s) { out.push("- " + (clean(s.title) ? clean(s.title) + " " : "") + s.url); }); out.push(""); }
     out.push(m.caveat, m.byline);
     return out.join("\n");
   }
   async function buildNational(position, check, preparedBy) {
-    var jspdf = window.jspdf;
-    if (!jspdf || !jspdf.jsPDF) throw new Error("The PDF library did not load. Check your connection and reload the page.");
+    var kit = K();
     var m = nationalModel(position, check, preparedBy);
-    var logo = await loadLogo();
-    var pdf = new jspdf.jsPDF({ unit: "pt", format: "letter", compress: true });
-    pdf.setProperties({ title: safeText(m.title) + " - national market check", subject: "National market check", creator: "Rexius Recruiter" });
-    var w = new Writer(pdf, logo, position.title);
-    w.header(m);
-    w.heading("At a glance");
-    m.figures.forEach(function (f) { w.kv(f[0], f[1]); });
+    var doc = await kit.create({ kind: "National market check", title: m.title, subtitle: m.subtitle, date: today(), byline: m.byline, docTitle: m.title + " - national market check" });
+    var w = doc.w;
+    var tiles = [{ label: "Rexius advertises", value: m.rexius }, { label: "Adjusted to " + position.location, value: m.adjusted || "—", sub: m.adjustedSub }];
+    if (m.raw) tiles.push({ label: "As advertised elsewhere", value: m.raw, sub: "Before the cost-of-living adjustment" });
+    tiles.push({ label: "Against the adjusted market", chip: m.verdict.chip, tone: m.verdict.tone, sub: m.verdict.text });
+    w.tiles(tiles);
     w.heading("What the search found");
-    w.paragraph(m.summary, M.left, w.width, 10.5, "normal", INK);
-    if (m.adjusted.length) {
-      w.heading("Postings across the country, scaled to " + position.location);
-      w.table([{ label: "Employer", width: 150 }, { label: "Metro", width: 120 }, { label: "Index", width: 44 }, { label: "As posted", width: 95 }, { label: "Adjusted", width: 95 }],
-        m.adjusted.map(function (r) { return [r.employer || "Unknown", r.metro || "", r.index == null ? "—" : String(r.index), rangeText(r.min, r.max, r.unit), r.adjusted_min == null ? "—" : rangeText(r.adjusted_min, r.adjusted_max, r.unit)]; }), true);
-      m.adjusted.forEach(function (r) { var u = urlFor(m, r); if (u) w.paragraph((r.employer || "Unknown") + ": " + u, M.left, w.width, 8, "normal", LINK, u); });
+    w.paragraph(m.summary || "The run returned no summary.", { size: 10.5, leading: 1.45 });
+    if (m.rows.length) {
+      w.heading("Postings across the country, scaled to " + position.location, 50);
+      w.table([{ label: "Employer", width: 28 }, { label: "Metro", width: 22 }, { label: "Index", width: 9, align: "right" }, { label: "As posted", width: 20, align: "right" }, { label: "Adjusted", width: 21, align: "right" }],
+        m.rows.map(function (r) { return [linkCell(r.employer || "Unknown", urlFor(m, r), "semibold"), r.metro || "", r.index == null ? "—" : String(r.index), rangeText(r.min, r.max, r.unit), r.adjusted_min == null ? "—" : { text: rangeText(r.adjusted_min, r.adjusted_max, r.unit), style: "semibold" }]; }));
     } else if (m.samples.length) {
-      w.heading("Postings across the country");
-      m.samples.forEach(function (s) {
-        w.paragraph((s.employer || "Unknown") + (s.title ? " · " + s.title : "") + " · " + s.metro + " · " + rangeText(s.min, s.max, s.unit), M.left, w.width, 10, "normal", INK);
-        if (s.url) w.paragraph(s.url, M.left, w.width, 8, "normal", LINK, s.url);
-      });
+      w.heading("Postings across the country", 50);
+      w.table([{ label: "Employer", width: 30 }, { label: "Title as posted", width: 34 }, { label: "Metro", width: 20 }, { label: "Pay", width: 16, align: "right" }],
+        m.samples.map(function (s) { return [linkCell(s.employer || "Unknown", s.url, "semibold"), clean(s.title), s.metro || "", rangeText(s.min, s.max, s.unit)]; }));
+    }
+    if (m.method.length) {
+      w.heading("Method", 40);
+      m.method.forEach(function (f) { w.kv(f[0], f[1]); });
     }
     if (m.sources.length) {
-      w.heading("Sources");
-      m.sources.forEach(function (s) { w.paragraph((s.title ? s.title + " — " : "") + s.url, M.left, w.width, 8, "normal", LINK, s.url); });
+      w.heading("Sources", 40);
+      w.paragraph("Pages the web search returned, in the order found. Employer names in the table above link to the posting.", { size: 8.5, color: kit.C.mute, after: 8 });
+      w.sources(m.sources);
     }
-    w.y += 12; w.need(40);
-    w.paragraph(m.caveat, M.left, w.width, 8.5, "italic", MUTE);
-    w.footers(m);
-    return pdf;
+    w.note(m.caveat);
+    w.footers();
+    return doc.pdf;
   }
-  function nationalFileName(position, check) {
-    return fileName(position, check).replace("-market-check-", "-national-check-");
-  }
+  function nationalFileName(position, check) { return fileName(position, check).replace("-market-check-", "-national-check-"); }
   async function downloadNational(position, check, preparedBy) { var pdf = await buildNational(position, check, preparedBy); pdf.save(nationalFileName(position, check)); }
-  async function copyNationalText(position, check, preparedBy) {
-    var t = nationalText(position, check, preparedBy);
-    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(t); return true; }
-    var ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
-    var ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-    ta.remove(); return ok;
-  }
+  async function copyNationalText(position, check, preparedBy) { return copy(nationalText(position, check, preparedBy)); }
 
   window.RR = window.RR || {};
   window.RR.marketReport = { build: build, download: download, copyText: copyText, text: text, fileName: fileName,

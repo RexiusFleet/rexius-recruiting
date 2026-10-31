@@ -19,3 +19,6 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Sample PDFs rendered by scripts/pdf-samples/render.mjs
+scripts/pdf-samples/out/

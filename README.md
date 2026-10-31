@@ -28,6 +28,8 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack (126 checks after Phase 7 and manual entry) | 3+ |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
+| `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
+| `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
 | `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `config.js` (project URL and publishable key only). No build step | 6, 7 |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `.github/workflows/pages.yml` | Publishes `web/` to GitHub Pages on every push to `main`, writing `config.js` from two repository variables on the way (step 13) | 8 |
@@ -378,10 +380,11 @@ with `--refresh --skip-files` (step 10) to re-clean every row from Jotform; new 
 they arrive.
 
 **How it works.** `web/application-pdf.js` lays the document out with jsPDF 3.0.3, loaded from a
-pinned jsDelivr URL in `index.html` the same way as supabase-js. `applicationModel(id)` in
+pinned jsDelivr URL in `index.html` the same way as supabase-js, through the shared kit in
+`web/pdf-kit.js` (since 2026-10-30; see "What the PDF restyle created"). `applicationModel(id)` in
 `web/app.js` assembles the sections (for staff it reads the row's `answers` on click; managers
 use the curated columns already loaded). The PDF is produced in the browser and handed to the
-download; nothing is written to Supabase or fetched from Jotform. jsPDF's built-in fonts cover
+download; nothing is written to Supabase or fetched from Jotform. The embedded Public Sans covers
 Latin text including Spanish accents; a character outside that range is replaced with "?".
 
 Verified against the local stack with 1,404 applications: as hr, an English applicant with
@@ -680,6 +683,44 @@ the first pass.
 **Deploy** like the local check (step 15 item 1): `npm run db:migrate`, then
 `npx supabase functions deploy recruiting-national-check --no-verify-jwt`. No vault entries.
 
+## What the PDF restyle created
+
+The three PDFs the tracker builds in the browser (the application hand-off, the market check
+report and the national check report) were each laid out by their own copy of a small jsPDF
+writer, and the copies had drifted: the market report drew a key/value label on one line, so a
+long label ("BLS Heavy and Tractor-Trailer Truck Drivers (53-3032)") ran into its value; a table
+heading could end a page with its rows on the next; forty full URLs filled a page of sources;
+and a page title scraped from the web could carry an HTML comment into the PDF. The restyle
+(2026-10-30, branch `claude/pdf-restyle`) puts the layout in one place and makes the three
+documents a set.
+
+- `web/pdf-kit.js` is the shared writer: US Letter page frame, the Rexius wordmark
+  (`assets/rexius-logo.png`, converted from the site's WebP) with the document kind and date on
+  the right and a green rule under them, a title and subtitle, a continuation header on later
+  pages, and a footer with who prepared it and the page count. Section headings keep with their
+  first lines, paragraphs never leave a single line behind, table headers repeat after a page
+  break and never sit alone at the foot of one, and the caveat sits in a shaded note panel.
+  "At a glance" tiles carry the few figures a reader asks first, with a green or amber verdict
+  chip on the market reports. Sources are a numbered list with the page title as the link and
+  only the host in grey, so forty sources take half a page and still open the page.
+- Public Sans, the tracker's own typeface, is embedded (Regular, SemiBold, Bold and Italic,
+  about 85 KB each, `web/assets/fonts/`, SIL Open Font License in `OFL.txt` beside them). The
+  fonts and the wordmark are fetched once per session, when the first PDF is built, never on
+  page load; if a font fails to load the document falls back to Helvetica and still builds.
+- `web/application-pdf.js` and `web/market-report.js` keep their document models and the
+  "Copy as text" output and only draw with the kit. The application lifts position, location,
+  source and start date into tiles; the market reports lift Rexius' range, the market figure and
+  the verdict, and move the BLS and cost-of-living detail of a national check into a "Method"
+  section where the labels have room. Employer names in the tables link to the posting, which
+  replaced the separate URL lines. `stripHtml` in the kit cleans every scraped title.
+- `scripts/pdf-samples/` (`npm run pdf:samples`) renders the three documents from invented data
+  with the same jsPDF version as a devDependency, into the gitignored `out/` folder. It is how
+  the layout was checked and how the next change to it should be.
+
+Nothing in the database or the Edge Functions changed; no migration, no manual step. The
+GitHub Pages deploy picks up the new files with the next push to `main`.
+
+---
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
