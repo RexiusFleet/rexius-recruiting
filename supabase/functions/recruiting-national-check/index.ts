@@ -191,8 +191,9 @@ async function runCheck(db: Db, apiKey: string, model: string, checkId: string, 
   const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 5 * 60 * 1000 });
   const standard = Number(env("NATIONAL_CHECK_MAX_SEARCHES")) || DEFAULT_MAX_SEARCHES;
   const total = Math.max(4, Math.min(20, Number(position.national_max_searches) || standard));
-  const pass1Searches = Math.max(3, Math.ceil(total * 0.65));
-  const pass2Searches = Math.max(1, total - pass1Searches);
+  // Pass 2 needs room: one table page can cover every metro, but finding it takes a few tries.
+  const pass1Searches = Math.max(3, Math.ceil(total * 0.55));
+  const pass2Searches = Math.max(2, total - pass1Searches);
   const area = rexiusMetro(position.location);
   const unit: Unit = position.pay_unit === "year" ? "year" : "hour";
 
@@ -283,23 +284,24 @@ This pass looks at the whole United States. Use the web_search tool to find (a) 
 JSON shape:
 {
   "summary": "3 to 5 plain sentences: how many postings, in which parts of the country, the pay range across them, what BLS shows. End with: a sample from search results, not a complete count.",
-  "samples": [{"employer": "name", "title": "title as posted", "metro": "City, ST (the metro area)", "state": "ST", "min": 20, "max": 26, "unit": "hour", "url": "https://..."}],
+  "samples": [{"employer": "name", "title": "title as posted", "metro": "the metropolitan area as City, ST (for example Denver, CO; a suburb goes under its metro's main city)", "state": "ST", "min": 20, "max": 26, "unit": "hour", "url": "https://..."}],
   "bls": {"occupation": "BLS occupation title", "soc_code": "37-3011", "unit": "hour", "national_median": 18.5, "p25": 15.9, "p75": 22.1, "area_name": "Eugene-Springfield, OR", "area_median": 19.2, "year": "2025", "source_url": "https://www.bls.gov/oes/..."}
 }
 "unit" is "hour" or "year", as the source used; convert nothing. Up to 12 samples, each from a different employer where possible, only those with a pay figure. "bls" is null if you did not find the page; inside it any figure you did not find is null.`;
 
 const SYSTEM_PASS2 = `${COMMON}
 
-This pass is about cost of living. Use the web_search tool to find, from ONE published cost-of-living index where 100 is the United States average (for example a widely used city or metro index), the index value for each metro area listed, including the Rexius metro. Use the same source and the same year for every metro so the figures compare; if one metro is missing from that source, say so with null rather than mixing sources.
+This pass is about cost of living. Use the web_search tool to find ONE page that lists a published cost-of-living index (100 = United States average) for many metro areas at once, and read every metro you need from that one page: the U.S. Bureau of Economic Analysis "Regional Price Parities by metropolitan area" (all items) table is the preferred source, and a widely used cost-of-living index page that tabulates many cities is an acceptable fallback. Do not search for metros one at a time; a search or two to find the table and a search or two to read it is the whole job. Use the same source and the same year for every metro so the figures compare. If a place is not in that source, use its state's non-metropolitan value when the source gives one, else null; never mix sources.
 
 JSON shape:
 {
   "summary": "2 to 4 plain sentences: which index and year, how the Rexius metro compares with the US average and with the metros listed, which metros were missing.",
   "source_name": "name of the index", "source_url": "https://...", "year": "2026",
   "rexius_index": 104,
-  "metros": [{"metro": "City, ST", "index": 112}],
+  "metros": [{"metro": "the metro exactly as given in the list", "index": 112}],
   "notes": "anything a reader should know about the index, or null"
-}`;
+}
+Copy each "metro" string exactly as it appears in the list you were given, so the figures can be matched up.`;
 
 function pass1Prompt(p: Position, area: string, description: string | null): string {
   const lines = [
@@ -391,13 +393,28 @@ function plausible(lo: number, hi: number, u: Unit): boolean { return u === "hou
 function round(n: number): number { return Math.round(n * 100) / 100; }
 function median(xs: number[]): number { const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
-/** Index for a metro from the pass-2 list, matched on the city name before the comma. */
+/**
+ * Index for a metro from the pass-2 list. The model names places in several ways
+ * ("Tacoma, WA (Seattle-Tacoma-Bellevue)", "Seattle-Tacoma-Bellevue, WA (Tacoma, WA)"), so a
+ * sample and a list entry match when they share any place name: the text before a comma, inside
+ * parentheses, or any hyphen-separated part of a metro name.
+ */
+function placeNames(s: string): Set<string> {
+  const out = new Set<string>();
+  const add = (t: string) => { const k = t.trim().toLowerCase().replace(/\s+/g, " "); if (k.length >= 3 && !/^[a-z]{2}$/.test(k)) out.add(k); };
+  for (const part of s.split(/[()]/)) {
+    const city = part.split(",")[0];
+    add(city);
+    for (const piece of city.split(/[-–\/]/)) add(piece);
+  }
+  return out;
+}
 function indexFor(col: Col | null, metro: string): number | null {
   if (!col) return null;
-  const key = metro.split(",")[0].trim().toLowerCase();
   const exact = col.metros.find((m) => m.metro.toLowerCase() === metro.toLowerCase());
   if (exact) return exact.index;
-  const loose = col.metros.find((m) => m.metro.split(",")[0].trim().toLowerCase() === key);
+  const names = placeNames(metro);
+  const loose = col.metros.find((m) => m.index != null && [...placeNames(m.metro)].some((n) => names.has(n)));
   return loose ? loose.index : null;
 }
 
