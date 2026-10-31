@@ -141,3 +141,23 @@ select id, now() - interval '3 days', now() - interval '3 days' + interval '70 s
   '{"unit":"hour","position_min":17,"position_max":20,"market_low_median":19,"market_high_median":22,"ranges_compared":2}',
   false, 4120, 980, 4, 'claude-opus-5-5'
 from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+
+-- National check: one finished run for the same position (invented figures and employers).
+insert into recruiting.national_checks
+  (position_id, ran_at, finished_at, pass, summary, pay_samples, bls, cost_of_living, adjusted, comparison, below_market, sources,
+   input_tokens, output_tokens, searches, model)
+select id, now() - interval '2 days', now() - interval '2 days' + interval '3 minutes', 2,
+  'Across the United States, landscape maintenance crew roles at larger employers advertise $17 to $26 an hour, with the Bureau of Labor Statistics median for landscaping and groundskeeping workers at $18.50. After scaling each figure to the Eugene/Springfield cost of living, the adjusted range is $18 to $24. This is a sample from search results, not a complete count.',
+  '[{"employer":"Example National Grounds","title":"Landscape Crew Member","metro":"Denver, CO","state":"CO","min":21,"max":26,"unit":"hour","url":"https://example.com/n/1"},
+    {"employer":"Sample Services Inc","title":"Grounds Maintenance Technician","metro":"Dallas, TX","state":"TX","min":17,"max":20,"unit":"hour","url":"https://example.com/n/2"},
+    {"employer":"Demo Landscape Group","title":"Landscape Maintenance Crew","metro":"Phoenix, AZ","state":"AZ","min":18,"max":22,"unit":"hour","url":"https://example.com/n/3"}]',
+  '{"occupation":"Landscaping and Groundskeeping Workers","soc_code":"37-3011","unit":"hour","national_median":18.5,"p25":15.9,"p75":22.1,"area_name":"Eugene-Springfield, OR","area_median":19.2,"year":"2025","source_url":"https://www.bls.gov/oes/current/oes373011.htm"}',
+  '{"source_name":"Example cost-of-living index","source_url":"https://example.com/col","year":"2026","rexius_metro":"Eugene, OR","rexius_index":104,"metros":[{"metro":"Denver, CO","index":112},{"metro":"Dallas, TX","index":98},{"metro":"Phoenix, AZ","index":103}],"notes":"100 = US average."}',
+  '[{"employer":"Example National Grounds","title":"Landscape Crew Member","metro":"Denver, CO","min":21,"max":26,"unit":"hour","index":112,"adjusted_min":19.5,"adjusted_max":24.14},
+    {"employer":"Sample Services Inc","title":"Grounds Maintenance Technician","metro":"Dallas, TX","min":17,"max":20,"unit":"hour","index":98,"adjusted_min":18.04,"adjusted_max":21.22},
+    {"employer":"Demo Landscape Group","title":"Landscape Maintenance Crew","metro":"Phoenix, AZ","min":18,"max":22,"unit":"hour","index":103,"adjusted_min":18.17,"adjusted_max":22.21}]',
+  '{"unit":"hour","position_min":17,"position_max":20,"adjusted_low_median":18.17,"adjusted_high_median":22.21,"raw_low_median":18,"raw_high_median":22,"samples_compared":3,"bls_national_median_adjusted":19.64}',
+  false,
+  '[{"url":"https://example.com/n/1","title":"Landscape Crew Member - Example National Grounds","age":null},{"url":"https://www.bls.gov/oes/current/oes373011.htm","title":"Landscaping and Groundskeeping Workers","age":null}]',
+  61000, 5200, 12, 'claude-opus-5-5'
+from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';

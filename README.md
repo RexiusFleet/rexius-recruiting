@@ -632,6 +632,54 @@ Cost: about fifty cents a run at 2026-10 list prices (six searches at a cent eac
 tokens; the first hosted run was $0.56), about $0.85 at Deeper and $1.30 at Deepest. The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
 it is reached the run ends with "rate limit or spend cap reached" on the row.
 
+## What the national check created
+
+A second kind of market check for specialised roles, where the local one finds little
+(2026-10-30, after Phase 9a). One national run asks Claude, with web search, what the same role
+pays across the United States and what each place costs to live in compared with the Rexius
+location, then scales every figure to the Rexius location and compares the adjusted median with
+the position's advertised range. On demand only, from the drawer; there is no schedule, since a
+run costs a few dollars.
+
+- `supabase/migrations/20261108000100_national_checks.sql`: `positions.national_max_searches`
+  (null = the standard limit, 4 to 20) and table `national_checks`, one row per run (`pass` 0, 1
+  or 2, `summary`, `pay_samples`, `bls`, `cost_of_living`, `adjusted`, `comparison`,
+  `below_market`, `sources`, usage, `error`), RLS as for `market_checks`.
+- `supabase/functions/recruiting-national-check/index.ts`: the tracker's JWT only (admin or hr
+  at aal2), same 202-then-background pattern as the local check, deployed with
+  `--no-verify-jwt`. Two passes saved separately, so a run cut off in the second keeps the first
+  (`pass` 1 with an error): pass 1 finds postings by larger employers across several metros plus
+  the Bureau of Labor Statistics occupational wage page for the matching occupation (SOC code,
+  national median and 25th/75th percentiles, the Oregon metro figure if shown); pass 2 finds one
+  published cost-of-living index (100 = US average) for the Rexius metro and every metro from
+  pass 1, same source and year throughout; it also has the web fetch tool (up to four pages)
+  because search results only carry snippets and the index table has to be read from the page
+  itself (the first two hosted runs stalled on exactly that). The adjustment is arithmetic in the function, not
+  the model: each posting's pay times Rexius index over posting index, converted to the
+  position's pay unit; `below_market` compares the top of Rexius' range with the median adjusted
+  low end; the BLS national median is scaled the same way. The summary is the two passes'
+  summaries plus one code-written closing sentence with the adjusted figures. Searches: 15 a
+  run by default (secret `NATIONAL_CHECK_MAX_SEARCHES`, per-position override), about 65% to
+  pass 1. The standard key `ANTHROPIC_API_KEY_RECRUITING` is used; no new secret.
+- `web/positions.js`: a **National market check** section under the local one, with a depth
+  dropdown (Lighter 10, Standard 15, Deepest 20), **Run national check** (confirms the cost
+  first), the latest run (summary, below-market flag, adjusted medians, the BLS line with a
+  link, a table of postings with metro, index, pay as posted and adjusted, the cost-of-living
+  source, sources, usage), earlier runs, and **Download report (PDF)** / **Copy as text**
+  (`web/market-report.js`, national variants with the adjusted table).
+- `scripts/test-policies.sql`: 13 more checks. `supabase/seed.sql`: one made-up finished run.
+
+Cost: about $1.50 a run at Standard at 2026-10 list prices (the first complete hosted run,
+Commercial Landscape Project Lead at Eugene/Springfield on 2026-10-30, used 12 searches and
+298,531 input / 10,129 output tokens, about $1.52, in 2 minutes 34 seconds), about $2.50 at
+Deepest. Caveats the report carries: free cost-of-living indexes are rough and differ by
+publisher, so the source is named and the adjustment is approximate; a run takes three to six
+minutes, and the Edge Function's wall-clock limit means a very deep run can still end after
+the first pass.
+
+**Deploy** like the local check (step 15 item 1): `npm run db:migrate`, then
+`npx supabase functions deploy recruiting-national-check --no-verify-jwt`. No vault entries.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
