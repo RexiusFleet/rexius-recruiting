@@ -878,7 +878,7 @@ is the archive for everything the tracker has purged. On 2026-10-31 (branch
   run makes another form each time. Read-only Jotform API keys cannot clone; the key in `.env`
   needs full access for this one script.
 
-Switch-over, in order:
+Switch-over, done on 2026-10-31 (kept for the record; the Spanish-speaker read in step 1 was still pending):
 
 1. Read the new form through once at https://www.jotform.com/build/263035461572051 and have a
    Spanish speaker check the agreement, MVR and drug-test paragraphs (questions 219 to 331, 368 and
