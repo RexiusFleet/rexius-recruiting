@@ -696,3 +696,8 @@ select pg_temp.check('no profile: sees no national checks', (select count(*) fro
 select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
 select pg_temp.check('hr at aal1: sees no national checks', (select count(*) from recruiting.national_checks) = 0);
 rollback;
+
+begin;
+select pg_temp.check('national: request_national_check returns null without vault secrets', recruiting.request_national_check((select id from recruiting.positions limit 1)) is null);
+select pg_temp.check('national: helper is not callable by app users', not has_function_privilege('authenticated', 'recruiting.request_national_check(uuid)', 'execute'));
+rollback;

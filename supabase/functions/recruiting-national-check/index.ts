@@ -17,6 +17,9 @@
 // Request:  POST /functions/v1/recruiting-national-check   body {"position_id": "<uuid>"}
 //           Authorization: Bearer <the user's Supabase JWT>; admin or hr with a two-factor
 //           (aal2) session, checked through recruiting.current_role() like every table policy.
+//           Or, from Postgres (recruiting.request_national_check(), for a test run from the SQL
+//           editor; there is no schedule), the header x-market-check-secret with the same
+//           MARKET_CHECK_SECRET the local check uses.
 //           Deployed with --no-verify-jwt like the other functions so the check is this one.
 // Response: 202 {status: "started", check_id}   row exists; the run continues after the
 //                                                 response (EdgeRuntime.waitUntil) and fills it in
@@ -27,6 +30,7 @@
 //
 // Environment (Edge Function secrets):
 //   ANTHROPIC_API_KEY_RECRUITING     required (never ANTHROPIC_API_KEY)
+//   MARKET_CHECK_SECRET              required only for the Postgres path
 //   NATIONAL_CHECK_MODEL             optional; default claude-opus-5-5
 //   NATIONAL_CHECK_MAX_SEARCHES      optional; standard searches per run across both passes,
 //                                    default 15 (4-20). positions.national_max_searches overrides it.
@@ -46,7 +50,7 @@ const HOURS_PER_YEAR = 2080;
 
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-market-check-secret",
   "access-control-allow-methods": "POST, OPTIONS",
 };
 
@@ -61,6 +65,15 @@ function env(name: string): string | undefined {
   return v && v.trim() ? v.trim() : undefined;
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Compare two strings without leaking their length or where they differ through timing. */
+function secretsMatch(given: string | null, expected: string): boolean {
+  if (!given) return false;
+  const a = new TextEncoder().encode(given), b = new TextEncoder().encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  return diff === 0;
+}
 
 interface Position {
   id: string; title: string; location: string; department: string | null;
@@ -85,16 +98,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!supabaseUrl || !serviceKey || !anonKey) return json(503, { error: "function not configured (Supabase environment)" });
   if (!apiKey) return json(503, { error: "function not configured (ANTHROPIC_API_KEY_RECRUITING)" });
 
-  // 1. Who is calling: staff with a two-factor session, nobody else.
-  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (!token) return json(401, { error: "sign in first" });
-  const asUser = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
-  const who = await asUser.auth.getUser(token);
-  if (who.error || !who.data.user) return json(401, { error: "invalid session" });
-  const role = await asUser.schema("recruiting").rpc("current_role");
-  if (role.error) { console.error(`[${FUNCTION}] current_role: ${role.error.message}`); return json(500, { error: "could not check your role" }); }
-  if (role.data !== "admin" && role.data !== "hr") return json(403, { error: "only HR and admins can run a national check" });
-  const requestedBy = who.data.user.id;
+  // 1. Who is calling: staff with a two-factor session, or Postgres with the shared secret.
+  let requestedBy: string | null = null;
+  const given = req.headers.get("x-market-check-secret");
+  if (given) {
+    const expected = env("MARKET_CHECK_SECRET");
+    if (!expected) return json(503, { error: "function not configured (MARKET_CHECK_SECRET)" });
+    if (!secretsMatch(given, expected)) { console.warn(`[${FUNCTION}] rejected: bad internal secret`); return json(401, { error: "bad secret" }); }
+  } else {
+    const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return json(401, { error: "sign in first" });
+    const asUser = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
+    const who = await asUser.auth.getUser(token);
+    if (who.error || !who.data.user) return json(401, { error: "invalid session" });
+    const role = await asUser.schema("recruiting").rpc("current_role");
+    if (role.error) { console.error(`[${FUNCTION}] current_role: ${role.error.message}`); return json(500, { error: "could not check your role" }); }
+    if (role.data !== "admin" && role.data !== "hr") return json(403, { error: "only HR and admins can run a national check" });
+    requestedBy = who.data.user.id;
+  }
 
   // 2. The request.
   let body: Json;

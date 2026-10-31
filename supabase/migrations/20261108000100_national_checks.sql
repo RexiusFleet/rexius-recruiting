@@ -84,3 +84,40 @@ create policy "national_checks: staff can remove national checks"
 
 grant select, insert, update, delete on recruiting.national_checks to authenticated;
 grant all on recruiting.national_checks to service_role;
+
+-- A test run from the SQL editor (there is no schedule for national checks): posts to the
+-- function through pg_net with the URL and shared secret the local check already keeps in the
+-- vault (recruiting_market_check_url with the function name swapped, recruiting_market_check_secret).
+create or replace function recruiting.request_national_check(p_position_id uuid)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_url text;
+  v_secret text;
+  v_request_id bigint;
+begin
+  select replace(decrypted_secret, 'recruiting-market-check', 'recruiting-national-check') into v_url
+    from vault.decrypted_secrets where name = 'recruiting_market_check_url' limit 1;
+  select decrypted_secret into v_secret
+    from vault.decrypted_secrets where name = 'recruiting_market_check_secret' limit 1;
+  if v_url is null or v_secret is null then
+    raise warning 'recruiting.request_national_check: vault secrets recruiting_market_check_url / recruiting_market_check_secret are not set; position % not checked', p_position_id;
+    return null;
+  end if;
+  select net.http_post(
+    url := v_url,
+    body := jsonb_build_object('position_id', p_position_id),
+    headers := jsonb_build_object('content-type', 'application/json', 'x-market-check-secret', v_secret),
+    timeout_milliseconds := 15000
+  ) into v_request_id;
+  return v_request_id;
+end;
+$$;
+
+comment on function recruiting.request_national_check(uuid) is
+  'Asks recruiting-national-check to run for a position from inside Postgres (a test run from the SQL editor; no schedule exists). Returns the pg_net request id, or null when the vault is not set up.';
+
+revoke execute on function recruiting.request_national_check(uuid) from public;
