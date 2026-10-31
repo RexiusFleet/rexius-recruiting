@@ -652,7 +652,9 @@ run costs a few dollars.
   the Bureau of Labor Statistics occupational wage page for the matching occupation (SOC code,
   national median and 25th/75th percentiles, the Oregon metro figure if shown); pass 2 finds one
   published cost-of-living index (100 = US average) for the Rexius metro and every metro from
-  pass 1, same source and year throughout. The adjustment is arithmetic in the function, not
+  pass 1, same source and year throughout; it also has the web fetch tool (up to four pages)
+  because search results only carry snippets and the index table has to be read from the page
+  itself (the first two hosted runs stalled on exactly that). The adjustment is arithmetic in the function, not
   the model: each posting's pay times Rexius index over posting index, converted to the
   position's pay unit; `below_market` compares the top of Rexius' range with the median adjusted
   low end; the BLS national median is scaled the same way. The summary is the two passes'
@@ -667,8 +669,10 @@ run costs a few dollars.
   (`web/market-report.js`, national variants with the adjusted table).
 - `scripts/test-policies.sql`: 13 more checks. `supabase/seed.sql`: one made-up finished run.
 
-Cost: about $1.50 a run at Standard at 2026-10 list prices (15 searches plus tokens), $2.50
-at Deepest. Caveats the report carries: free cost-of-living indexes are rough and differ by
+Cost: about $1.50 a run at Standard at 2026-10 list prices (the first complete hosted run,
+Commercial Landscape Project Lead at Eugene/Springfield on 2026-10-30, used 12 searches and
+298,531 input / 10,129 output tokens, about $1.52, in 2 minutes 34 seconds), about $2.50 at
+Deepest. Caveats the report carries: free cost-of-living indexes are rough and differ by
 publisher, so the source is named and the adjustment is approximate; a run takes three to six
 minutes, and the Edge Function's wall-clock limit means a very deep run can still end after
 the first pass.
