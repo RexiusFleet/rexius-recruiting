@@ -833,6 +833,68 @@ Nothing in the database or the Edge Functions changed; no migration, no manual s
 GitHub Pages deploy picks up the new files with the next push to `main`.
 
 ---
+## What the Spanish 2026 form created
+
+The Spanish application form (Employment Application-ESP 2025, `232824275836160`) had kept the
+2025 layout while the English 2026 form moved on: no resume or portfolio upload, no forklift or
+herbicide-licence question, no "describe your role" boxes, the old physical-capability and safety
+sections still in, and older agreement wording. Editing it in place was ruled out because Jotform
+drops a question's answers from every past submission when the question is removed, and that form
+is the archive for everything the tracker has purged. On 2026-10-31 (branch
+`claude/spanish-form-2026`) a new form was built from the English one instead.
+
+- **Employment Application-ESP 2026** (`263035461572051`, https://form.jotform.com/263035461572051)
+  is a clone of the English 2026 form made by `scripts/jotform/clone-spanish-form.mjs` through the
+  Jotform API. A clone keeps the question IDs, so every question, type, order, required flag and
+  all 25 conditions match the English form, and the tracker reuses the English field map. Each
+  label got a Spanish half in the existing "English/ Español" style from
+  `scripts/jotform/spanish-2026.translations.mjs`; the English half is taken from the live English
+  form at run time, so the two can never drift in wording. Options that are words ("Yes" → "Yes/
+  Sí", "Home" → "Home/ Casa", the education levels, the student checkboxes) are bilingual; position
+  titles, brand names and "No" stay as they are. The four conditions that compare against a changed
+  value ("Yes" on the two "have you worked/applied before" questions, "Other" on the source question,
+  the Eugene/Springfield location) were rewritten to the new values. The location option is stored
+  as "Eugene-Springfield" because the import's Spanish rule keeps the text before the first "/" and
+  the alias table maps it back.
+- **Carried over by the clone** (checked on a throwaway clone first, then on the real one): the
+  thank-you redirect, now pointed at the Spanish page
+  `https://rexius.com/pages/solicitud-de-empleo-de-rexius-gracias` so analytics conversions keep
+  working (both thank-you pages load the same Google Ads tag, so the conversion fires as before);
+  the webhook into the tracker, with its secret; and the English form's emails. The English form's
+  two auto-replies (switched off there) still describe the questionnaire that was dropped, so they
+  were deleted from the new form on 2026-10-31; only the notification to the recruiting addresses
+  remains. If HR wants Spanish applicants to get a reply, add a fresh autoresponder in the new
+  form's **Settings → Emails**. The same two auto-replies were deleted from the English form the same day, so neither form mentions the questionnaire any more.
+- **Migration `20261110000100_spanish_form_2026.sql`** inserts the `recruiting.forms` row (label
+  "Employment Application-ESP 2026 (Spanish)", language `es`, the form's question list, the field
+  map copied from the English row). Until it is applied the webhook rejects the form's submissions
+  as "unknown form". `reference/jotform-forms.json` gained the new form's question map and
+  `scripts/backfill/clean.test.mjs` checks a submission on it. The 2025 form's row stays active until
+  the switch-over below.
+- **The script** (`npm run jotform:spanish-form -- --dry-run | --test`) is kept for the record and
+  for the next time the English form changes shape: `--dry-run` lists what it would change,
+  `--test` builds a throwaway clone, verifies it against the English form and deletes it, and a
+  plain run creates a form, the migration and the reference entry. It is not idempotent, so a real
+  run makes another form each time. Read-only Jotform API keys cannot clone; the key in `.env`
+  needs full access for this one script.
+
+Switch-over, in order:
+
+1. Read the new form through once at https://www.jotform.com/build/263035461572051 and have a
+   Spanish speaker check the agreement, MVR and drug-test paragraphs (questions 219 to 331, 368 and
+   238). Fix wording in the builder or in the translations file; a builder fix is final, a file fix
+   only matters for a future re-run.
+2. `npm run db:migrate` on the hosted project (adds the forms row).
+3. Submit one test application on the new form and confirm it appears on the tracker with the
+   Spanish location and "Yes" answers cleaned; delete the test afterwards (step 14.4).
+4. Point the careers page's Spanish link and the Spanish QR code, if any, at
+   `https://form.jotform.com/263035461572051`.
+5. Disable the 2025 form in Jotform (**Settings → Form Status**) and run
+   `update recruiting.forms set is_active = false where jotform_form_id = '232824275836160';` so a
+   late submission through it is rejected rather than imported. Its submissions stay in Jotform
+   as the archive.
+
+---
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
@@ -1240,8 +1302,10 @@ secrets but not create them).
 
    → **Complete Integration**. Do this for Employment Application 2026 (`260115636145148`),
    Employment Application-ESP 2025 (`232824275836160`) and CAS Employment Application 2026
-   (`232764918957171`). A form not in `recruiting.forms` (the QR card, internal and referral
-   forms) would be rejected with "unknown form", so do not add it there.
+   (`232764918957171`). Employment Application-ESP 2026 (`263035461572051`) was cloned from the
+   English form with the webhook already on it ("What the Spanish 2026 form created"). A form not
+   in `recruiting.forms` (the QR card, internal and referral forms) would be rejected with
+   "unknown form", so do not add it there.
 4. **Confirm it works.** Submit a test application on one form (your own name, a throwaway
    email, a small PDF as the resume). Within a few seconds it is on the tracker's Applications
    page in stage Applied with the resume in the drawer; the function's **Logs** show

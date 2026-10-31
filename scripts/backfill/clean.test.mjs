@@ -35,6 +35,9 @@ const forms = {
   en: { id: 1, jotform_form_id: "260115636145148", language: "en", default_location: null, questions: reference["260115636145148"].questions, field_map: fieldMaps[0] },
   es: { id: 2, jotform_form_id: "232824275836160", language: "es", default_location: null, questions: reference["232824275836160"].questions, field_map: fieldMaps[1] },
   cas: { id: 3, jotform_form_id: "232764918957171", language: "en", default_location: "CAS", questions: reference["232764918957171"].questions, field_map: fieldMaps[2] },
+  // The 2026 Spanish form is a clone of the English one (migration 20261110000100 copies the
+  // English field map), so it is the English map with language "es".
+  es2026: { id: 4, jotform_form_id: "263035461572051", language: "es", default_location: null, questions: reference["263035461572051"].questions, field_map: fieldMaps[0] },
 };
 const positions = [
   { id: "p-eug-maint", title: "Landscape Maintenance Crew Member", location: "Eugene/Springfield", jotform_option_label: "Landscape Maintenance Crew Member" },
@@ -208,6 +211,54 @@ test("Spanish submission: bilingual values, location alias, position keeps inner
   assert.equal(row.submitted_at, "2026-01-15T17:00:00.000Z");
   assert.equal(row.has_resume, false);
   assert.equal(files.length, 0);
+});
+
+test("Spanish 2026 submission: English field map, bilingual options, Eugene-Springfield, resume on 387", () => {
+  const sub = {
+    id: "6000000000000000006", form_id: "263035461572051", created_at: "2026-11-03 08:15:00", status: "ACTIVE",
+    answers: a({
+      9: { first: "Ana", middle: "", last: "Morales" },
+      22: "ana.m@example.com",
+      264: { full: "(541) 555-0106" },
+      263: { addr_line1: "2 Calle Mayor", city: "Springfield", state: "OR", postal: "97477" },
+      21: ["Phone/ Teléfono"],
+      342: "Eugene-Springfield",
+      340: "Landscape Maintenance Crew Member",
+      268: ["Indeed.com", "Other/ Otro"],
+      384: "Un amigo",
+      261: { month: "11", day: "10", year: "2026" },
+      344: "Associates Degree/ Título técnico (Associate)",
+      272: "Yes/ Sí", 274: "No",
+      386: "Yes/ Sí", 395: "No",
+      385: ["I am currently a student/ Actualmente soy estudiante"],
+      72: "Vivero Sol", 280: "Springfield, OR", 76: "Jardinera", 380: "Riego y poda", 348: "05/2025", 377: "10/2026", 352: "Fin de temporada",
+      387: ["https://www.jotform.com/uploads/rexius/263035461572051/6000000000000000006/6000000000000000006_cv.pdf"],
+      30: "B7654321", 31: { month: "6", day: "1", year: "2029" }, 35: "Clase C",
+      324: "AM", 369: "https://www.jotform.com/uploads/rexius/263035461572051/6000000000000000006/6000000000000000006_signature_369.png",
+    }),
+  };
+  const { row, files, warnings } = buildApplication(sub, forms.es2026, positions);
+  assert.deepEqual(warnings, []);
+  assert.equal(row.language, "es");
+  assert.equal(row.name, "Ana Morales");
+  assert.equal(row.city, "Springfield");
+  assert.equal(row.state, "OR");
+  assert.equal(row.location, "Eugene/Springfield", "Eugene-Springfield is normalised through the alias table");
+  assert.equal(row.position_text, "Landscape Maintenance Crew Member");
+  assert.equal(row.position_id, "p-eug-maint", "the English field map links the position");
+  assert.equal(row.source, "Indeed.com");
+  assert.equal(row.answers["344"], "Associates Degree");
+  assert.equal(row.answers["272"], "Yes");
+  assert.equal(row.answers["386"], "Yes");
+  assert.deepEqual(row.answers["21"], ["Phone"]);
+  assert.deepEqual(row.answers["385"], ["I am currently a student"]);
+  assert.equal(row.answers["35"], "Clase C");
+  assert.equal(row.answers["30"], undefined, "licence number never imported");
+  assert.equal(row.answers["324"], undefined, "initials never imported");
+  assert.equal(row.answers["263"], undefined, "street address never imported");
+  assert.equal(row.has_resume, true);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].kind, "resume");
 });
 
 test("CAS submission: free-text position, location CAS, resume on 381", () => {

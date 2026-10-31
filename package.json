@@ -16,7 +16,8 @@
     "backfill:test": "node --test scripts/backfill/clean.test.mjs scripts/backfill/download.test.mjs",
     "webhook:stub": "node scripts/webhook-test/stub-jotform.mjs",
     "purge:unmatched": "node scripts/purge-unmatched.mjs",
-    "pdf:samples": "node scripts/pdf-samples/render.mjs"
+    "pdf:samples": "node scripts/pdf-samples/render.mjs",
+    "jotform:spanish-form": "node scripts/jotform/clone-spanish-form.mjs"
   },
   "devDependencies": {
     "jspdf": "3.0.3",
