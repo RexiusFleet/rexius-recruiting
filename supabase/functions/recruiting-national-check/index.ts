@@ -34,6 +34,7 @@
 //   NATIONAL_CHECK_MODEL             optional; default claude-opus-5-5
 //   NATIONAL_CHECK_MAX_SEARCHES      optional; standard searches per run across both passes,
 //                                    default 15 (4-20). positions.national_max_searches overrides it.
+//                                    Pass 2 may also fetch up to 4 pages (web_fetch) to read a table.
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY   injected by Supabase
 
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
@@ -216,7 +217,7 @@ async function runCheck(db: Db, apiKey: string, model: string, checkId: string, 
   if (bls?.area_name) metros.push(bls.area_name);
   let col: Col | null = null, summary2 = "";
   try {
-    const text = await ask(client, model, SYSTEM_PASS2, pass2Prompt(area.label, metros), pass2Searches, usage, sources, area.city);
+    const text = await ask(client, model, SYSTEM_PASS2, pass2Prompt(area.label, metros), pass2Searches, usage, sources, area.city, 4);
     const parsed = parsePass2(text, area.label);
     if (!parsed) { await save({ error: "Claude's cost-of-living answer was not the expected JSON; the first pass is kept." }, true); return; }
     col = parsed.col; summary2 = parsed.summary;
@@ -234,11 +235,16 @@ async function runCheck(db: Db, apiKey: string, model: string, checkId: string, 
 }
 
 /** One web-search conversation; resumes pause_turn; returns the final text. */
-async function ask(client: Anthropic, model: string, system: string, prompt: string, maxUses: number, usage: Usage, sources: Map<string, Source>, city: string): Promise<string> {
-  const tools = [{
-    type: "web_search_20260209" as const, name: "web_search" as const, max_uses: maxUses,
-    user_location: { type: "approximate" as const, city, region: "Oregon", country: "US", timezone: "America/Los_Angeles" },
-  }];
+async function ask(client: Anthropic, model: string, system: string, prompt: string, maxUses: number, usage: Usage, sources: Map<string, Source>, city: string, fetchUses = 0): Promise<string> {
+  // Search returns snippets; a table of index values needs the page itself, so the
+  // cost-of-living pass may also fetch a few of the pages its searches turned up.
+  const tools = [
+    {
+      type: "web_search_20260209" as const, name: "web_search" as const, max_uses: maxUses,
+      user_location: { type: "approximate" as const, city, region: "Oregon", country: "US", timezone: "America/Los_Angeles" },
+    },
+    ...(fetchUses > 0 ? [{ type: "web_fetch_20260209" as const, name: "web_fetch" as const, max_uses: fetchUses, max_content_tokens: 60000 }] : []),
+  ];
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
   let response = await client.messages.create({ model, max_tokens: 8000, system, messages, tools, output_config: { effort: "medium" } });
   collect(response, usage, sources);
@@ -291,7 +297,7 @@ JSON shape:
 
 const SYSTEM_PASS2 = `${COMMON}
 
-This pass is about cost of living. Use the web_search tool to find ONE page that lists a published cost-of-living index (100 = United States average) for many metro areas at once, and read every metro you need from that one page: the U.S. Bureau of Economic Analysis "Regional Price Parities by metropolitan area" (all items) table is the preferred source, and a widely used cost-of-living index page that tabulates many cities is an acceptable fallback. Do not search for metros one at a time; a search or two to find the table and a search or two to read it is the whole job. Use the same source and the same year for every metro so the figures compare. If a place is not in that source, use its state's non-metropolitan value when the source gives one, else null; never mix sources.
+This pass is about cost of living. Use the web_search tool to find ONE page that lists a published cost-of-living index (100 = United States average) for many metro areas at once, then use the web_fetch tool to open that page and read every metro you need from it (search results only show snippets; the table rows are on the page). The U.S. Bureau of Economic Analysis "Regional Price Parities by metropolitan area" (all items) table is the preferred source; a widely used cost-of-living index page that tabulates many cities is an acceptable fallback, and a page you can fetch beats a PDF you cannot. Do not search for metros one at a time: a search or two to find the table, a fetch to read it, is the whole job. Use the same source and the same year for every metro so the figures compare. If a place is not in that source, use its state's non-metropolitan value when the source gives one, else null; never mix sources.
 
 JSON shape:
 {
