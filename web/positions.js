@@ -1,6 +1,8 @@
 /* Positions page (Phase 7). Lists and edits recruiting.positions, shows applicants per position
  * and a funnel, flags drift between open positions and the English form's dropdowns, manages
  * position aliases (so applications match), and, for staff, postings and channel spend.
+ * A position is the role, kept for good: each period it was open is an opening, and each change
+ * of the advertised range is logged in its pay history (both written by database triggers).
  * Managers get the same page read-only (no spend; RLS returns nothing for them anyway).
  * Data: positions and applications come from app.js (window.RR); aliases, postings, spend and
  * the document list are loaded here on first show.
@@ -214,7 +216,10 @@
       tr.appendChild(el("td", "col-dept", p.department || "—"));
       tr.appendChild(el("td", "col-mgr", p.hiring_manager || "—"));
       tr.appendChild(el("td", "col-pay", fmtPay(p) || "—"));
-      var tdO = el("td", "col-open date", p.opened_at ? RR.fmtDay(p.opened_at) : "—"); if (p.closed_at) tdO.title = "Closed " + RR.fmtDay(p.closed_at); tr.appendChild(tdO);
+      var lo = p.lastOpening;
+      var tdO = el("td", "col-open date", lo ? RR.fmtDay(lo.opened_at) : "—");
+      if (lo) tdO.title = (lo.closed_at ? "Closed " + RR.fmtDay(lo.closed_at) : "Open now") + (p.openings.length > 1 ? " · " + p.openings.length + " openings" : "");
+      tr.appendChild(tdO);
       var tdN = el("td", "num", s ? s.count.toLocaleString() : "0"); if (s && s.last) tdN.title = "Latest " + RR.fmtDate(s.last); tr.appendChild(tdN);
       var tdF = el("td", "col-funnel"); tdF.appendChild(funnelCells(s)); tr.appendChild(tdF);
       tr.addEventListener("click", function () { openPosition(p.id); });
@@ -309,12 +314,15 @@
       else {
         var dl = el("dl", "kv");
         RR.kv(dl, "Department", p.department); RR.kv(dl, "Hiring manager", p.hiring_manager); RR.kv(dl, "Pay range", fmtPay(p));
-        RR.kv(dl, "Opened", p.opened_at ? RR.fmtDay(p.opened_at) : ""); RR.kv(dl, "Closed", p.closed_at ? RR.fmtDay(p.closed_at) : "");
         RR.kv(dl, "Form label", p.jotform_option_label);
-        var fb = st.appById[p.filled_by_application_id]; if (fb) RR.kv(dl, "Filled by", fb.name);
         var d = docById(p.description_doc_id); if (d) { RR.kv(dl, "Description", d.title); }
         sec.appendChild(dl);
       }
+      // Openings and pay history: the position's record across seasons
+      sec = RR.section(body, "Openings");
+      renderOpenings(sec, p);
+      sec = RR.section(body, "Pay history");
+      renderPayHistory(sec, p);
       // Funnel
       sec = RR.section(body, "Funnel (furthest stage reached)");
       sec.appendChild(funnelBars(stats));
@@ -358,6 +366,7 @@
     var dl = el("datalist"); dl.id = "posLocList"; locations().forEach(function (l) { var o = el("option"); o.value = l; dl.appendChild(o); }); ll.appendChild(loc); ll.appendChild(dl); f.location = loc; r1.appendChild(ll);
     r1.appendChild(select("Status", "status", [["draft", "Draft"], ["open", "Open"], ["closed", "Closed"]]));
     form.appendChild(r1);
+    form.appendChild(el("div", "hint", "Open starts an opening and Closed ends it; the position keeps its applicants, postings, pay and market history from one season to the next. Correct the dates under Openings."));
     var r2 = el("div", "row");
     r2.appendChild(field("Department", "department"));
     r2.appendChild(field("Hiring manager", "hiring_manager"));
@@ -367,21 +376,16 @@
     r3.appendChild(field("Pay to", "pay_max", "number", { step: "0.01", min: "0" }));
     r3.appendChild(select("Per", "pay_unit", [["hour", "Hour"], ["year", "Year"]], true));
     form.appendChild(r3);
-    form.appendChild(el("div", "hint", "The advertised range only. An individual's wage is never stored here or anywhere in the app."));
-    var r4 = el("div", "row");
-    r4.appendChild(field("Opened", "opened_at", "date"));
-    r4.appendChild(field("Closed", "closed_at", "date"));
-    form.appendChild(r4);
+    form.appendChild(el("div", "hint", "The advertised range only. An individual's wage is never stored here or anywhere in the app. Every change is kept in the pay history."));
+    // Why the range changed: shown once a pay field differs from what is saved, and written to
+    // the pay history row the database adds for this save.
+    var payNote = field("Why the pay changed (optional)", "pay_note", "text", { placeholder: "For example: raised to fill spring crews" });
+    payNote.hidden = true; form.appendChild(payNote);
+    function payOf(src) { return [src.pay_min == null || src.pay_min === "" ? null : Number(src.pay_min), src.pay_max == null || src.pay_max === "" ? null : Number(src.pay_max), src.pay_unit || null].join("|"); }
+    var savedPay = payOf(p);
+    function currentPay() { return payOf({ pay_min: f.pay_min.value, pay_max: f.pay_max.value, pay_unit: f.pay_unit.value }); }
+    [f.pay_min, f.pay_max, f.pay_unit].forEach(function (i) { i.addEventListener(i.tagName === "SELECT" ? "change" : "input", function () { payNote.hidden = currentPay() === savedPay; }); });
     form.appendChild(field("Label in the form's dropdown", "jotform_option_label", "text", { placeholder: "Exact option text on the English form (blank: use the title)" }));
-    if (!isNew) {
-      // Filled by: applications linked to this position, furthest stage first.
-      var linked = st.apps.filter(function (a) { return a.positionId === p.id; }).sort(function (a, b) { return b.furthestSort - a.furthestSort || b.when - a.when; }).slice(0, 200);
-      var lf = el("label", null, "Filled by"); var fb = el("select");
-      var o0 = el("option", null, "—"); o0.value = ""; fb.appendChild(o0);
-      if (p.filled_by_application_id && !linked.some(function (a) { return a.id === p.filled_by_application_id; })) { var cur = st.appById[p.filled_by_application_id]; var oc = el("option", null, cur ? cur.name : "(application)"); oc.value = p.filled_by_application_id; oc.selected = true; fb.appendChild(oc); }
-      linked.forEach(function (a) { var o = el("option", null, a.name + " · " + RR.fmtDate(a.when) + " · " + RR.stageName(a.stageId)); o.value = a.id; if (a.id === p.filled_by_application_id) o.selected = true; fb.appendChild(o); });
-      lf.appendChild(fb); f.filled_by_application_id = fb; form.appendChild(lf);
-    }
     var ld = el("label", null, "Job description (document library)"); var ds = el("select");
     var od = el("option", null, "—"); od.value = ""; ds.appendChild(od);
     docs.filter(function (d) { return d.kind === "description" || d.id === p.description_doc_id; }).forEach(function (d) { var o = el("option", null, d.title); o.value = d.id; if (d.id === p.description_doc_id) o.selected = true; ds.appendChild(o); });
@@ -393,7 +397,8 @@
       var del = el("button", "link", "Delete position"); del.type = "button";
       del.addEventListener("click", async function () {
         var n = st.apps.filter(function (a) { return a.positionId === p.id; }).length;
-        if (!confirm("Delete “" + p.title + "” (" + p.location + ")? " + (n ? n + " applications lose their link (they are not deleted). " : "") + "Postings, spend and aliases for it are removed.")) return;
+        if (!confirm("Delete “" + p.title + "” (" + p.location + ") for good? " + (n ? n + " applications lose their link (they are not deleted). " : "") +
+          "Its openings, pay history, market and national checks, postings, spend and aliases are deleted with it.\n\nTo take it off the list until next season, set it to Closed instead.")) return;
         var r = await sb.from("positions").delete().eq("id", p.id);
         if (r.error) { RR.notice("Could not delete: " + RR.errText(r.error)); return; }
         RR.closeDrawer(); await afterPositionChange(true);
@@ -407,19 +412,21 @@
         title: f.title.value.trim(), location: f.location.value.trim(), status: f.status.value,
         department: f.department.value.trim() || null, hiring_manager: f.hiring_manager.value.trim() || null,
         pay_min: f.pay_min.value === "" ? null : Number(f.pay_min.value), pay_max: f.pay_max.value === "" ? null : Number(f.pay_max.value), pay_unit: f.pay_unit.value || null,
-        opened_at: f.opened_at.value || null, closed_at: f.closed_at.value || null,
         jotform_option_label: f.jotform_option_label.value.trim() || null,
         description_doc_id: f.description_doc_id.value || null
       };
-      if (f.filled_by_application_id) payload.filled_by_application_id = f.filled_by_application_id.value || null;
-      if (payload.status === "open" && !payload.opened_at && isNew) payload.opened_at = RR.ymd(new Date());
-      if (!isNew && payload.status === "closed" && p.status !== "closed" && !payload.closed_at) payload.closed_at = RR.ymd(new Date());
+      var note = currentPay() !== savedPay ? f.pay_note.value.trim() : "";
       save.disabled = true; status.textContent = "Saving…";
       var r = isNew ? await sb.from("positions").insert(payload).select("id").single() : await sb.from("positions").update(payload).eq("id", p.id).select("id").single();
       save.disabled = false;
       if (r.error) { status.textContent = ""; RR.notice("Could not save the position: " + RR.errText(r.error)); return; }
       status.textContent = "Saved";
       var id = r.data.id;
+      if (note) {
+        var h = await sb.from("position_pay_history").select("id").eq("position_id", id).order("id", { ascending: false }).limit(1);
+        var hr = h.data && h.data[0] ? await sb.from("position_pay_history").update({ note: note }).eq("id", h.data[0].id) : h;
+        if (hr.error) RR.notice("The position was saved, but the pay note was not: " + RR.errText(hr.error));
+      }
       await afterPositionChange(isNew || payload.jotform_option_label !== p.jotform_option_label || payload.title !== p.title);
       openPosition(id);
     });
@@ -590,6 +597,136 @@
     [ps, pe, sp, vw, ap, btn].forEach(function (x) { row.appendChild(x); });
     box.appendChild(row);
     return box;
+  }
+
+  // ---------- Openings ----------
+  // One row per period the position was open, written by a trigger when the status changes.
+  // Applications count towards the opening they were submitted in, up to the day the position
+  // next opened, and hires are those applicants who reached Hired (as in report_time_to_fill).
+  // Staff can correct the dates and add a note; the current opening is closed by closing the
+  // position, and the database refuses overlapping openings.
+  function daysBetween(fromYmd, toYmd) {
+    var a = /^(\d{4})-(\d{2})-(\d{2})/.exec(fromYmd), b = /^(\d{4})-(\d{2})-(\d{2})/.exec(toYmd);
+    return Math.round((Date.UTC(+b[1], +b[2] - 1, +b[3]) - Date.UTC(+a[1], +a[2] - 1, +a[3])) / 86400000);
+  }
+  function openingStats(p) {
+    var st = RR.state();
+    var hired = st.stages.filter(function (s) { return s.is_hired; })[0];
+    var asc = p.openings.slice().reverse(), out = {};
+    asc.forEach(function (o) { out[o.id] = { applicants: 0, hires: 0 }; });
+    st.apps.forEach(function (a) {
+      if (a.positionId !== p.id) return;
+      for (var i = asc.length - 1; i >= 0; i--) {
+        if (a.dateKey >= asc[i].opened_at) { var s = out[asc[i].id]; s.applicants++; if (hired && a.furthestSort >= hired.sort_order) s.hires++; return; }
+      }
+    });
+    return out;
+  }
+  function renderOpenings(sec, p) {
+    var st = RR.state();
+    sec.querySelectorAll(".openings").forEach(function (n) { n.remove(); });
+    var box = el("div", "openings"); sec.appendChild(box);
+    if (!p.openings.length) {
+      box.appendChild(el("div", "hint", p.status === "draft" ? "A draft. Setting the status to Open starts its first opening."
+        : p.status === "open" ? "No opening recorded." : "Not open since the tracker started recording openings. Setting the status to Open starts one."));
+      return;
+    }
+    var stats = openingStats(p), today = RR.ymd(new Date());
+    var tbl = el("table", "mini");
+    var thead = el("thead"), trh = el("tr");
+    ["Opened", "Closed", "Days", "Applicants", "Hired", ""].forEach(function (h, i) { trh.appendChild(el("th", i >= 2 && i <= 4 ? "num" : null, h)); });
+    thead.appendChild(trh); tbl.appendChild(thead);
+    var tbody = el("tbody");
+    p.openings.forEach(function (o) {
+      var tr = el("tr"), s = stats[o.id];
+      tr.appendChild(el("td", null, RR.fmtDay(o.opened_at)));
+      tr.appendChild(el("td", null, o.closed_at ? RR.fmtDay(o.closed_at) : "Open now"));
+      tr.appendChild(el("td", "num", o.closed_at ? String(daysBetween(o.opened_at, o.closed_at)) : daysBetween(o.opened_at, today) + " so far"));
+      tr.appendChild(el("td", "num", s.applicants.toLocaleString()));
+      tr.appendChild(el("td", "num", s.hires.toLocaleString()));
+      var td = el("td");
+      if (st.staff) td.appendChild(linkBtn("Edit", function () { editOpening(sec, p, o); }));
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      if (o.note) { var trn = el("tr"); var tdn = el("td", "meta", o.note); tdn.colSpan = 6; trn.appendChild(tdn); tbody.appendChild(trn); }
+    });
+    tbl.appendChild(tbody); box.appendChild(tbl);
+    box.appendChild(el("div", "hint", "Setting the position to Open starts an opening and Closed ends it. Applicants count towards the opening they applied in, up to the day the position next opened."));
+  }
+  function editOpening(sec, p, o) {
+    sec.querySelectorAll(".opening-edit").forEach(function (n) { n.remove(); });
+    var form = el("form", "review opening-edit");
+    form.appendChild(el("div", "q", "Correct the opening from " + RR.fmtDay(o.opened_at)));
+    var row = el("div", "row");
+    var lo = el("label", null, "Opened"); var io = el("input"); io.type = "date"; io.required = true; io.value = o.opened_at; lo.appendChild(io); row.appendChild(lo);
+    var lc = el("label", null, "Closed"); var ic = el("input"); ic.type = "date"; ic.value = o.closed_at || "";
+    if (!o.closed_at) { ic.disabled = true; ic.title = "Set the position to Closed to end the current opening."; }
+    lc.appendChild(ic); row.appendChild(lc);
+    form.appendChild(row);
+    var ln = el("label", null, "Note"); var inote = el("input"); inote.type = "text"; inote.value = o.note || ""; inote.placeholder = "For example: spring crews, or the Bend contract"; ln.appendChild(inote); form.appendChild(ln);
+    var btns = el("div", "row");
+    var save = el("button", "btn small primary", "Save"); save.type = "submit"; btns.appendChild(save);
+    btns.appendChild(linkBtn("Cancel", function () { form.remove(); }));
+    form.appendChild(btns);
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var patch = { opened_at: io.value, note: inote.value.trim() || null };
+      if (o.closed_at) { if (!ic.value) { RR.notice("A past opening needs a closing date."); return; } patch.closed_at = ic.value; }
+      save.disabled = true;
+      var r = await sb.from("position_openings").update(patch).eq("id", o.id);
+      save.disabled = false;
+      if (r.error) { RR.notice("Could not save the opening: " + RR.errText(r.error)); return; }
+      await RR.reloadPositions(); renderAll();
+      if (openId === p.id) openPosition(p.id);
+    });
+    sec.appendChild(form);
+    io.focus();
+  }
+
+  // ---------- Pay history ----------
+  // An append-only log of the advertised range, written by a trigger on every change of Pay
+  // from, Pay to or Per. Only the note saying why can be added or edited.
+  async function renderPayHistory(sec, p) {
+    var st = RR.state();
+    sec.querySelectorAll(".pay-history").forEach(function (n) { n.remove(); });
+    var box = el("div", "pay-history"); sec.appendChild(box);
+    box.appendChild(el("div", "hint", "Loading…"));
+    var r = await sb.from("position_pay_history").select("id, pay_min, pay_max, pay_unit, note, changed_by, changed_at").eq("position_id", p.id).order("id", { ascending: false });
+    if (openId !== p.id || !box.isConnected) return;
+    box.innerHTML = "";
+    if (r.error) { box.appendChild(el("div", "hint", "Could not load the pay history: " + RR.errText(r.error))); return; }
+    var rows = r.data || [];
+    if (!rows.length) { box.appendChild(el("div", "hint", "No advertised range yet. Every change to the range is recorded here.")); return; }
+    var ul = el("ul", "log");
+    rows.forEach(function (h, i) {
+      var li = el("li"), prev = rows[i + 1];
+      li.appendChild(el("b", null, fmtPay(h) || "Range removed"));
+      if (prev) li.appendChild(document.createTextNode(" (was " + (fmtPay(prev) || "no range") + ")"));
+      var who = h.changed_by ? (st.profileNames[h.changed_by] || "a removed user") : null;
+      li.appendChild(el("div", "when", RR.fmtDateTime(new Date(h.changed_at)) + (who ? " · " + who : "")));
+      if (h.note) li.appendChild(el("div", null, h.note));
+      if (st.staff) li.appendChild(linkBtn(h.note ? "Edit note" : "Add a note", function () { editPayNote(sec, li, p, h); }));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  function editPayNote(sec, li, p, h) {
+    var form = el("form", "row");
+    var input = el("input"); input.type = "text"; input.value = h.note || ""; input.placeholder = "Why the range changed"; input.setAttribute("aria-label", "Note");
+    form.appendChild(input);
+    var save = el("button", "btn small", "Save"); save.type = "submit"; form.appendChild(save);
+    form.appendChild(linkBtn("Cancel", function () { renderPayHistory(sec, p); }));
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      save.disabled = true;
+      var r = await sb.from("position_pay_history").update({ note: input.value.trim() || null }).eq("id", h.id);
+      save.disabled = false;
+      if (r.error) { RR.notice("Could not save the note: " + RR.errText(r.error)); return; }
+      renderPayHistory(sec, p);
+    });
+    li.querySelectorAll("button.link").forEach(function (b) { b.remove(); });
+    li.appendChild(form);
+    input.focus();
   }
 
   // ---------- Market check (Phase 9a) ----------

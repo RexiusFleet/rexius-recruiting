@@ -918,6 +918,62 @@ Switch-over, done on 2026-10-31 (kept for the record; the Spanish-speaker read i
    late submission through it is rejected rather than imported. Its submissions stay in Jotform
    as the archive.
 
+## What the reopenable-positions change created
+
+Until 2026-11-01 a position row was one opening: a role hired for again got a new row so time to
+fill stayed per opening. Seasonal and crew roles open and close several times a year, and a new
+row each time split their applicants, aliases, postings, market checks and pay across rows. Now a
+position is the role, kept for good, and HR switches it between Open and Closed as the seasons and
+contracts go (branch `claude/reopenable-positions`, migration
+`20261111000100_position_openings_and_pay_history.sql`):
+
+- **`position_openings`**: one row per period a position was open. A trigger on `positions`
+  starts one when the status becomes Open and ends it when the status leaves Open, stamping who
+  did it. Reopening on the day it closed carries on the same opening, so a mistaken close leaves no
+  gap. Staff can correct an opening's dates and add a note ("Spring crews", "Bend contract") under
+  **Openings** in the position drawer; the database refuses overlapping openings, a current
+  opening on a position that is not open, and closing the current opening by a date edit (close
+  the position instead). Openings cannot be added or deleted from the browser.
+- **`position_pay_history`**: an append-only log of the advertised range. A trigger adds a row
+  whenever Pay from, Pay to or Per changes, with who and when. The figures cannot be changed or
+  deleted from the browser; staff can add or edit the note saying why, either in the "Why the pay
+  changed" box that appears in the form when the range changes or later under **Pay history**.
+  Every position that had a range on the day the migration ran gets a first row dated then, with
+  the note "Range when pay history started; earlier changes were not recorded." This is the range
+  Rexius advertises for the role, never an individual's wage (CLAUDE.md section 5).
+- **Dropped from `positions`**: `opened_at`, `closed_at` (the openings carry the dates) and
+  `filled_by_application_id` (unused; a crew role hires several people a season, and hires come
+  from applications reaching Hired). The Opened and Closed date fields and the Filled by picker
+  are gone from the form; the list's Opened column shows the latest opening.
+- **`report_time_to_fill`** is rebuilt with one row per opening ("Time to fill per opening" on
+  the Reports page). An application counts towards the opening it was submitted in, up to the day
+  the position next opened, so late applicants after a close still count; hires are those
+  applicants who reached Hired, whenever that was. The view carries no pay columns, like every
+  report view (`scripts/test-policies.sql` checks this).
+- **Everyone with a profile** reads openings and pay history, as they already read positions;
+  admin and hr correct dates and notes. Deleting a position deletes its openings and pay history
+  with it, and the delete confirmation now says so and points to Closed instead.
+- **Existing positions**: each open position gets a current opening from its Opened date, or else
+  from the earlier of the day it was added and the day its first linked application arrived. A
+  closed position with a Closed date gets one past opening ending then; closed positions with no
+  dates get none. On the hosted data (2026-11-01) that is 17 current openings starting between
+  2026-06-08 and 2026-10-25, one past opening, and 16 first pay-history rows.
+- **Policy checks**: 28 new checks for the two tables and the report; three stale expectations
+  were corrected in passing (four forms since the Spanish 2026 form, nine Time in stage rows since
+  the Archived stage).
+
+To record a season from before the tracker, an admin can insert a closed opening in the SQL
+editor (it bypasses the browser rules but not the overlap check):
+`insert into recruiting.position_openings (position_id, opened_at, closed_at, note) values ('<position id>', '2026-03-01', '2026-06-15', 'Spring crews');`
+
+**Deploying.** The migration drops the three columns that the current site still asks for, and
+the new site asks for the openings table, so apply and publish together:
+
+1. `npm run db:migrate` (applies `20261111000100` to the hosted project).
+2. Merge the pull request straight away; the Pages workflow publishes `web/` in a minute or two.
+   Between the two steps the live Positions page cannot load positions. Anyone with the tracker
+   open should reload once it is published.
+
 ---
 ## Manual steps in Supabase (do these in order)
 

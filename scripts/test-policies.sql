@@ -105,13 +105,13 @@ select pg_temp.check('manager: sees zero rows of referrals', (select count(*) fr
 select pg_temp.check('manager: sees zero rows of status_history', (select count(*) from recruiting.status_history) = 0);
 select pg_temp.check('manager: reads the curated view', (select count(*) from recruiting.applications_for_managers) = 5);
 select pg_temp.check('manager: view has stage and education', (select count(*) from recruiting.applications_for_managers where stage_name is not null and education is not null) = 5);
-select pg_temp.check('forms: licence number and expiry stay in never_import, class does not', (select count(*) from recruiting.forms where field_map -> 'never_import' ? '30' and field_map -> 'never_import' ? '31' and not field_map -> 'never_import' ? '35' and field_map ->> 'licence_class' = '35') = 3);
+select pg_temp.check('forms: licence number and expiry stay in never_import, class does not', (select count(*) from recruiting.forms where field_map -> 'never_import' ? '30' and field_map -> 'never_import' ? '31' and not field_map -> 'never_import' ? '35' and field_map ->> 'licence_class' = '35') = 4);
 select pg_temp.check('manager: view has licence_class', (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name = 'applications_for_managers' and column_name = 'licence_class') = 1);
 select pg_temp.check('manager: view has employment history', (select jsonb_array_length(employment_history) from recruiting.applications_for_managers where name = 'Priya Natarajan') = 1);
 select pg_temp.check('manager: reads stages', (select count(*) from recruiting.stages) = 9);
 select pg_temp.check('manager: reads positions (17 seeded open + 10 past roles from Phase 7)', (select count(*) from recruiting.positions) = 27);
 select pg_temp.check('manager: reads postings', (select count(*) from recruiting.postings) = 1);
-select pg_temp.check('manager: reads forms', (select count(*) from recruiting.forms) = 3);
+select pg_temp.check('manager: reads forms (three 2026 forms and the 2025 Spanish archive)', (select count(*) from recruiting.forms) = 4);
 select pg_temp.check('manager: reads profiles', (select count(*) from recruiting.profiles) = 3);
 insert into recruiting.manager_feedback (application_id, manager_user_id, verdict, note)
   select a.id, '33333333-3333-3333-3333-333333333333', 'interested', 'Please schedule.' from recruiting.applications_for_managers a where a.name = 'Priya Natarajan';
@@ -467,7 +467,7 @@ select pg_temp.check('schema: eight report_* views, all security_barrier',
    where v.schemaname = 'recruiting' and v.viewname like 'report\_%' and c.reloptions::text like '%security_barrier=true%') = 8);
 select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
 select pg_temp.check('hr: source/stage report counts every seeded application', (select sum(applications) from recruiting.report_applications_by_source_stage) = 5);
-select pg_temp.check('hr: time in stage has a row per stage', (select count(*) from recruiting.report_time_in_stage) = 8);
+select pg_temp.check('hr: time in stage has a row per stage (eight plus Archived)', (select count(*) from recruiting.report_time_in_stage) = 9);
 select pg_temp.check('hr: spend by channel by month shows the seeded month', (select spend from recruiting.report_spend_by_channel_month where channel = 'indeed') = 240.00);
 select pg_temp.check('hr: funnel counts Priya as reaching Interview',
   (select applications from recruiting.report_position_funnel f join recruiting.positions p on p.id = f.position_id where p.title = 'Irrigation Service Technician' and f.stage_name = 'Interview' and f.source = 'Rexius.com') = 1);
@@ -475,7 +475,7 @@ select pg_temp.check('hr: funnel never lists Not selected or Withdrawn', (select
 select pg_temp.check('hr: cost by channel has one row per channel', (select count(*) from recruiting.report_cost_by_channel) = 6);
 select pg_temp.check('hr: cost per applicant on indeed = 240 / 2', (select cost_per_applicant from recruiting.report_cost_by_channel where channel = 'indeed') = 120.00);
 select pg_temp.check('hr: offer acceptance is empty on the seed', (select count(*) from recruiting.report_offer_acceptance) = 0);
-select pg_temp.check('hr: time to fill lists every position', (select count(*) from recruiting.report_time_to_fill) = 27);
+select pg_temp.check('hr: time to fill has a row per opening (17 current + 1 past season in the seed)', (select count(*) from recruiting.report_time_to_fill) = 18);
 select pg_temp.check('hr: seasonality totals the seed', (select sum(applications) from recruiting.report_seasonality) = 5);
 select pg_temp.check('hr: no report column carries notes, answers or pay',
   (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name like 'report\_%' and column_name in ('notes', 'answers', 'pay_min', 'pay_max', 'tags', 'email', 'phone')) = 0);
@@ -734,4 +734,147 @@ update recruiting.applications set has_resume = true where files_purged_at is no
 select pg_temp.check('retention: has_resume stays false once files are purged', (select count(*) from recruiting.applications where files_purged_at is not null and has_resume) = 0);
 select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
 select pg_temp.check('retention: manager view exposes files_purged_at', (select count(*) from recruiting.applications_for_managers where files_purged_at is not null) >= 1);
+rollback;
+
+-- ----- Reopenable positions and pay history (20261111000100) ----------------------------------
+-- Today in Oregon, as the triggers see it.
+create or replace function pg_temp.today() returns date language sql as $$ select (now() at time zone 'America/Los_Angeles')::date $$;
+create or replace function pg_temp.seasonal() returns uuid language sql as $$ select id from recruiting.positions where title = 'Seasonal test' $$;
+
+begin;
+select pg_temp.check('openings: every open position has one current opening, and no other position has one',
+  (select count(*) from recruiting.positions where status = 'open') =
+  (select count(*) from recruiting.position_openings o join recruiting.positions p on p.id = o.position_id where o.closed_at is null and p.status = 'open')
+  and not exists (select 1 from recruiting.position_openings o join recruiting.positions p on p.id = o.position_id where o.closed_at is null and p.status <> 'open'));
+select pg_temp.check('positions: opened_at, closed_at and filled_by_application_id are gone',
+  (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name = 'positions' and column_name in ('opened_at', 'closed_at', 'filled_by_application_id')) = 0);
+select pg_temp.check('openings: the trigger helpers are not callable by app users',
+  not has_function_privilege('authenticated', 'recruiting.track_position_openings()', 'execute')
+  and not has_function_privilege('authenticated', 'recruiting.log_position_pay()', 'execute'));
+
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+insert into recruiting.positions (title, location, status, pay_min, pay_max, pay_unit) values ('Seasonal test', 'Bend', 'open', 18, 20, 'hour');
+select pg_temp.check('hr: a position added as open starts an opening today',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at is null and opened_at = pg_temp.today() and opened_by = '22222222-2222-2222-2222-222222222222') = 1);
+select pg_temp.check('hr: a new position''s range is logged',
+  (select count(*) from recruiting.position_pay_history where position_id = pg_temp.seasonal() and pay_min = 18 and pay_max = 20 and changed_by = '22222222-2222-2222-2222-222222222222') = 1);
+update recruiting.positions set status = 'closed' where id = pg_temp.seasonal();
+select pg_temp.check('hr: closing the position ends its opening today',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at = pg_temp.today() and closed_by = '22222222-2222-2222-2222-222222222222') = 1);
+update recruiting.positions set status = 'open' where id = pg_temp.seasonal();
+select pg_temp.check('hr: reopening on the day it closed carries on the same opening',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal()) = 1
+  and (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at is null and closed_by is null) = 1);
+-- Move that opening back a season, close it, correct its closing date, then reopen.
+update recruiting.position_openings set opened_at = pg_temp.today() - 200, note = 'Spring' where position_id = pg_temp.seasonal();
+update recruiting.positions set status = 'closed' where id = pg_temp.seasonal();
+update recruiting.position_openings set closed_at = pg_temp.today() - 100 where position_id = pg_temp.seasonal();
+select pg_temp.check('hr: can correct an opening''s dates and note',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and opened_at = pg_temp.today() - 200 and closed_at = pg_temp.today() - 100 and note = 'Spring') = 1);
+update recruiting.positions set status = 'open' where id = pg_temp.seasonal();
+select pg_temp.check('hr: reopening a later season starts a second opening',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal()) = 2
+  and (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at is null) = 1);
+savepoint sp;
+do $$ begin
+  update recruiting.position_openings set closed_at = pg_temp.today() where position_id = pg_temp.seasonal() and closed_at is null;
+  raise notice 'UNEXPECTED: the current opening was closed by a date edit';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('openings: the current opening is closed only by closing the position',
+  (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at is null) = 1);
+savepoint sp2;
+do $$ begin
+  update recruiting.position_openings set closed_at = pg_temp.today() where position_id = pg_temp.seasonal() and closed_at is not null;
+  raise notice 'UNEXPECTED: overlapping openings accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+select pg_temp.check('openings: openings of one position cannot overlap',
+  (select closed_at from recruiting.position_openings where position_id = pg_temp.seasonal() and closed_at is not null) = pg_temp.today() - 100);
+savepoint sp3;
+do $$ begin
+  insert into recruiting.position_openings (position_id, opened_at, closed_at) values (pg_temp.seasonal(), pg_temp.today() - 400, pg_temp.today() - 300);
+  raise notice 'UNEXPECTED: hr inserted an opening directly';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp3;
+savepoint sp4;
+do $$ begin
+  delete from recruiting.position_openings where position_id = pg_temp.seasonal();
+  raise notice 'UNEXPECTED: hr deleted an opening';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp4;
+savepoint sp5;
+do $$ begin
+  update recruiting.position_openings set position_id = (select id from recruiting.positions where title = 'Flatbed Truck Driver' limit 1) where position_id = pg_temp.seasonal();
+  raise notice 'UNEXPECTED: hr moved an opening to another position';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp5;
+select pg_temp.check('openings: hr cannot add, delete or move openings', (select count(*) from recruiting.position_openings where position_id = pg_temp.seasonal()) = 2);
+
+update recruiting.positions set pay_max = 21 where id = pg_temp.seasonal();
+update recruiting.positions set department = 'Maintenance' where id = pg_temp.seasonal();
+update recruiting.positions set pay_unit = 'hour' where id = pg_temp.seasonal();
+select pg_temp.check('pay: a range change is logged, other edits are not',
+  (select count(*) from recruiting.position_pay_history where position_id = pg_temp.seasonal()) = 2
+  and (select pay_max from recruiting.position_pay_history where position_id = pg_temp.seasonal() order by id desc limit 1) = 21);
+update recruiting.position_pay_history set note = 'Raised to fill spring crews' where id = (select max(id) from recruiting.position_pay_history where position_id = pg_temp.seasonal());
+select pg_temp.check('hr: can add a note to a pay change', (select count(*) from recruiting.position_pay_history where note = 'Raised to fill spring crews') = 1);
+savepoint sp6;
+do $$ begin
+  update recruiting.position_pay_history set pay_max = 30 where position_id = pg_temp.seasonal();
+  raise notice 'UNEXPECTED: hr rewrote a logged range';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp6;
+savepoint sp7;
+do $$ begin
+  delete from recruiting.position_pay_history where position_id = pg_temp.seasonal();
+  raise notice 'UNEXPECTED: hr deleted pay history';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp7;
+savepoint sp8;
+do $$ begin
+  insert into recruiting.position_pay_history (position_id, pay_min, pay_max, pay_unit) values (pg_temp.seasonal(), 1, 2, 'hour');
+  raise notice 'UNEXPECTED: hr inserted pay history directly';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp8;
+select pg_temp.check('pay: hr cannot add, rewrite or delete logged ranges',
+  (select count(*) from recruiting.position_pay_history where position_id = pg_temp.seasonal()) = 2
+  and (select max(pay_max) from recruiting.position_pay_history where position_id = pg_temp.seasonal()) = 21);
+select pg_temp.check('report: time to fill shows both seasons of the test position', (select count(*) from recruiting.report_time_to_fill where position_id = pg_temp.seasonal()) = 2);
+select pg_temp.check('report: the seeded crew application counts towards the current opening, not last spring',
+  (select string_agg(coalesce(closed_at::text, 'current') || ':' || applicants, ',' order by opened_at) from recruiting.report_time_to_fill where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield') = (pg_temp.today() - 120)::text || ':0,current:1');
+delete from recruiting.positions where id = pg_temp.seasonal();
+select pg_temp.check('hr: deleting a position deletes its openings and pay history',
+  not exists (select 1 from recruiting.position_openings o left join recruiting.positions p on p.id = o.position_id where p.id is null)
+  and not exists (select 1 from recruiting.position_pay_history h left join recruiting.positions p on p.id = h.position_id where p.id is null));
+rollback;
+
+begin;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: reads openings', (select count(*) from recruiting.position_openings) = 18);
+select pg_temp.check('manager: reads pay history', (select count(*) from recruiting.position_pay_history) = 2);
+update recruiting.position_openings set note = 'manager edit';
+select pg_temp.check('manager: cannot change an opening', (select count(*) from recruiting.position_openings where note = 'manager edit') = 0);
+update recruiting.position_pay_history set note = 'manager edit';
+select pg_temp.check('manager: cannot change a pay note', (select count(*) from recruiting.position_pay_history where note = 'manager edit') = 0);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: sees no openings or pay history', (select count(*) from recruiting.position_openings) + (select count(*) from recruiting.position_pay_history) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('hr at aal1: sees no openings or pay history', (select count(*) from recruiting.position_openings) + (select count(*) from recruiting.position_pay_history) = 0);
 rollback;
