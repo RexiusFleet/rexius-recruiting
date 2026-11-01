@@ -43,6 +43,7 @@
   // ---------- State ----------
   var session = null, profile = null, role = null, staff = false;
   var stages = [], stageById = {};
+  var archiveId = null;       // id of the stage with is_archive set; its applications are hidden from the list until asked for
   var forms = [], formById = {}, formByLabel = {};
   var positions = [], positionById = {};
   var profileNames = {};      // user_id -> name, for history and feedback
@@ -62,7 +63,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  function emptyFilters() { return { q: "", forms: {}, locs: {}, pos: {}, src: {}, stages: {}, from: "", to: "", resumeOnly: false, dupOnly: false }; }
+  function emptyFilters() { return { q: "", forms: {}, locs: {}, pos: {}, src: {}, stages: {}, from: "", to: "", resumeOnly: false, dupOnly: false, showArchived: false }; }
 
   // ---------- Text helpers ----------
   function toText(v) {
@@ -265,7 +266,7 @@
   }
   function resetData() {
     apps = []; appById = {}; selectedId = null; filters = emptyFilters(); shown = SHOW_STEP; lastLoaded = null;
-    $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…";
+    $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…"; $("showArchived").checked = false;
     // The next sign-in may be a different role: every page drops what it cached.
     Object.keys(pages).forEach(function (n) { if (pages[n].reset) pages[n].reset(); });
   }
@@ -324,7 +325,7 @@
   // ---------- Reference data ----------
   async function loadRefs() {
     var r = await Promise.all([
-      sb.from("stages").select("id, name, sort_order, is_terminal, is_hired").order("sort_order"),
+      sb.from("stages").select("id, name, sort_order, is_terminal, is_hired, is_archive").order("sort_order"),
       sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map"),
       sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, created_at, updated_at").order("location").order("title"),
       sb.from("profiles").select("user_id, name, role")
@@ -332,7 +333,8 @@
     var failed = r.filter(function (x) { return x.error; });
     if (failed.length) notice("Could not load reference data: " + errText(failed[0].error));
     stages = r[0].data || []; stageById = {};
-    stages.forEach(function (s, i) { s.index = i; stageById[s.id] = s; });
+    archiveId = null;
+    stages.forEach(function (s, i) { s.index = i; stageById[s.id] = s; if (s.is_archive) archiveId = s.id; });
     forms = r[1].data || []; formById = {}; formByLabel = {};
     forms.forEach(function (f) { f.short = shortFormLabel(f); formById[f.id] = f; formByLabel[f.label] = f; });
     positions = r[2].data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
@@ -449,18 +451,17 @@
   }
   function appsMeta() {
     if (!apps.length) return lastLoaded ? "No applications found." : "Loading…";
+    // Archived applications are not part of the working count; they get their own tail.
+    var live = apps.filter(function (a) { return !isArchived(a); }), archived = apps.length - live.length;
     var perForm = {};
-    apps.forEach(function (a) { perForm[a.form] = (perForm[a.form] || 0) + 1; });
+    live.forEach(function (a) { perForm[a.form] = (perForm[a.form] || 0) + 1; });
     var parts = Object.keys(perForm).sort(function (a, b) { return perForm[b] - perForm[a]; }).map(function (k) { return perForm[k].toLocaleString() + " " + k; }).join(", ");
-    return apps.length.toLocaleString() + " applications (" + parts + ") · updated " + (lastLoaded ? relTime(lastLoaded) : "—");
+    return live.length.toLocaleString() + " applications" + (parts ? " (" + parts + ")" : "") + (archived ? " · " + archived.toLocaleString() + " archived" : "") + " · updated " + (lastLoaded ? relTime(lastLoaded) : "—");
   }
   function updateMeta() {
     if (currentPage !== "applications") return;
     if (!apps.length) { $("meta").textContent = lastLoaded ? "No applications found." : $("meta").textContent; return; }
-    var perForm = {};
-    apps.forEach(function (a) { perForm[a.form] = (perForm[a.form] || 0) + 1; });
-    var parts = Object.keys(perForm).sort(function (a, b) { return perForm[b] - perForm[a]; }).map(function (k) { return perForm[k].toLocaleString() + " " + k; }).join(", ");
-    $("meta").textContent = apps.length.toLocaleString() + " applications (" + parts + ") · updated " + (lastLoaded ? relTime(lastLoaded) : "—");
+    $("meta").textContent = appsMeta();
   }
 
   // ---------- Writes (staff) ----------
@@ -509,10 +510,24 @@
     checkList($("f-src"), uniqCounts("source").slice(0, 25), filters.src);
   }
   function hasAny(o) { for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) return true; return false; }
-  function applyFilters() {
+  function isArchived(a) { return archiveId !== null && a.stageId === archiveId; }
+  // Archived applications stay out of the list, the pipeline bar and the CSV unless "Include
+  // archived" is ticked (or the Archived chip is picked, which ticks it).
+  function archivedHidden() { return archiveId !== null && !filters.showArchived; }
+  function setShowArchived(on) {
+    filters.showArchived = on;
+    if (!on && archiveId !== null) delete filters.stages[archiveId];
+    $("showArchived").checked = on;
+    shown = SHOW_STEP;
+  }
+  // withArchived: ignore the archive rule, so render() can say how many archived rows the other
+  // filters would have matched (a search for a name that only exists in Archived still gets a hint).
+  function applyFilters(withArchived) {
     var q = filters.q.trim().toLowerCase();
     var fF = hasAny(filters.forms), fL = hasAny(filters.locs), fP = hasAny(filters.pos), fS = hasAny(filters.src), fSt = hasAny(filters.stages);
+    var hide = !withArchived && archivedHidden();
     return apps.filter(function (a) {
+      if (hide && isArchived(a)) return false;
       if (q && a.search.indexOf(q) < 0) return false;
       if (fF && !filters.forms[a.form || "(blank)"]) return false;
       if (fL && !filters.locs[a.location || "(blank)"]) return false;
@@ -546,18 +561,30 @@
     var counts = {}; stages.forEach(function (s) { counts[s.id] = 0; });
     var other = 0;
     apps.forEach(function (a) { if (counts.hasOwnProperty(a.stageId)) counts[a.stageId]++; else other++; });
+    var hidden = archivedHidden();
+    // The bar shows what the list shows: archived rows would otherwise dwarf the live pipeline.
+    var barTotal = hidden ? apps.length - counts[archiveId] : apps.length;
     var bar = el("div", "bar");
-    stages.forEach(function (s) { var sp = el("span"); sp.style.width = (100 * counts[s.id] / apps.length) + "%"; sp.style.background = stageColor(s.id); sp.title = s.name + ": " + counts[s.id]; bar.appendChild(sp); });
+    stages.forEach(function (s) {
+      if (hidden && s.id === archiveId) return;
+      var sp = el("span"); sp.style.width = (barTotal ? 100 * counts[s.id] / barTotal : 0) + "%"; sp.style.background = stageColor(s.id); sp.title = s.name + ": " + counts[s.id]; bar.appendChild(sp);
+    });
     p.appendChild(bar);
     var chips = el("div", "chips");
     var any = hasAny(filters.stages);
     stages.forEach(function (s) {
-      var c = el("button", "chip" + (filters.stages[s.id] ? " on" : (any ? " off" : "")));
+      var tucked = hidden && s.id === archiveId;
+      var c = el("button", "chip" + (filters.stages[s.id] ? " on" : (any ? " off" : "")) + (tucked ? " tucked" : ""));
       c.type = "button";
+      if (tucked) c.title = "Hidden from the list. Click to show archived applications.";
       var d = el("span", "dot"); d.style.background = stageColor(s.id); c.appendChild(d);
       c.appendChild(el("span", null, s.name + " ")); c.appendChild(el("b", null, counts[s.id].toLocaleString()));
       c.setAttribute("aria-pressed", filters.stages[s.id] ? "true" : "false");
-      c.addEventListener("click", function () { if (filters.stages[s.id]) delete filters.stages[s.id]; else filters.stages[s.id] = true; shown = SHOW_STEP; render(); });
+      c.addEventListener("click", function () {
+        if (filters.stages[s.id]) delete filters.stages[s.id]; else filters.stages[s.id] = true;
+        if (s.id === archiveId && filters.stages[s.id]) setShowArchived(true); // picking Archived means "show me those"
+        shown = SHOW_STEP; render();
+      });
       chips.appendChild(c);
     });
     if (other) chips.appendChild(el("span", "chip", other + " in a stage that no longer exists"));
@@ -603,11 +630,28 @@
     var rows = sortRows(applyFilters());
     renderPipeline();
     var tbody = $("rows"); tbody.innerHTML = "";
-    var filtered = rows.length !== apps.length;
-    $("count").textContent = apps.length ? (filtered ? rows.length.toLocaleString() + " of " + apps.length.toLocaleString() + " applications match" : rows.length.toLocaleString() + " applications") : "";
+    var hidden = archivedHidden();
+    var archivedTotal = apps.filter(isArchived).length;
+    var base = hidden ? apps.length - archivedTotal : apps.length;       // what the list holds with no other filter
+    var hiddenMatches = hidden ? applyFilters(true).length - rows.length : 0; // archived rows the other filters would match
+    var filtered = rows.length !== base;
+    $("archivedN").textContent = archivedTotal ? String(archivedTotal) : "";
+    var count = $("count"); count.textContent = "";
+    if (apps.length) {
+      count.appendChild(document.createTextNode(filtered ? rows.length.toLocaleString() + " of " + base.toLocaleString() + " applications match" : rows.length.toLocaleString() + " applications"));
+      if (hiddenMatches) {
+        count.appendChild(document.createTextNode(" · " + hiddenMatches.toLocaleString() + " archived hidden "));
+        var showBtn = el("button", "link", "Show");
+        showBtn.type = "button";
+        showBtn.addEventListener("click", function () { setShowArchived(true); render(); });
+        count.appendChild(showBtn);
+      }
+    }
     $("table").hidden = !rows.length;
     $("empty").hidden = !!rows.length || !apps.length;
-    $("empty").textContent = filters.q || filtered ? "No applications match these filters. Clear a filter or widen the date range." : "No applications yet.";
+    var emptyText = filters.q || filtered ? "No applications match these filters. Clear a filter or widen the date range." : "No applications yet.";
+    if (hiddenMatches) emptyText = (base ? "No applications match these filters." : "Every application is archived.") + " " + hiddenMatches.toLocaleString() + " archived " + (hiddenMatches === 1 ? "application matches" : "applications match") + ". Tick “Include archived” to see " + (hiddenMatches === 1 ? "it" : "them") + ".";
+    $("empty").textContent = emptyText;
     var frag = document.createDocumentFragment();
     rows.slice(0, shown).forEach(function (a) {
       var tr = el("tr", a.id === selectedId ? "selected" : "");
@@ -1312,10 +1356,11 @@
   $("to").addEventListener("change", function () { filters.to = this.value; render(); });
   $("resumeOnly").addEventListener("change", function () { filters.resumeOnly = this.checked; render(); });
   $("dupOnly").addEventListener("change", function () { filters.dupOnly = this.checked; render(); });
+  $("showArchived").addEventListener("change", function () { setShowArchived(this.checked); render(); });
   $("sort").addEventListener("change", function () { var p = this.value.split(":"); sort = { key: p[0], dir: p[1] }; render(); });
   $("clearBtn").addEventListener("click", function () {
     filters = emptyFilters();
-    $("q").value = ""; $("from").value = ""; $("to").value = ""; $("resumeOnly").checked = false; $("dupOnly").checked = false;
+    $("q").value = ""; $("from").value = ""; $("to").value = ""; $("resumeOnly").checked = false; $("dupOnly").checked = false; $("showArchived").checked = false;
     buildFilterOptions(); shown = SHOW_STEP; render();
   });
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });
