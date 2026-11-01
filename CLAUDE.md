@@ -51,9 +51,9 @@ Three forms feed the app. Counts are as of 2026-10-23.
 | Form | Jotform form ID | Submissions | Notes |
 | --- | --- | --- | --- |
 | Employment Application 2026 (English) | `260115636145148` | 1,319 | Primary form; three position dropdowns, one per location |
-| Employment Application-ESP 2025 (Spanish) | `232824275836160` | 228 | Bilingual labels and values ("Yes/Si", "Indeed.com/"); no resume upload field. Being retired in favour of the ESP 2026 form below; stays as the archive |
+| Employment Application-ESP 2025 (Spanish) | `232824275836160` | 228 | Bilingual labels and values ("Yes/Si", "Indeed.com/"); no resume upload field. Retired 2026-10-31 (disabled in Jotform, `is_active = false`) in favour of the ESP 2026 form below; stays as the archive |
 | CAS Employment Application 2026 | `232764918957171` | 55 | Free-text position; no location question (store location as "CAS") |
-| Employment Application-ESP 2026 (Spanish) | `263035461572051` | 0 | Clone of the English 2026 form made 2026-10-31 by `scripts/jotform/clone-spanish-form.mjs`: same question IDs, conditions and field map; bilingual labels from `scripts/jotform/spanish-2026.translations.mjs`; location stored as "Eugene-Springfield". Replaces the ESP 2025 form once the careers page links to it (README "What the Spanish 2026 form created") |
+| Employment Application-ESP 2026 (Spanish) | `263035461572051` | 0 | Clone of the English 2026 form made 2026-10-31 by `scripts/jotform/clone-spanish-form.mjs`: same question IDs, conditions and field map; bilingual labels from `scripts/jotform/spanish-2026.translations.mjs`; location stored as "Eugene-Springfield". Live since 2026-10-31: migration applied, rexius.com careers pages link to it, ESP 2025 retired (README "What the Spanish 2026 form created") |
 
 Other forms exist in the account (Internal Employment Application 2026, Employment Application: QR Card, Employment Application 2025, Referral Application) and are out of scope unless the user says otherwise.
 
