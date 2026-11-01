@@ -332,11 +332,11 @@
       // Postings and spend
       sec = RR.section(body, "Postings" + (st.staff ? " and spend" : ""));
       renderPostings(sec, p);
-      // Market check (Phase 9a)
-      sec = RR.section(body, "Market check");
+      // Market check (Phase 9a), folded: the closed line shows the latest run
+      sec = foldSection(body, "Market check", "market", p.id);
       renderMarket(sec, p);
-      // National market check with cost-of-living adjustment
-      sec = RR.section(body, "National market check");
+      // National market check with cost-of-living adjustment, folded the same way
+      sec = foldSection(body, "National market check", "national", p.id);
       renderNational(sec, p);
       // Applicants
       sec = RR.section(body, "Applicants");
@@ -344,6 +344,32 @@
     });
   }
   function docById(id) { return docs.filter(function (d) { return d.id === id; })[0] || null; }
+
+  // Folded sections: the market and national checks are long, so they start closed with the
+  // latest run on the closed line. Whether one is open is kept while the same position stays in
+  // the drawer (a redraw after a save or a refresh keeps it) and forgotten for the next position.
+  var folds = { id: null, open: {} };
+  function foldSection(body, title, key, positionId) {
+    if (folds.id !== positionId) folds = { id: positionId, open: {} };
+    var sec = el("details", "sec fold"); sec.open = !!folds.open[key];
+    var sm = el("summary");
+    sm.appendChild(el("span", "fold-title", title));
+    sm.appendChild(el("span", "fold-meta", "Loading…"));
+    sec.appendChild(sm);
+    sec.addEventListener("toggle", function () { folds.open[key] = sec.open; });
+    body.appendChild(sec);
+    return sec;
+  }
+  // The closed line for the fold that holds `box`: the latest run, with a below-market flag kept
+  // visible so it is not hidden by the fold.
+  function setFoldMeta(box, latest, running, outcome) {
+    var sec = box.closest("details.fold"); if (!sec) return;
+    var m = sec.querySelector(".fold-meta"); m.textContent = "";
+    if (!latest) m.textContent = "Not run yet";
+    else if (running) m.textContent = "Running… started " + RR.relTime(new Date(latest.ran_at));
+    else m.textContent = "Last run " + RR.fmtDateTime(new Date(latest.ran_at)) + " · " + outcome;
+    if (latest && !running && latest.below_market) m.appendChild(el("span", "tag warn", "Below market"));
+  }
 
   function positionForm(p, isNew) {
     var st = RR.state();
@@ -778,6 +804,7 @@
     box.innerHTML = "";
     var latest = checks[0] || null;
     var running = latest && isRunning(latest);
+    setFoldMeta(box, latest, running, latest && runOutcome(latest, true));
     // Controls (staff): tracking toggle, cadence, Check now.
     if (st.staff) {
       var row = el("div", "row market-controls");
@@ -850,13 +877,14 @@
       box.appendChild(det);
     }
   }
-  function runOutcome(c) {
+  // noFlag: leave out "below market" (the fold's closed line shows it as a tag instead).
+  function runOutcome(c, noFlag) {
     if (isRunning(c)) return "running";
     if (c.error) return "failed";
     if (c.summary == null) return "did not finish";
     var n = (c.pay_ranges || []).length, m = (c.postings || []).length;
     var cmp = c.comparison;
-    return m + " posting" + (m === 1 ? "" : "s") + ", " + n + " with pay" + (cmp && cmp.market_low_median != null ? " · others " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : "") + (c.below_market ? " · below market" : "");
+    return m + " posting" + (m === 1 ? "" : "s") + ", " + n + " with pay" + (cmp && cmp.market_low_median != null ? " · others " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : "") + (c.below_market && !noFlag ? " · below market" : "");
   }
   function renderRun(c, p, isLatest) {
     var st = RR.state();
@@ -977,6 +1005,7 @@
     var st = RR.state();
     box.innerHTML = "";
     var latest = checks[0] || null, running = latest && isNationalRunning(latest);
+    setFoldMeta(box, latest, running, latest && nationalOutcome(latest, true));
     if (st.staff) {
       var row = el("div", "row market-controls");
       var depth = el("select"); depth.setAttribute("aria-label", "National search depth"); depth.title = "Web searches per run across both passes. About $1.50 a run at Standard, $2.50 at Deepest.";
@@ -1026,11 +1055,11 @@
       box.appendChild(det);
     }
   }
-  function nationalOutcome(c) {
+  function nationalOutcome(c, noFlag) {
     if (isNationalRunning(c)) return "running";
     if (c.error) return c.pass >= 1 ? "first pass only" : "failed";
     var cmp = c.comparison;
-    return (c.pay_samples || []).length + " postings" + (cmp && cmp.adjusted_low_median != null ? " · adjusted " + rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, cmp.unit) : "") + (c.below_market ? " · below market" : "");
+    return (c.pay_samples || []).length + " postings" + (cmp && cmp.adjusted_low_median != null ? " · adjusted " + rangeText(cmp.adjusted_low_median, cmp.adjusted_high_median, cmp.unit) : "") + (c.below_market && !noFlag ? " · below market" : "");
   }
   function renderNationalRun(c, p, isLatest) {
     var st = RR.state();
