@@ -62,21 +62,20 @@
         { key: "avg_days_to_respond", label: "Avg days to respond", num: true },
         { key: "last_offer", label: "Last offer", fmt: function (v) { return v ? RR.fmtDay(v) : ""; } }
       ] },
-    { key: "time-to-fill", title: "Time to fill per position", view: "report_time_to_fill",
-      desc: "Days from opening to the first hire, and days open, per position. Set opened and closed dates on the Positions page.",
+    { key: "time-to-fill", title: "Time to fill per opening", view: "report_time_to_fill",
+      desc: "One line per opening: a position that closes and reopens next season gets a new line. Applicants applied from the day it opened until it next opened; hires are those of them who reached Hired, whenever that was. Correct opening dates on the Positions page.",
       columns: [
         { key: "title", label: "Position", fmt: function (v, r) { return v + " · " + r.location; } },
-        { key: "status", label: "Status", fmt: function (v) { return STATUS_LABEL[v] || v; } },
         { key: "opened_at", label: "Opened", fmt: function (v) { return v ? RR.fmtDay(v) : ""; } },
-        { key: "closed_at", label: "Closed", fmt: function (v) { return v ? RR.fmtDay(v) : ""; } },
+        { key: "closed_at", label: "Closed", fmt: function (v) { return v ? RR.fmtDay(v) : "Open now"; } },
         { key: "applicants", label: "Applicants", num: true },
         { key: "hires", label: "Hires", num: true },
         { key: "days_to_first_hire", label: "Days to first hire", num: true, bar: true },
         { key: "days_open", label: "Days open", num: true },
         { key: "days_open_so_far", label: "Open so far (days)", num: true },
-        { key: "filled_by", label: "Filled by" }
+        { key: "note", label: "Note" }
       ],
-      sort: function (a, b) { return (b.applicants || 0) - (a.applicants || 0); } },
+      sort: function (a, b) { return String(b.opened_at).localeCompare(String(a.opened_at)) || a.title.localeCompare(b.title) || a.location.localeCompare(b.location); } },
     { key: "seasonality", title: "Seasonality", view: "report_seasonality",
       desc: "Applications per month by location. Spring is the peak; use it to time postings.",
       build: function (rows) { rows.forEach(function (r) { r.month_label = monthLabel(r.month); }); return pivot(rows, "month_label", "location", "applications", { rowLabel: "Month", totalBar: true, rowSortKey: function (r) { return r.month; }, desc: true }); } }

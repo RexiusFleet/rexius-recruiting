@@ -327,7 +327,7 @@
     var r = await Promise.all([
       sb.from("stages").select("id, name, sort_order, is_terminal, is_hired, is_archive").order("sort_order"),
       sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map"),
-      sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, created_at, updated_at").order("location").order("title"),
+      sb.from("positions").select(POSITION_COLUMNS).order("location").order("title"),
       sb.from("profiles").select("user_id, name, role")
     ]);
     var failed = r.filter(function (x) { return x.error; });
@@ -337,8 +337,21 @@
     stages.forEach(function (s, i) { s.index = i; stageById[s.id] = s; if (s.is_archive) archiveId = s.id; });
     forms = r[1].data || []; formById = {}; formByLabel = {};
     forms.forEach(function (f) { f.short = shortFormLabel(f); formById[f.id] = f; formByLabel[f.label] = f; });
-    positions = r[2].data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
+    setPositions(r[2].data || []);
     profileNames = {}; (r[3].data || []).forEach(function (p) { profileNames[p.user_id] = p.name; });
+  }
+
+  // A position is the role, kept for good; each period it was open is a position_openings row,
+  // embedded here newest first. lastOpening is the current one while the position is open.
+  var POSITION_COLUMNS = "id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, jotform_option_label, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, created_at, updated_at, " +
+    "openings:position_openings(id, opened_at, closed_at, note, opened_by, closed_by)";
+  function setPositions(rows) {
+    positions = rows; positionById = {};
+    positions.forEach(function (p) {
+      p.openings = (p.openings || []).sort(function (a, b) { return b.opened_at.localeCompare(a.opened_at); });
+      p.lastOpening = p.openings[0] || null;
+      positionById[p.id] = p;
+    });
   }
 
   // ---------- Applications ----------
@@ -1386,9 +1399,9 @@
     state: function () { return { session: session, profile: profile, role: role, staff: staff, stages: stages, stageById: stageById, forms: forms, formById: formById, positions: positions, positionById: positionById, profileNames: profileNames, apps: apps, appById: appById, lastLoaded: lastLoaded }; },
     // Re-read positions (after an edit on the Positions page) and refresh the applications' matched titles.
     reloadPositions: async function () {
-      var r = await sb.from("positions").select("id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, opened_at, closed_at, jotform_option_label, filled_by_application_id, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, created_at, updated_at").order("location").order("title");
+      var r = await sb.from("positions").select(POSITION_COLUMNS).order("location").order("title");
       if (r.error) { notice("Could not reload positions: " + errText(r.error)); return positions; }
-      positions = r.data || []; positionById = {}; positions.forEach(function (p) { positionById[p.id] = p; });
+      setPositions(r.data || []);
       apps.forEach(function (a) { var p = positionById[a.positionId]; a.positionTitle = p ? p.title : ""; });
       return positions;
     },

@@ -161,3 +161,20 @@ select id, now() - interval '2 days', now() - interval '2 days' + interval '3 mi
   '[{"url":"https://example.com/n/1","title":"Landscape Crew Member - Example National Grounds","age":null},{"url":"https://www.bls.gov/oes/current/oes373011.htm","title":"Landscaping and Groundskeeping Workers","age":null}]',
   61000, 5200, 12, 'claude-opus-5-5'
 from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+
+-- Openings (20261111000100): the migration opened every open position on the day it ran, which
+-- is after the applications above, so start them 45 days back. The maintenance crew also gets a
+-- past spring season, and a range of $17–$20 that was then raised, so the position page shows
+-- the history.
+update recruiting.position_openings set opened_at = current_date - 45 where closed_at is null;
+
+insert into recruiting.position_openings (position_id, opened_at, closed_at, note)
+select id, current_date - 230, current_date - 120, 'Spring crews'
+from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+
+update recruiting.positions set pay_min = 17, pay_max = 20, pay_unit = 'hour'
+where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+update recruiting.positions set pay_min = 18, pay_max = 21
+where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+update recruiting.position_pay_history set note = 'Raised $1 to fill fall crews'
+where id = (select max(id) from recruiting.position_pay_history);
