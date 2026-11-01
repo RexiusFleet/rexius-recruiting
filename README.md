@@ -296,6 +296,30 @@ Applied to the hosted project through the CLI's Management API route (`npx supab
 --linked -f <file>`, then the `schema_migrations` row by hand), since the `.env` database
 connection does not work for a Developer.
 
+## What the archived-view change created
+
+Archived applications no longer sit in the default list (2026-10-31). Frontend only: no
+migration, nothing to run on the hosted project.
+
+- The **Applicants list, the pipeline bar and Export CSV** leave out the stage flagged
+  `is_archive` until someone asks for it. Two ways to ask: tick **Include archived** (under
+  "Other" in the filter rail, with the archived count beside it), or click the **Archived** chip,
+  which ticks it. Unticking the box while the Archived chip is selected drops the chip too, and
+  **Clear filters** hides archived again.
+- The Archived chip stays in the strip with its count (dashed while hidden) so there is always a
+  visible way in. The header line reads "128 applications (…) · 3 archived"; the line above the
+  table says "· 3 archived hidden Show" and counts the archived rows the *current* filters would
+  match, so a search for someone who only exists in Archived says so instead of coming back empty.
+- What is **not** changed: duplicate detection ("Applied more than once") still looks at archived
+  applications, so a re-applicant's earlier row is still found; the Positions and Reports pages
+  count archived applications exactly as before (applicants per position, source and month; their
+  funnels already ignore the archive stage).
+- Moving an application to Archived from the status dropdown takes it out of the list at once (use
+  Include archived to find it again); moving it back out of Archived works from the drawer as before.
+- Checked in a scratch copy of `web/` with a stubbed Supabase client (8 applications, 3 archived):
+  the default list, the search hint, the Show link, the chip, the checkbox, Clear filters, and
+  CSV row counts (5 hidden, 8 shown).
+
 ## What the pre-2026 cleanup did
 
 Decided 2026-10-28: the tracker keeps only applications from 2026 on. Candidates have to re-apply
