@@ -326,11 +326,11 @@
       // Funnel
       sec = RR.section(body, "Funnel (furthest stage reached)");
       sec.appendChild(funnelBars(stats));
-      // Aliases
-      sec = RR.section(body, "Also matches (aliases)");
+      // Aliases, folded: the closed line counts them
+      sec = foldSection(body, "Also matches (aliases)", "aliases", p.id);
       renderAliases(sec, p);
-      // Postings and spend
-      sec = RR.section(body, "Postings" + (st.staff ? " and spend" : ""));
+      // Postings and spend, folded: the closed line names the channels and the spend
+      sec = foldSection(body, "Postings" + (st.staff ? " and spend" : ""), "postings", p.id);
       renderPostings(sec, p);
       // Market check (Phase 9a), folded: the closed line shows the latest run
       sec = foldSection(body, "Market check", "market", p.id);
@@ -345,9 +345,10 @@
   }
   function docById(id) { return docs.filter(function (d) { return d.id === id; })[0] || null; }
 
-  // Folded sections: the market and national checks are long, so they start closed with the
-  // latest run on the closed line. Whether one is open is kept while the same position stays in
-  // the drawer (a redraw after a save or a refresh keeps it) and forgotten for the next position.
+  // Folded sections: aliases, postings and the market and national checks are long and rarely
+  // needed at a glance, so they start closed with a one-line summary beside the title. Whether one
+  // is open is kept while the same position stays in the drawer (a redraw after a save or a
+  // refresh keeps it) and forgotten for the next position.
   var folds = { id: null, open: {} };
   function foldSection(body, title, key, positionId) {
     if (folds.id !== positionId) folds = { id: positionId, open: {} };
@@ -360,15 +361,35 @@
     body.appendChild(sec);
     return sec;
   }
-  // The closed line for the fold that holds `box`: the latest run, with a below-market flag kept
+  // Sets the closed line of the fold that holds `node`; `flag` is a warning tag kept visible.
+  function setFoldLine(node, text, flag) {
+    var sec = node.closest("details.fold"); if (!sec) return;
+    var m = sec.querySelector(".fold-meta"); m.textContent = text;
+    if (flag) m.appendChild(el("span", "tag warn", flag));
+  }
+  // A market or national check's closed line: the latest run, with a below-market flag kept
   // visible so it is not hidden by the fold.
   function setFoldMeta(box, latest, running, outcome) {
-    var sec = box.closest("details.fold"); if (!sec) return;
-    var m = sec.querySelector(".fold-meta"); m.textContent = "";
-    if (!latest) m.textContent = "Not run yet";
-    else if (running) m.textContent = "Running… started " + RR.relTime(new Date(latest.ran_at));
-    else m.textContent = "Last run " + RR.fmtDateTime(new Date(latest.ran_at)) + " · " + outcome;
-    if (latest && !running && latest.below_market) m.appendChild(el("span", "tag warn", "Below market"));
+    setFoldLine(box,
+      !latest ? "Not run yet" : running ? "Running… started " + RR.relTime(new Date(latest.ran_at)) : "Last run " + RR.fmtDateTime(new Date(latest.ran_at)) + " · " + outcome,
+      latest && !running && latest.below_market ? "Below market" : null);
+  }
+  // Postings' closed line: the channels, whether they are still up and, for staff, the spend.
+  function postingsLine(positionId) {
+    var mine = postings.filter(function (x) { return x.position_id === positionId; });
+    if (!mine.length) return "Not posted anywhere yet";
+    var today = RR.ymd(new Date()), n = mine.length;
+    var up = mine.filter(function (x) { return !x.ended_at || x.ended_at >= today; }).length;
+    var channels = [];
+    mine.forEach(function (x) { var c = CHANNEL_LABEL[x.channel] || x.channel; if (channels.indexOf(c) < 0) channels.push(c); });
+    var state = up === n ? (n === 1 ? "still up" : "all " + n + " still up") : up === 0 ? (n === 1 ? "ended" : "all " + n + " ended") : up + " of " + n + " still up";
+    var line = channels.join(", ") + " · " + state;
+    if (RR.state().staff) {
+      var ids = mine.map(function (x) { return x.id; });
+      var total = spend.filter(function (s) { return ids.indexOf(s.posting_id) >= 0; }).reduce(function (t, s) { return t + Number(s.spend || 0); }, 0);
+      line += " · " + (total ? "$" + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " spent" : "no spend entered");
+    }
+    return line;
   }
 
   function positionForm(p, isNew) {
@@ -485,6 +506,8 @@
     var st = RR.state();
     sec.querySelectorAll(".log, .review, .hint").forEach(function (n) { n.remove(); });
     var mine = aliases.filter(function (a) { return a.position_id === p.id; });
+    var shown = mine.slice(0, 2).map(function (a) { return "“" + a.alias + "”"; }).join(", ") + (mine.length > 2 ? " and " + (mine.length - 2) + " more" : "");
+    setFoldLine(sec, mine.length ? shown : "None; matches the form label or the title");
     if (!mine.length) sec.appendChild(el("div", "hint", "No aliases. Applications match this position when their position text equals the form label or the title at " + p.location + "."));
     else {
       var ul = el("ul", "log");
@@ -526,6 +549,7 @@
     if (!mine.length) wrap.appendChild(el("div", "hint", "Not posted anywhere yet."));
     mine.forEach(function (po) { wrap.appendChild(st.staff ? postingForm(p, po, sec) : postingView(po)); });
     sec.appendChild(wrap);
+    setFoldLine(sec, postingsLine(p.id));
     if (st.staff) {
       var add = el("button", "btn small", "Add posting"); add.type = "button";
       add.addEventListener("click", function () { wrap.querySelectorAll(".hint").forEach(function (n) { n.remove(); }); wrap.appendChild(postingForm(p, null, sec)); });
@@ -597,7 +621,7 @@
       var td = el("td"); td.appendChild(linkBtn("Remove", async function () {
         var r = await sb.from("channel_spend").delete().eq("id", s.id);
         if (r.error) { RR.notice("Could not remove: " + RR.errText(r.error)); return; }
-        spend = spend.filter(function (x) { return x.id !== s.id; }); box.replaceWith(spendBlock(po));
+        spend = spend.filter(function (x) { return x.id !== s.id; }); var nb = spendBlock(po); box.replaceWith(nb); setFoldLine(nb, postingsLine(po.position_id));
       })); tr.appendChild(td);
       tbody.appendChild(tr);
     });
@@ -618,7 +642,7 @@
       var r = await sb.from("channel_spend").insert(payload).select("id, posting_id, period_start, period_end, spend, views, applies, notes").single();
       btn.disabled = false;
       if (r.error) { RR.notice("Could not add spend: " + RR.errText(r.error)); return; }
-      spend.push(r.data); box.replaceWith(spendBlock(po));
+      spend.push(r.data); var nb = spendBlock(po); box.replaceWith(nb); setFoldLine(nb, postingsLine(po.position_id));
     });
     [ps, pe, sp, vw, ap, btn].forEach(function (x) { row.appendChild(x); });
     box.appendChild(row);
