@@ -413,6 +413,7 @@
       curated: {
         education: toText(row.education), skills: toText(row.relevant_skills), workedBefore: toText(row.worked_at_rexius_before), appliedBefore: toText(row.applied_before), licenceClass: toText(row.licence_class),
         manualNotes: row.manual_notes || "",
+        translation: Array.isArray(row.translation) ? row.translation : [],
         employers: (row.employment_history || []).map(function (e) { return { employer: toText(e.employer), location: toText(e.location), title: toText(e.title), start: toText(e.start), end: toText(e.end), reason: toText(e.reason), responsibilities: toText(e.responsibilities) }; })
       }
     });
@@ -744,6 +745,7 @@
       education: txt("education", true), skills: txt("relevant_skills"), workedBefore: txt("worked_before", true), appliedBefore: txt("applied_before", true),
       student: txt("student", true), forklift: txt("forklift", true), herbicide: txt("herbicide_licence", true), licenceClass: txt("licence_class"), portfolioLink: txt("portfolio_link").trim(),
       manualNotes: typeof answers.manual_notes === "string" ? answers.manual_notes : "",
+      certifications: txt("certifications"), workedBeforeDetails: txt("worked_before_details"), appliedBeforeDetails: txt("applied_before_details"), otherQualifications: txt("other_qualifications"),
       employers: employers
     };
   }
@@ -785,6 +787,13 @@
     }
     sec.appendChild(rv);
 
+    // Summary by Claude (Phase 9b, summary.js): staff only; managers never see a summary.
+    if (staff) {
+      sec = section(body, "Summary"); sec.id = "summarySec";
+      if (window.RR && RR.summary) RR.summary.render(sec, a);
+      else sec.appendChild(el("div", "hint", "The summary module did not load. Reload the page."));
+    }
+
     // Contact
     sec = section(body, "Contact");
     if (a.contactPurged) sec.appendChild(el("p", "hint", "Email and phone were removed after six months (contact-detail retention). The original submission in Jotform still has them."));
@@ -808,6 +817,11 @@
     sec = section(body, "Employment history"); sec.id = "employmentSec";
     sec.appendChild(el("div", "hint", staff ? "Loading…" : "None given."));
     if (a.curated) fillEmployment(a.curated.employers);
+    // Managers: the English translation of answers they can already read, when a summary made one.
+    if (!staff && a.curated && a.curated.translation && a.curated.translation.length && window.RR && RR.summary) {
+      sec = section(body, "English translation");
+      RR.summary.managerTranslation(sec, a.curated.translation);
+    }
 
     // Files and links
     sec = section(body, "Files and links");
@@ -845,6 +859,7 @@
       sec = section(body, "Contact log"); sec.id = "contactSec";
       var log = el("ul", "log"); log.id = "contactList"; log.appendChild(el("li", "hint", "Loading…")); sec.appendChild(log);
       sec.appendChild(contactForm(a));
+      if (window.RR && RR.summary) RR.summary.translator(sec, a);
       // Manager feedback (read)
       sec = section(body, "Manager feedback"); sec.id = "feedbackSec";
       sec.appendChild(el("div", "hint", "Loading…"));
@@ -865,9 +880,10 @@
     kv(c, "Alternate phone", d.altPhone, d.altPhone ? "tel:" + digits(d.altPhone) : null);
     kv(c, "Phone type", d.phoneType);
     kv(c, "Prefers", d.contactMethod);
-    kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Applied before", d.appliedBefore);
+    kv(ap, "Education", d.education); kv(ap, "Worked here before", d.workedBefore); kv(ap, "Earlier Rexius work", d.workedBeforeDetails); kv(ap, "Applied before", d.appliedBefore); kv(ap, "Earlier application", d.appliedBeforeDetails);
     kv(ap, "Student", d.student); kv(ap, "Forklift", d.forklift); kv(ap, "Herbicide licence", d.herbicide); kv(ap, "Driver licence class", d.licenceClass);
     kv(ap, "Skills", d.skills);
+    kv(ap, "Licences and certifications", d.certifications); kv(ap, "Other qualifications", d.otherQualifications);
     kv(ap, "Notes from the paper form", d.manualNotes);
     var pl = $("portfolioLink");
     if (pl && d.portfolioLink) { var link = el("a", null, "Portfolio link"); link.href = /^https?:/.test(d.portfolioLink) ? d.portfolioLink : "https://" + d.portfolioLink; link.target = "_blank"; link.rel = "noopener"; pl.appendChild(link); }
@@ -1188,11 +1204,15 @@
       ["Matched opening", a.positionTitle && a.positionTitle !== a.positionText ? a.positionTitle : ""],
       ["Location", a.location], ["Form", a.formLabel],
       ["Heard from", a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : "")], ["Referred by", a.referredBy],
-      ["Can start", fullDay(a.availableStart)], ["Education", d.education], ["Worked at Rexius before", d.workedBefore], ["Applied before", d.appliedBefore],
+      ["Can start", fullDay(a.availableStart)], ["Education", d.education], ["Worked at Rexius before", d.workedBefore], ["Earlier Rexius work", d.workedBeforeDetails],
+      ["Applied before", d.appliedBefore], ["Earlier application", d.appliedBeforeDetails],
       ["Student", d.student], ["Forklift experience", d.forklift], ["Herbicide licence", d.herbicide], ["Driver licence class", d.licenceClass], ["Skills", d.skills],
+      ["Licences and certifications", d.certifications], ["Other qualifications", d.otherQualifications],
       ["Portfolio link", d.portfolioLink], ["Notes from the paper form", d.manualNotes]
     ] });
     sections.push({ title: "Employment history", jobs: (d.employers || []).slice() });
+    var translated = staff ? (window.RR && RR.summary ? await RR.summary.latestTranslations(id) : []) : ((a.curated && a.curated.translation) || []);
+    if (translated.length) sections.push({ title: "English translation (by Claude)", items: translated.map(function (t) { return { q: t.label || t.key, a: (t.english || "") + (t.original ? "\nOriginal: " + t.original : "") }; }) });
     var fileNames = a.files.map(fileLabel);
     sections.push({ title: "Files", text: fileNames.length ? "Sent separately from the tracker: " + fileNames.join("; ") + "." : a.filesPurged ? "Removed after six months (retention)." : "" });
     if (staff && !manual) {

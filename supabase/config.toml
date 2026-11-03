@@ -407,6 +407,10 @@ verify_jwt = false
 # The national check (same auth scheme, tracker only; README "What the national check created").
 [functions.recruiting-national-check]
 verify_jwt = false
+# Phase 9b: applicant summaries and the reply translator. Tracker only (the user's JWT, checked
+# by the function through recruiting.current_role()), same scheme as the market check.
+[functions.recruiting-applicant-summary]
+verify_jwt = false
 
 [functions.recruiting-retention]
 verify_jwt = false

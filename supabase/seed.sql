@@ -178,3 +178,50 @@ update recruiting.positions set pay_min = 18, pay_max = 21
 where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
 update recruiting.position_pay_history set note = 'Raised $1 to fill fall crews'
 where id = (select max(id) from recruiting.position_pay_history);
+
+-- Phase 9b (20261112000100): the Spanish-form applicant writes in Spanish, and two finished
+-- summaries so the drawer and the manager view have something to show locally. Invented text.
+-- Luis Hernández's translations include one answer managers cannot see (earlier work at Rexius),
+-- which the manager view must leave out.
+update recruiting.applications
+set answers = answers || '{"372":"Dos temporadas en cuadrilla de camión soplador; permiso de Clase B en trámite.",
+                           "273":"Trabajé la temporada de 2023 en Lake Oswego como ayudante.",
+                           "76":"Ayudante de cuadrilla","352":"Terminó la temporada"}'::jsonb
+where jotform_submission_id = '6000000000000000003';
+
+insert into recruiting.applicant_summaries
+  (application_id, position_id, requested_by, created_at, finished_at, answer_language, summary, translations,
+   had_description, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+select a.id, a.position_id, '22222222-2222-2222-2222-222222222222', now() - interval '1 day', now() - interval '1 day' + interval '24 seconds', 'es',
+  '{"overview":"Applies for Blower Truck Crew Member at Lake Oswego. Worked on a blower truck crew at Bark Blowers NW in Tualatin from 04/2024 to 10/2025 and says a Class B permit is in progress. Says they worked a season at Rexius in Lake Oswego in 2023.",
+    "experience":["Crew helper (Ayudante de cuadrilla) at Bark Blowers NW, Tualatin, OR, 04/2024 to 10/2025 (about 1.5 years); left when the season ended.","Two seasons on a blower truck crew (stated under skills).","Worked the 2023 season at Rexius in Lake Oswego as a helper.","Highest education: GED."],
+    "licences":["Class B permit in progress (stated)."],
+    "availability":"Can start on the date given in the application.",
+    "location":"Lives in Lake Oswego, OR, and applied to Lake Oswego.",
+    "not_stated":["Does not say whether they have operated the blower hose or only assisted the crew."],
+    "check_in_application":[]}',
+  '[{"key":"skills","label":"Relevant skills or experience","original":"Dos temporadas en cuadrilla de camión soplador; permiso de Clase B en trámite.","english":"Two seasons on a blower truck crew; Class B permit in progress.","manager":true},
+    {"key":"rexius_work","label":"Details of earlier work at Rexius","original":"Trabajé la temporada de 2023 en Lake Oswego como ayudante.","english":"I worked the 2023 season in Lake Oswego as a helper.","manager":false},
+    {"key":"job1.title","label":"Job 1: title","original":"Ayudante de cuadrilla","english":"Crew helper","manager":true},
+    {"key":"job1.reason","label":"Job 1: reason for leaving","original":"Terminó la temporada","english":"The season ended","manager":true}]',
+  false, 'claude-opus-5-5', 3420, 1610, 0, 1950, 0.0499
+from recruiting.applications a where a.jotform_submission_id = '6000000000000000003';
+
+insert into recruiting.applicant_summaries
+  (application_id, position_id, requested_by, created_at, finished_at, answer_language, summary, translations,
+   had_description, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+select a.id, a.position_id, '22222222-2222-2222-2222-222222222222', now() - interval '2 hours', now() - interval '2 hours' + interval '19 seconds', 'en',
+  '{"overview":"Applies for Irrigation Service Technician in Central Oregon. Has worked as a service technician at High Desert Irrigation in Bend since 05/2022 and holds a backflow tester certification. Says they applied to Rexius before.",
+    "experience":["Service technician at High Desert Irrigation, Bend, OR, 05/2022 to present (about 4.5 years); still employed, \"seeking stability\".","Four years of irrigation repair (stated under skills)."],
+    "licences":["Backflow tester certification (stated)."],
+    "availability":"Can start on the date given in the application.",
+    "location":"Lives in Bend, OR, and applied to Central Oregon.",
+    "not_stated":["Does not say whether they hold a driver licence."],
+    "check_in_application":[]}',
+  '[]', false, 'claude-opus-5-5', 3180, 1230, 1950, 0, 0.0379
+from recruiting.applications a where a.jotform_submission_id = '6000000000000000002';
+
+insert into recruiting.message_translations
+  (application_id, requested_by, created_at, direction, chars_in, chars_out, model, input_tokens, output_tokens, cost_usd)
+select a.id, '22222222-2222-2222-2222-222222222222', now() - interval '20 hours', 'en-es', 142, 158, 'claude-opus-5-5', 410, 96, 0.0036
+from recruiting.applications a where a.jotform_submission_id = '6000000000000000003';
