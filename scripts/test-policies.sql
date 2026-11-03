@@ -878,3 +878,100 @@ select pg_temp.check('no profile: sees no openings or pay history', (select coun
 select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
 select pg_temp.check('hr at aal1: sees no openings or pay history', (select count(*) from recruiting.position_openings) + (select count(*) from recruiting.position_pay_history) = 0);
 rollback;
+
+-- ----- Phase 9b: applicant summaries and translation ----------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hr: reads the seeded applicant summaries', (select count(*) from recruiting.applicant_summaries) = 2);
+select pg_temp.check('hr: reads translation usage', (select count(*) from recruiting.message_translations) = 1);
+select pg_temp.check('hr: a summary holds an HR-only translation', exists (select 1 from recruiting.applicant_summaries where translations @> '[{"key":"rexius_work","manager":false}]'));
+savepoint sp;
+do $$ begin
+  insert into recruiting.applicant_summaries (application_id) select id from recruiting.applications limit 1;
+  raise notice 'UNEXPECTED: hr inserted a summary';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+savepoint sp2;
+do $$ begin
+  update recruiting.applicant_summaries set summary = '{"overview":"edited"}';
+  raise notice 'UNEXPECTED: hr edited a summary';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+savepoint sp3;
+do $$ begin
+  delete from recruiting.applicant_summaries;
+  raise notice 'UNEXPECTED: hr deleted summaries';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp3;
+savepoint sp4;
+do $$ begin
+  insert into recruiting.message_translations (direction, chars_in) values ('en-es', 1);
+  raise notice 'UNEXPECTED: hr inserted translation usage';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp4;
+select pg_temp.check('hr: cannot add, change or remove summaries or usage (only the function writes them)',
+  (select count(*) from recruiting.applicant_summaries) = 2
+  and (select count(*) from recruiting.applicant_summaries where summary ->> 'overview' = 'edited') = 0
+  and (select count(*) from recruiting.message_translations) = 1);
+rollback;
+
+begin;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+select pg_temp.check('admin: reads applicant summaries', (select count(*) from recruiting.applicant_summaries) = 2);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: sees no applicant summaries', (select count(*) from recruiting.applicant_summaries) = 0);
+select pg_temp.check('manager: sees no translation usage', (select count(*) from recruiting.message_translations) = 0);
+select pg_temp.check('manager: reads the English translation through the view', (select count(*) from recruiting.applications_for_managers where translation is not null) = 1);
+select pg_temp.check('manager: the view carries only answers a manager can see',
+  (select jsonb_array_length(translation) from recruiting.applications_for_managers where translation is not null) = 3
+  and not exists (select 1 from recruiting.applications_for_managers where translation @> '[{"key":"rexius_work"}]'));
+select pg_temp.check('manager: translation items carry key, label, original and English only',
+  (select array_agg(k order by k) from recruiting.applications_for_managers v, jsonb_array_elements(v.translation) t, jsonb_object_keys(t) k where v.translation is not null and t ->> 'key' = 'skills')
+  = array['english', 'key', 'label', 'original']);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('no profile: sees no applicant summaries', (select count(*) from recruiting.applicant_summaries) + (select count(*) from recruiting.message_translations) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('hr at aal1: sees no applicant summaries', (select count(*) from recruiting.applicant_summaries) = 0);
+select pg_temp.as_user(null);
+savepoint sp;
+do $$ begin
+  perform count(*) from recruiting.applicant_summaries;
+  raise notice 'UNEXPECTED: anon read applicant_summaries';
+exception when insufficient_privilege then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+rollback;
+
+begin;
+-- As postgres (what the function's service role does): a running or failed run never replaces
+-- the translation managers see; the newest finished run does.
+insert into recruiting.applicant_summaries (application_id, created_at, translations)
+  select id, now(), '[{"key":"skills","label":"x","original":"x","english":"RUNNING","manager":true}]' from recruiting.applications where jotform_submission_id = '6000000000000000003';
+insert into recruiting.applicant_summaries (application_id, created_at, finished_at, error, translations)
+  select id, now(), now(), 'test failure', '[{"key":"skills","label":"x","original":"x","english":"FAILED","manager":true}]' from recruiting.applications where jotform_submission_id = '6000000000000000003';
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('summaries: a running or failed run does not reach the manager view',
+  (select translation -> 0 ->> 'english' from recruiting.applications_for_managers where translation is not null) = 'Two seasons on a blower truck crew; Class B permit in progress.');
+reset role;
+insert into recruiting.applicant_summaries (application_id, created_at, finished_at, translations)
+  select id, now(), now(), '[{"key":"skills","label":"x","original":"x","english":"NEWEST","manager":true}]' from recruiting.applications where jotform_submission_id = '6000000000000000003';
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('summaries: the newest finished run is the one managers see',
+  (select translation -> 0 ->> 'english' from recruiting.applications_for_managers where translation is not null) = 'NEWEST');
+reset role;
+delete from recruiting.applications where jotform_submission_id = '6000000000000000003';
+select pg_temp.check('summaries: deleting an application deletes its summaries and keeps usage without the link',
+  (select count(*) from recruiting.applicant_summaries where application_id not in (select id from recruiting.applications)) = 0
+  and (select count(*) from recruiting.message_translations where application_id is null) = 1);
+select pg_temp.check('forms: every form has the four keys the summary reads',
+  (select count(*) from recruiting.forms where field_map ?& array['certifications', 'worked_before_details', 'applied_before_details', 'other_qualifications']) = (select count(*) from recruiting.forms));
+rollback;

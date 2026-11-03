@@ -23,19 +23,21 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `supabase/functions/_shared/clean.mjs` | The cleanup, field-map and never-import rules, one submission in and one `applications` row plus its files out. Canonical copy, used by the webhook and re-exported by `scripts/backfill/lib/clean.mjs` | 4, 5 |
 | `supabase/functions/recruiting-retention/` | Edge Function the daily job calls to delete the files of applications past the six-month retention ("What the contact-retention change created") | retention |
 | `supabase/functions/.env.example` | Names of the webhook's local variables; copy to the gitignored `supabase/functions/.env` for `functions serve` | 5 |
+| `supabase/functions/recruiting-applicant-summary/` | Edge Function for applicant summaries and the reply translator (Phase 9b, step 16) | 9b |
+| `scripts/summary-test/stub-anthropic.mjs` | Stand-in for the Claude API so summaries can be tested on the local stack with no key, no cost and no data leaving the machine (`npm run summary:stub`) | 9b |
 | `scripts/webhook-test/stub-jotform.mjs` | Stand-in for api.jotform.com (one made-up submission and resume) so the webhook can be tested on the local stack with no key and no real data (`npm run webhook:stub`) | 5 |
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
-| `scripts/test-policies.sql` | Policy checks as every role against the local stack (126 checks after Phase 7 and manual entry) | 3+ |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack (225 checks after Phase 9b) | 3+ |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
 | `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
-| `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `config.js` (project URL and publishable key only). No build step | 6, 7 |
+| `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `summary.js` (applicant summaries and translation in the drawer), `config.js` (project URL and publishable key only). No build step | 6, 7, 9b |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `.github/workflows/pages.yml` | Publishes `web/` to GitHub Pages on every push to `main`, writing `config.js` from two repository variables on the way (step 13) | 8 |
 | `scripts/make-profile.sql` | Give an invited user a role (`admin`, `hr` or `manager`) by pasting into SQL Editor | 8 |
-| `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill) | 2+ |
+| `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill), `applicant-summary-rules.md` (what applicant summaries send, return and never say; for HR) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
 
 ## What Phase 2 created in the database
@@ -974,6 +976,69 @@ the new site asks for the openings table, so apply and publish together:
    Between the two steps the live Positions page cannot load positions. Anyone with the tracker
    open should reload once it is published.
 
+## What Phase 9b created
+
+Applicant summaries with translation (CLAUDE.md section 8, "Phase 9 decisions"). HR or an admin
+presses **Summarize** in an application's drawer; Claude reads the application against its
+position and writes what relates to the position, what the application does not say, and an
+English translation of every written answer that is not in English. It never scores, ranks or
+recommends. `docs/applicant-summary-rules.md` is the HR-facing statement of what is sent, what
+comes back and what a summary must never say; HR agrees to it before the feature is used.
+
+- `supabase/migrations/20261112000100_applicant_summaries.sql`:
+  - four `forms.field_map` keys for written questions the summary reads that had none:
+    `certifications` (66), `worked_before_details` (273), `applied_before_details` (275),
+    `other_qualifications` (276), the same IDs on all four forms;
+  - table `applicant_summaries`, one row per run, never overwritten (`application_id`,
+    `position_id`, `requested_by`, `created_at`, `finished_at`, `answer_language`, `summary`,
+    `translations`, `had_description`, `model`, token counts, `cost_usd`, `error`). The Edge
+    Function is the only writer (service role); admin and hr read; managers and everyone else
+    nothing. Each translation item holds the original text copied from the application by the
+    function, not written by Claude, and a `manager` flag for answers a manager can already see;
+  - table `message_translations`: the reply translator's usage (direction, lengths, tokens,
+    cost). The message itself is never stored. Admin and hr read;
+  - `applications_for_managers` appends `translation`: the manager-visible translations from the
+    newest finished, successful summary. A running or failed run never replaces it.
+- `supabase/functions/recruiting-applicant-summary/index.ts`: the Edge Function, with two actions
+  and the same caller check as the market check (the user's JWT; admin or hr with a two-factor
+  session through `recruiting.current_role()`; gateway JWT check off).
+  - `summarize` builds the prompt from an allowlist: the position (title, location, department,
+    the linked job description's text) and the application's facts and written answers, each
+    written answer keyed so its translation comes back by key. Never sent: name, email, phones,
+    address, contact preference, source, referrer, employers' phones, supervisors, files, and the
+    age, identity and work-authorisation, fitness-for-duties, drug-policy and contact-employer
+    questions. It inserts the row, answers `202 {summary_id}`, and finishes in the background:
+    `claude-opus-5-5` at medium effort with structured output (a JSON schema, so the answer always
+    parses), the system prompt cached, and refusal fallbacks on (`fallbacks: "default"`). The
+    answer is checked again (lengths, list sizes, translation keys it actually sent), usage and
+    list-price cost are stored, and any failure (refusal, cut-off answer, bad key, spend cap) is
+    stored on the row as `error` and shown in the drawer. One run at a time per application.
+  - `translate` turns a message into Spanish (usted, plain Latin American Spanish) or into
+    English, at low effort, and returns it to the browser; the usage goes to
+    `message_translations`.
+- `web/summary.js` (new) and `web/app.js`: for admin and hr a **Summary** section under Review
+  (Summarize / Summarize again, a running state that refreshes itself, the latest summary with its
+  translations and cost, earlier runs folded) and **Translate a message** under Contact log (open
+  by default on Spanish-form applications; Copy puts the text on the clipboard). For managers an
+  **English translation** section after Employment history when a summary has one. The four newly
+  mapped answers are now labelled rows in the drawer's Application section and the PDF ("Earlier
+  Rexius work", "Earlier application", "Licences and certifications", "Other qualifications")
+  instead of falling under "Other answers"; the PDF gains "English translation (by Claude)".
+- `scripts/summary-test/stub-anthropic.mjs` (`npm run summary:stub`): a stand-in for the Claude
+  API so the whole path can be tested locally with no key, no cost and no data leaving the
+  machine; `STUB_MODE` exercises refusals, unparseable answers, a bad key and the spend cap, and
+  `STUB_DUMP` saves each request so the exact prompt can be read.
+- `scripts/test-policies.sql`: 16 more checks (225 in all): hr and admin read summaries and
+  usage but cannot write them; managers, users without a profile, hr at `aal1` and anon see none;
+  the manager view shows only manager-visible translations, never the `manager` flag, never a
+  running or failed run, and always the newest finished one; deleting an application deletes its
+  summaries and keeps the usage rows without the link; every form has the four new keys.
+  `supabase/seed.sql` gives the Spanish-form sample applicant Spanish answers and adds two
+  finished summaries and one translation-usage row (invented text).
+
+Cost at 2026-11 list prices: about five cents a summary and under a cent a message. Every
+summary row stores its own cost.
+
 ---
 ## Manual steps in Supabase (do these in order)
 
@@ -1488,6 +1553,52 @@ curl -X POST http://127.0.0.1:54321/functions/v1/recruiting-market-check -H 'con
 Expect `{"status":"started","check_id":...}`; without the header 401, with a closed position
 `{"status":"skipped",...}`. Checked this way on 2026-10-30.
 
+### 16. Turn on applicant summaries (Phase 9b)
+
+No new secret: the function reads the same `ANTHROPIC_API_KEY_RECRUITING` as the market check.
+Nothing runs until someone presses Summarize.
+
+1. **HR reads and agrees to `docs/applicant-summary-rules.md`.** That is the condition CLAUDE.md
+   sets for this phase. Any change HR asks for goes into that file and into `SYSTEM_PROMPT` in the
+   function together.
+2. **Apply the migration and deploy the function** (Developer is enough):
+
+   ```sh
+   npm run db:migrate
+   ```
+
+   ```sh
+   npx supabase functions deploy recruiting-applicant-summary --no-verify-jwt
+   ```
+
+   The migration and the new `web/` must ship together: the drawer reads `applicant_summaries`
+   and the manager view's `translation` column. Apply the migration, then merge the pull request
+   so Pages publishes the new site.
+3. **Try it on a made-up application first.** Add a paper application (Applications → Add
+   application) with an invented name and a few Spanish answers in the notes, open it and press
+   **Summarize**. The section shows "Claude is reading the application" and, within a minute, the
+   summary, the English translation and a cost line. Check it against the rules page. Then try
+   **Translate a message** under Contact log. In the Claude Console → Usage, filtered to the
+   `recruiting` workspace, the two requests appear. Delete the test application afterwards
+   (Table Editor → `recruiting.applications`; its summary goes with it).
+4. Optional: `APPLICANT_SUMMARY_MODEL` as an Edge Function secret changes the model (default
+   `claude-opus-5-5`).
+
+**Test it locally** (no key, no cost), with the local stack running (step 9): in one terminal
+`npm run summary:stub`; in another, serve the functions with an env file that points at the stub
+(copy `supabase/functions/.env.example` and uncomment `APPLICANT_SUMMARY_API_BASE`):
+
+```sh
+npx supabase functions serve --env-file supabase/functions/.env
+```
+
+Sign in to the local tracker as `hr@local.test` and press Summarize on any application: the
+summary comes back marked "(stub)" with a "(stub translation)" for each Spanish answer. Start the
+stub with `STUB_MODE=refusal`, `badjson`, `auth` or `ratelimit` to see each error stored on the
+row and shown in the drawer, and with `STUB_DUMP=<folder>` to read the exact request the
+function sends. Checked this way on 2026-11-03, including as `manager@local.test` (English
+translation shown, no summary, no translator).
+
 ## Two repos, one project
 
 The inventory app is its own project in its own repository and environment; the only thing it
@@ -1604,6 +1715,14 @@ from the local stack is ever synced to the hosted project except by an explicit 
 - **Browser downloads**: the CSV exports (applications, and each report) are plain files on
   whoever downloaded them. Treat the applications export like any spreadsheet of personal data;
   the report exports hold aggregates only.
+- **Anthropic (Claude API)**: an applicant summary sends the allowlisted answers of one
+  application and the position's job description; a translated message sends that message. Never
+  the name, email, phones, address, referrer, files, or the age, work-authorisation, fitness and
+  drug-policy answers (`docs/applicant-summary-rules.md` has the full list). Requests go through
+  Rexius' Claude Console organization (`recruiting` workspace). Anthropic's published terms for
+  commercial API use: inputs and outputs deleted within 30 days unless flagged under the usage
+  policy or kept by law, and not used for model training. The market and national checks send
+  only position details, never applicant data.
 - **Library documents**: job descriptions, interview guides and templates are Rexius documents,
   not applicant data. They live in the same private bucket under `documents/` and are reachable
   only by the roles their `min_role` allows. Do not upload anything containing an individual's

@@ -239,6 +239,28 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .review .row .check { flex: 0 0 auto; margin-top: 18px; }
 .review .link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font: inherit; }
 .review .saving { margin-left: 4px; }
+/* Phase 9b: applicant summary, translations and the reply translator (summary.js) */
+.sum { display: grid; gap: 8px; }
+.sum-controls { display: flex; gap: 8px; align-items: center; }
+.sum-body { display: grid; gap: 6px; font-size: 13.5px; }
+.sum-body .q, .sum-check .q { font-size: 12.5px; color: var(--mute); margin-top: 4px; }
+.sum-overview { margin: 0; line-height: 1.45; }
+.sum-list { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.sum-check { display: grid; gap: 2px; }
+.sum-check .q { color: inherit; font-weight: 600; margin-top: 0; }
+.sum-error { display: block; }
+.sum-history { border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; }
+.sum-history > summary, .sum-run > summary { cursor: pointer; }
+.sum-run { margin: 6px 0 0 8px; }
+.sum-run .sum-body { padding: 4px 0 8px; }
+.sum-translation { margin-top: 6px; }
+.sum-translation .orig { color: var(--faint); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sum .notice-inline { margin: 0; }
+.translator { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.translator > summary { cursor: pointer; font-size: 13px; color: var(--mute); }
+.translator[open] > summary { margin-bottom: 8px; }
+.translator .review { display: grid; gap: 6px; }
+.translator textarea[readonly] { background: var(--panel); }
 .doc-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 6px 0 10px; max-height: 360px; overflow: auto; }
 .reports { display: grid; grid-template-columns: 240px 1fr; min-height: 60vh; }
 .report-list { border-right: 1px solid var(--line); padding: 12px; display: grid; gap: 2px; align-content: start; background: var(--panel); }

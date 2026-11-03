@@ -87,6 +87,9 @@ checksum and warns).
   managers can read through tables they have no policy on. The view's `where` clause is
   therefore the access check and must call `recruiting.current_role()`. Mark such views
   `security_barrier`. Never add a restricted column (notes, `answers`, offers, wages) to one.
+  `applications_for_managers.translation` is not one: it holds English translations of answers
+  the view already shows, filtered on the `manager` flag the summary function sets per answer
+  (Phase 9b); summaries themselves never reach a manager.
 - Tables with `updated_at` get a `before update` trigger calling `set_updated_at()`.
 
 ## Seed data

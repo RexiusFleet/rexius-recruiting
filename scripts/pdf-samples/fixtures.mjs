@@ -24,6 +24,11 @@ export const application = {
       { title: "Crew member", employer: "Cascadia Lawn & Garden", location: "Springfield, OR", start: "May 2021", end: "Mar 2023", reason: "Seasonal layoff; company closed its Springfield branch.", responsibilities: "Residential mowing and cleanup, leaf removal, bark delivery and spreading." },
       { title: "Warehouse associate", employer: "NW Nursery Supply", location: "Junction City, OR", start: "Jun 2019", end: "Apr 2021", reason: "Wanted outdoor work.", responsibilities: "Order picking, forklift (certified on site), loading customer trucks, inventory counts." }
     ] },
+    // Phase 9b: what app.js adds when a summary has translated the applicant's Spanish answers.
+    { title: "English translation (by Claude)", items: [
+      { q: "Relevant skills or experience", a: "Three years of garden maintenance: mowers, blowers, string trimmers, drip irrigation installation and sprinkler repair. Can handle a small trailer. Basic first aid. Bilingual Spanish and English (conversational).\nOriginal: Tres años de mantenimiento de jardines: cortadoras, sopladores, desbrozadoras, instalación de riego por goteo y reparación de aspersores. Manejo de remolque pequeño. Primeros auxilios básicos. Bilingüe español e inglés (conversacional)." },
+      { q: "Job 2: reason for leaving", a: "Seasonal layoff; the company closed its Springfield branch.\nOriginal: Despido de temporada; la empresa cerró su sucursal de Springfield." }
+    ] },
     { title: "Files", text: "Sent separately from the tracker: Fernandez-Ortiz-resume.pdf." },
     { title: "Other answers", items: [
       { q: "Are you legally authorized to work in the United States? / ¿Está autorizado legalmente para trabajar en los Estados Unidos?", a: "Yes" },
