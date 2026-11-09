@@ -1017,7 +1017,7 @@ the landscape maintenance roles were closed for the winter. No migration.
   stub's dropdowns; stopping the stub shows the "could not check" note.
 
 **Deploying.** The Jotform key is already an Edge Function secret (step 14), so only the function
-is new:
+is new. Step 1 was done on 2026-11-09 (version 1 active; it answers 401 without a session):
 
 1. `npx supabase functions deploy recruiting-form-dropdowns --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`
    Check: `curl -s -X POST https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-form-dropdowns`
