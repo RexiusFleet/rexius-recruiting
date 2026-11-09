@@ -1327,12 +1327,30 @@
     var st = RR.state();
     var mine = st.apps.filter(function (a) { return a.positionId === p.id; }).sort(function (a, b) { return b.when - a.when; });
     if (!mine.length) { sec.appendChild(el("div", "hint", "None linked.")); return; }
+    // Good leads for this role: the people to call first when it opens again.
+    var leads = mine.filter(function (a) { return a.lead; }).sort(function (a, b) { return (a.lead.revisitOn || "9999").localeCompare(b.lead.revisitOn || "9999") || b.when - a.when; });
+    if (leads.length) {
+      var box = el("div", "lead-box on");
+      box.appendChild(el("div", "lead-head", "★ " + leads.length + " good lead" + (leads.length === 1 ? "" : "s") + " on file for this role"));
+      var ll = el("ul", "log");
+      leads.forEach(function (a) {
+        var li = el("li");
+        var link = el("a", null, a.name); link.href = "#/applications"; link.addEventListener("click", function (e) { e.preventDefault(); RR.openApplicant(a.id); });
+        li.appendChild(link);
+        li.appendChild(el("span", "meta", " · applied " + RR.fmtDate(a.when) + (a.lead.revisitOn ? " · revisit " + RR.fmtDay(a.lead.revisitOn) : "") + (a.contactPurged ? " · contact details removed" : "")));
+        if (a.lead.reason) li.appendChild(el("div", "meta", a.lead.reason));
+        ll.appendChild(li);
+      });
+      box.appendChild(ll);
+      sec.appendChild(box);
+    }
     var ul = el("ul", "log");
     var LIMIT = 40;
     mine.slice(0, LIMIT).forEach(function (a) {
       var li = el("li");
       var link = el("a", null, a.name); link.href = "#/applications"; link.addEventListener("click", function (e) { e.preventDefault(); RR.openApplicant(a.id); });
       li.appendChild(link);
+      if (a.lead) { var star = el("span", "lead", "★"); star.title = "Good lead"; li.appendChild(star); }
       li.appendChild(el("span", "meta", " · " + RR.fmtDate(a.when) + " · " + RR.stageName(a.stageId) + (a.source ? " · " + a.source : "")));
       ul.appendChild(li);
     });
