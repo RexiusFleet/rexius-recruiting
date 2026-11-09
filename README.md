@@ -976,6 +976,56 @@ the new site asks for the openings table, so apply and publish together:
    Between the two steps the live Positions page cannot load positions. Anyone with the tracker
    open should reload once it is published.
 
+## What the bulk status change created
+
+Two changes to the Positions page (2026-11-09, branch `claude/positions-bulk-status`), made when
+the landscape maintenance roles were closed for the winter. No migration.
+
+- **Open or close several positions at once.** Staff get a tick box on each row and one in the
+  header that ticks every row shown. While any are ticked, a bar at the bottom of the window
+  offers **Set to Open** and **Set to Closed** and asks for confirmation, listing the positions.
+  It is one update, so the openings trigger and the market-check trigger run for each row as
+  they do for a change in the drawer, and if any row is refused none changes. Reopening a
+  position that has market tracking on runs a market check for it at once (unless one ran in the
+  last day); the confirmation says how many that is. Ticks only count for rows on screen: a
+  filter that hides a ticked row drops it. Managers see no tick boxes.
+- **The dropdown check reads Jotform live.** The "Form dropdowns vs open positions" warning used
+  the copy of the English form's questions stored in `recruiting.forms.questions`, which is
+  written when a form is added and never refreshed. On 2026-11-09 the English form's
+  Eugene/Springfield dropdown had 6 roles in Jotform and 11 in that copy, so a role closed in the
+  tracker and already taken off the form was still reported as "Dropdown still lists a closed
+  role", and open roles missing from the form were not reported. The Spanish 2026 form, which has
+  its own copy of the dropdowns (it still listed all 11), was not checked at all. Now:
+  - Edge Function `recruiting-form-dropdowns` reads the position dropdowns of every active form
+    that has one per location (English 2026 and Spanish 2026; CAS's position is free text) from
+    the Jotform API with `JOTFORM_API_KEY`, the webhook's key, and returns the options. It only
+    reads; nothing is written to the database or to Jotform. Any tracker user with a two-factor
+    session may call it, checked through `recruiting.current_role()`, because every user sees the
+    warning. Deployed with `--no-verify-jwt` like the other tracker functions.
+  - Each warning names the form it applies to ("English form", "Spanish form", or both), and the
+    note under the list says when Jotform was checked, with **Check again** for after an edit in
+    Jotform. The page asks again whenever Positions is opened and the last answer is over a
+    minute old.
+  - If Jotform cannot be reached, the warning says so and keeps the last good answer from this
+    visit, or else falls back to the stored copy and says it may be out of date.
+  - Each form has its own dropdowns: closing a role for the season means taking it off both the
+    English and the Spanish form in Jotform (and adding it back to both when it reopens).
+- **Local test.** `npm run webhook:stub` now also serves `GET /form/<id>/questions` from
+  `reference/jotform-forms.json`; `STUB_DROP_OPTIONS="<formID>:Label|Label"` leaves options out,
+  on one form or on all, to stand for a role taken off a dropdown. With the stub running and
+  `npx supabase functions serve --env-file supabase/functions/.env`, the Positions page shows the
+  stub's dropdowns; stopping the stub shows the "could not check" note.
+
+**Deploying.** The Jotform key is already an Edge Function secret (step 14), so only the function
+is new:
+
+1. `npx supabase functions deploy recruiting-form-dropdowns --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`
+   Check: `curl -s -X POST https://hibjqcgitqtgmkurghlw.supabase.co/functions/v1/recruiting-form-dropdowns`
+   answers `401 {"error":"sign in first"}`.
+2. Merge the pull request; the Pages workflow publishes `web/`. If the site publishes before the
+   function exists, the warning says it could not check Jotform and uses the stored copy, as
+   before; nothing else is affected.
+
 ## What Phase 9b created
 
 Applicant summaries with translation (CLAUDE.md section 8, "Phase 9 decisions"). HR or an admin

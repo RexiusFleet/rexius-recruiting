@@ -11,6 +11,11 @@
 //   GET /submission/<id>     -> { responseCode: 200, content: { id, form_id, created_at, status, answers } }
 //                               <id> 6990000000000000001 is the sample; anything else is 404
 //   GET /uploads/resume.pdf  -> a one-page PDF
+//   GET /form/<id>/questions -> the form's questions from reference/jotform-forms.json in the
+//                               API's shape (options as "A|B|C"), for recruiting-form-dropdowns.
+//                               STUB_DROP_OPTIONS="Label 1|<formID>:Label 2" leaves those options
+//                               out (on every form, or on that form only), to stand for a role
+//                               taken off the dropdowns in Jotform.
 // See README.md step 14 "Test it locally" for the full sequence.
 
 import { createServer } from "node:http";
@@ -24,7 +29,8 @@ export const FORM_ID = "260115636145148";
 export const SUBMISSION_ID = "6990000000000000001";
 
 const shape = JSON.parse(readFileSync(join(repoRoot, "reference", "submission-shape.json"), "utf8"));
-const questions = JSON.parse(readFileSync(join(repoRoot, "reference", "jotform-forms.json"), "utf8"))[FORM_ID].questions;
+const allForms = JSON.parse(readFileSync(join(repoRoot, "reference", "jotform-forms.json"), "utf8"));
+const questions = allForms[FORM_ID].questions;
 
 /** Invented answers, keyed by question ID; everything else in the shape gets a harmless string. */
 function sampleAnswers(base) {
@@ -89,6 +95,20 @@ const server = createServer((req, res) => {
   }
   if (path.startsWith("/submission/")) {
     return send(404, JSON.stringify({ responseCode: 404, message: "Submission not found" }));
+  }
+  const formQuestions = path.match(/^\/form\/(\d+)\/questions$/);
+  if (formQuestions) {
+    const form = allForms[formQuestions[1]];
+    if (!form) return send(404, JSON.stringify({ responseCode: 404, message: "Form not found" }));
+    const drop = new Set((process.env.STUB_DROP_OPTIONS || "").split("|").map((s) => s.trim()).filter(Boolean)
+      .map((s) => s.match(/^(\d+):(.+)$/) ?? [s, formQuestions[1], s]).filter((m) => m[1] === formQuestions[1]).map((m) => m[2].trim()));
+    const content = {};
+    for (const [qid, q] of Object.entries(form.questions)) {
+      const row = { qid, name: q.name, order: String(q.order ?? ""), text: q.text, type: q.type };
+      if (q.options) row.options = Object.keys(q.options).filter((o) => !drop.has(o)).join("|");
+      content[qid] = row;
+    }
+    return send(200, JSON.stringify({ responseCode: 200, message: "success", content }));
   }
   if (path === "/uploads/resume.pdf") return send(200, PDF, "application/pdf");
   if (path.startsWith("/uploads/_signature_")) return send(200, Buffer.alloc(0), "image/png");

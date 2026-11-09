@@ -1,6 +1,7 @@
 /* Positions page (Phase 7). Lists and edits recruiting.positions, shows applicants per position
- * and a funnel, flags drift between open positions and the English form's dropdowns, manages
- * position aliases (so applications match), and, for staff, postings and channel spend.
+ * and a funnel, flags drift between open positions and the application forms' live dropdowns in
+ * Jotform, manages position aliases (so applications match), and, for staff, postings, channel
+ * spend, and opening or closing several positions at once from the list.
  * A position is the role, kept for good: each period it was open is an opening, and each change
  * of the advertised range is logged in its pay history (both written by database triggers).
  * Managers get the same page read-only (no spend; RLS returns nothing for them anyway).
@@ -21,19 +22,21 @@
   var loaded = false, loading = null;
   var openId = null;            // position id in the drawer, "new" for the add form
   var filters = { q: "", status: "open", loc: "" };
+  var picked = {};              // position id -> true: rows ticked for a bulk status change (staff)
 
   RR.registerPage("positions", {
     show: show,
     hide: function () {},
     appsChanged: function () { renderAll(); if (openId && openId !== "new") openPosition(openId); },
     drawerClosed: function () { openId = null; stopMarketPoll(); stopNationalPoll(); history.replaceState(null, "", "#/positions"); },
-    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; stopMarketPoll(); stopNationalPoll(); }
+    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; picked = {}; live = { data: null, error: null, loading: null }; stopMarketPoll(); stopNationalPoll(); }
   });
 
   async function show(param) {
     RR.setHeader("Positions", loaded ? metaLine() : "Loading…");
     if (!loaded) await load();
     renderAll();
+    refreshDropdowns(false);
     if (param === "new") newPosition({});
     else if (param && RR.state().positionById[param]) openPosition(param);
   }
@@ -91,29 +94,93 @@
     return { groups: groups, skipped: skipped, total: total, linked: linked, freeText: freeText };
   }
   function labelOf(p) { return (p.jotform_option_label || p.title || "").trim(); }
-  function driftIssues() {
-    var st = RR.state();
-    var form = st.forms.filter(function (f) { return f.jotform_form_id === ENGLISH_FORM; })[0];
-    if (!form) return [];
-    var posMap = (form.field_map && typeof form.field_map.position === "object") ? form.field_map.position : {};
-    var issues = [];
-    Object.keys(posMap).forEach(function (loc) {
-      var q = (form.questions || {})[String(posMap[loc])];
-      var labels = Object.keys((q && q.options) || {}).map(function (s) { return s.trim(); }).filter(function (s) { return s && s.toLowerCase() !== "any"; });
-      var atLoc = st.positions.filter(function (p) { return p.location === loc; });
-      var open = atLoc.filter(function (p) { return p.status === "open"; });
-      labels.forEach(function (l) {
-        var lk = l.toLowerCase();
-        if (open.some(function (p) { return labelOf(p).toLowerCase() === lk; })) return;
-        var other = atLoc.filter(function (p) { return labelOf(p).toLowerCase() === lk; })[0];
-        issues.push({ kind: other ? "closed-on-form" : "unknown-on-form", location: loc, label: l, position: other || null });
+
+  // ---------- Form dropdowns vs positions ----------
+  // The dropdowns come live from Jotform through the Edge Function recruiting-form-dropdowns, for
+  // every active form with a position dropdown per location (the English and Spanish 2026 forms;
+  // CAS has a free-text position). The copy in recruiting.forms.questions is only the fallback
+  // when Jotform cannot be reached: it is written when a form is added and nothing refreshes it,
+  // so it goes stale as soon as HR edits a dropdown in Jotform.
+  var LIVE_MAX_AGE_MS = 60 * 1000;
+  var live = { data: null, error: null, loading: null };
+  async function refreshDropdowns(force) {
+    if (live.loading) return live.loading;
+    if (!force && live.data && Date.now() - live.data.at < LIVE_MAX_AGE_MS) return;
+    live.loading = (async function () {
+      var r = await sb.functions.invoke("recruiting-form-dropdowns", { body: {} });
+      var payload = r.data || null;
+      if (r.error && r.error.context && typeof r.error.context.json === "function") { try { payload = await r.error.context.json(); } catch (e) { payload = null; } }
+      if (r.error || !payload || !Array.isArray(payload.forms)) { live.error = (payload && payload.error) || (r.error ? RR.errText(r.error) : "no answer"); return; }
+      live.data = { at: new Date(payload.checked_at).getTime() || Date.now(), forms: payload.forms };
+      live.error = null;
+    })();
+    renderDrift();
+    await live.loading;
+    live.loading = null;
+    renderDrift();
+  }
+  function cleanOptions(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (s) {
+      var o = String(s).trim().replace(/\/\s*$/, "").trim(), k = o.toLowerCase();
+      if (!o || k === "any" || seen[k]) return;
+      seen[k] = true; out.push(o);
+    });
+    return out;
+  }
+  // The forms to compare, as {label, language, dropdowns: {location: [option]}}: live when Jotform
+  // answered, else the stored copy.
+  function dropdownForms() {
+    if (live.data) return live.data.forms;
+    return RR.state().forms.filter(function (f) {
+      return f.is_active !== false && f.field_map && f.field_map.position && typeof f.field_map.position === "object";
+    }).map(function (f) {
+      var d = {};
+      Object.keys(f.field_map.position).forEach(function (loc) {
+        var q = (f.questions || {})[String(f.field_map.position[loc])];
+        d[loc] = cleanOptions(Object.keys((q && q.options) || {}));
       });
-      open.forEach(function (p) {
-        var lk = labelOf(p).toLowerCase();
-        if (!labels.some(function (l) { return l.toLowerCase() === lk; })) issues.push({ kind: "open-not-on-form", location: loc, label: labelOf(p), position: p });
+      return { jotform_form_id: f.jotform_form_id, label: f.label, language: f.language, dropdowns: d };
+    });
+  }
+  // "English form" / "Spanish form", or the form's label when two forms share a language.
+  function formNames(forms) {
+    var byLang = {}, names = {};
+    forms.forEach(function (f) { byLang[f.language] = (byLang[f.language] || 0) + 1; });
+    forms.forEach(function (f) {
+      names[f.jotform_form_id] = byLang[f.language] > 1 || (f.language !== "en" && f.language !== "es") ? (f.label || f.jotform_form_id)
+        : f.language === "es" ? "Spanish form" : "English form";
+    });
+    return names;
+  }
+  var KIND_ORDER = { "closed-on-form": 0, "open-not-on-form": 1, "unknown-on-form": 2 };
+  // One issue per role, naming the forms it applies to ("English form and Spanish form").
+  function driftIssues() {
+    var st = RR.state(), byKey = {}, issues = [];
+    var forms = dropdownForms(), names = formNames(forms);
+    function add(kind, loc, label, position, form) {
+      var k = kind + "\u0000" + loc + "\u0000" + label.toLowerCase();
+      var i = byKey[k] || (byKey[k] = issues[issues.push({ kind: kind, location: loc, label: label, position: position, forms: [] }) - 1]);
+      var n = names[form.jotform_form_id]; if (i.forms.indexOf(n) < 0) i.forms.push(n);
+    }
+    forms.forEach(function (form) {
+      Object.keys(form.dropdowns || {}).forEach(function (loc) {
+        var labels = form.dropdowns[loc] || [];
+        var atLoc = st.positions.filter(function (p) { return p.location === loc; });
+        var open = atLoc.filter(function (p) { return p.status === "open"; });
+        labels.forEach(function (l) {
+          var lk = l.toLowerCase();
+          if (open.some(function (p) { return labelOf(p).toLowerCase() === lk; })) return;
+          var other = atLoc.filter(function (p) { return labelOf(p).toLowerCase() === lk; })[0];
+          add(other ? "closed-on-form" : "unknown-on-form", loc, l, other || null, form);
+        });
+        open.forEach(function (p) {
+          var lk = labelOf(p).toLowerCase();
+          if (!labels.some(function (l) { return l.toLowerCase() === lk; })) add("open-not-on-form", loc, labelOf(p), p, form);
+        });
       });
     });
-    return issues;
+    return issues.sort(function (a, b) { return KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.location.localeCompare(b.location) || a.label.localeCompare(b.label); });
   }
   function metaLine() {
     var st = RR.state();
@@ -148,31 +215,49 @@
   }
   function renderDrift() {
     var box = $("posDrift"); box.innerHTML = "";
+    // Until Jotform has answered once, show nothing rather than warnings from the stored copy.
+    if (!live.data && !live.error) { box.hidden = true; return; }
     var issues = driftIssues();
-    if (!issues.length) { box.hidden = true; return; }
+    if (!issues.length && !live.error) { box.hidden = true; return; }
     box.hidden = false;
     var st = RR.state();
     box.appendChild(el("h2", null, "Form dropdowns vs open positions"));
     var ul = el("ul");
     issues.forEach(function (i) {
       var li = el("li");
+      var where = i.label + " (" + i.location + ")";
       if (i.kind === "open-not-on-form") {
         li.appendChild(el("b", null, "Open role not on the form: "));
-        li.appendChild(document.createTextNode(i.label + " (" + i.location + "). "));
-        li.appendChild(linkBtn("Open", function () { openPosition(i.position.id); }));
+        li.appendChild(document.createTextNode(where));
       } else if (i.kind === "closed-on-form") {
-        li.appendChild(el("b", null, "Dropdown still lists a " + i.position.status + " role: "));
-        li.appendChild(document.createTextNode(i.label + " (" + i.location + "). "));
-        li.appendChild(linkBtn("Open", function () { openPosition(i.position.id); }));
+        li.appendChild(el("b", null, "Dropdown still lists a " + (STATUS_LABEL[i.position.status] || i.position.status).toLowerCase() + " role: "));
+        li.appendChild(document.createTextNode(where));
       } else {
         li.appendChild(el("b", null, "Dropdown lists a role with no position: "));
-        li.appendChild(document.createTextNode(i.label + " (" + i.location + "). "));
-        if (st.staff) li.appendChild(linkBtn("Add position", function () { newPosition({ title: i.label, location: i.location, jotform_option_label: i.label, status: "open" }); }));
+        li.appendChild(document.createTextNode(where));
       }
+      li.appendChild(el("span", "forms", ", " + i.forms.join(" and ") + ". "));
+      if (i.position) li.appendChild(linkBtn("Open", function () { openPosition(i.position.id); }));
+      else if (st.staff) li.appendChild(linkBtn("Add position", function () { newPosition({ title: i.label, location: i.location, jotform_option_label: i.label, status: "open" }); }));
       ul.appendChild(li);
     });
-    box.appendChild(ul);
-    box.appendChild(el("p", "hint", "Compared against the English form's position dropdowns (one per location) as stored in the forms table. Change the dropdown in Jotform, or the position's status or label here."));
+    if (issues.length) box.appendChild(ul);
+    var hint = el("p", "hint");
+    if (live.error && live.data) {
+      // An earlier check worked: keep its answer rather than falling back to the stored copy.
+      hint.appendChild(document.createTextNode("Could not check the dropdowns in Jotform again (" + live.error + "). " +
+        (issues.length ? "The list above is from the check at " + RR.fmtDateTime(new Date(live.data.at)) + "." : "The check at " + RR.fmtDateTime(new Date(live.data.at)) + " found nothing to fix.")));
+    } else if (live.error) {
+      var english = st.forms.filter(function (f) { return f.jotform_form_id === ENGLISH_FORM; })[0];
+      var stored = english && english.updated_at ? " (last changed " + RR.fmtDate(new Date(english.updated_at)) + ")" : "";
+      hint.appendChild(document.createTextNode("Could not check the dropdowns in Jotform (" + live.error + "). " +
+        (issues.length ? "The list above compares with the copy kept in the tracker" + stored + ", which can be out of date." : "")));
+    } else {
+      var names = formNames(live.data.forms);
+      hint.appendChild(document.createTextNode("Compared with the position dropdowns in Jotform (" + live.data.forms.map(function (f) { return names[f.jotform_form_id]; }).join(" and ") + ", one per location), checked " + RR.fmtDateTime(new Date(live.data.at)) + ". Each form has its own dropdowns: change them in Jotform on every form, or the position's status or label here."));
+    }
+    hint.appendChild(linkBtn(live.loading ? "Checking…" : "Check again", function () { refreshDropdowns(true); }));
+    box.appendChild(hint);
   }
   function linkBtn(label, onClick) { var b = el("button", "link", label); b.type = "button"; b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); onClick(); }); return b; }
 
@@ -199,15 +284,20 @@
     return wrap;
   }
   function renderTable(stats) {
+    var st = RR.state();
     var rows = filteredPositions();
     var tbody = $("posRows"); tbody.innerHTML = "";
     $("posTable").hidden = !rows.length;
     $("posEmpty").hidden = !!rows.length;
-    $("posEmpty").textContent = RR.state().positions.length ? "No positions match. Change the status or location filter." : "No positions yet.";
+    $("posEmpty").textContent = st.positions.length ? "No positions match. Change the status or location filter." : "No positions yet.";
     rows.sort(function (a, b) { return a.location.localeCompare(b.location) || a.title.localeCompare(b.title); });
+    // Ticks only count for rows on screen: a filter change drops the ones it hides.
+    var shown = {}; rows.forEach(function (p) { shown[p.id] = true; });
+    Object.keys(picked).forEach(function (id) { if (!shown[id]) delete picked[id]; });
     rows.forEach(function (p) {
-      var tr = el("tr", p.id === openId ? "selected" : ""); tr.dataset.id = p.id;
+      var tr = el("tr", (p.id === openId ? "selected" : "") + (picked[p.id] ? " picked" : "")); tr.dataset.id = p.id;
       var s = stats[p.id];
+      if (st.staff) tr.appendChild(pickCell(p, tr, rows));
       var tdT = el("td", "name"); tdT.appendChild(document.createTextNode(p.title));
       if (p.jotform_option_label && p.jotform_option_label !== p.title) tdT.appendChild(el("small", null, "Form label: " + p.jotform_option_label));
       tr.appendChild(tdT);
@@ -225,8 +315,76 @@
       tr.addEventListener("click", function () { openPosition(p.id); });
       tbody.appendChild(tr);
     });
+    renderBulk(rows);
   }
   function statusPill(status) { var sp = el("span", "status-pill st-" + status, STATUS_LABEL[status] || status); return sp; }
+
+  // ---------- Ticking rows and changing their status together (staff) ----------
+  // The tick box sits in its own cell so a click on it, or beside it, never opens the drawer.
+  function pickCell(p, tr, rows) {
+    var td = el("td", "col-sel");
+    var cb = el("input"); cb.type = "checkbox"; cb.checked = !!picked[p.id];
+    cb.setAttribute("aria-label", "Select " + p.title + ", " + p.location);
+    cb.addEventListener("click", function (e) { e.stopPropagation(); });
+    cb.addEventListener("change", function () {
+      if (cb.checked) picked[p.id] = true; else delete picked[p.id];
+      tr.classList.toggle("picked", cb.checked);
+      renderBulk(rows);
+    });
+    td.addEventListener("click", function (e) { e.stopPropagation(); if (e.target === td) cb.click(); });
+    td.appendChild(cb);
+    return td;
+  }
+  function pickedPositions() {
+    var byId = RR.state().positionById;
+    return Object.keys(picked).map(function (id) { return byId[id]; }).filter(Boolean);
+  }
+  function renderBulk(rows) {
+    var bar = $("posBulk"), all = $("posSelAll");
+    if (!RR.state().staff) { bar.hidden = true; return; }
+    var ps = pickedPositions(), n = ps.length;
+    all.checked = n > 0 && n === rows.length;
+    all.indeterminate = n > 0 && n < rows.length;
+    bar.hidden = !n;
+    if (!n) return;
+    $("posBulkCount").textContent = n + " selected";
+    $("posBulkOpen").disabled = ps.every(function (p) { return p.status === "open"; });
+    $("posBulkClose").disabled = ps.every(function (p) { return p.status === "closed"; });
+  }
+  function bulkConfirmText(ps, status) {
+    var names = ps.map(function (p) { return "• " + p.title + " (" + p.location + ")"; });
+    var list = names.slice(0, 15).join("\n") + (names.length > 15 ? "\n… and " + (names.length - 15) + " more" : "");
+    var what = ps.length === 1 ? "this position" : "these " + ps.length + " positions";
+    if (status === "closed") {
+      return "Close " + what + "?\n\n" + list + "\n\n" +
+        "Each current opening ends today. Applicants, notes, postings, pay and market history stay with the position; set it to Open again next season and a new opening starts.\n\n" +
+        "Take them off the position dropdowns in Jotform too (English and Spanish forms). The warning on this page lists any still there.";
+    }
+    var tracked = ps.filter(function (p) { return p.market_tracking; }).length;
+    return "Open " + what + "?\n\n" + list + "\n\n" +
+      "Each starts a new opening today." +
+      (tracked ? " " + tracked + (tracked === 1 ? " has" : " have") + " market tracking on, so a market check runs for " + (tracked === 1 ? "it" : "each") + " now, unless one ran in the last day (about $0.50 a run)." : "") +
+      "\n\nAdd them to the position dropdowns in Jotform too (English and Spanish forms) if they are not there.";
+  }
+  async function bulkSetStatus(status) {
+    var ps = pickedPositions().filter(function (p) { return p.status !== status; });
+    if (!ps.length) return;
+    if (!confirm(bulkConfirmText(ps, status))) return;
+    var ids = ps.map(function (p) { return p.id; });
+    var btns = [$("posBulkOpen"), $("posBulkClose")];
+    btns.forEach(function (b) { b.disabled = true; });
+    $("posBulkCount").textContent = (status === "closed" ? "Closing " : "Opening ") + ids.length + "…";
+    // One update for all of them: the openings and market-check triggers run per row, and if any
+    // row is refused none changes.
+    var r = await sb.from("positions").update({ status: status }).in("id", ids).select("id");
+    if (r.error) { RR.notice("Could not change the status: " + RR.errText(r.error)); renderBulk(filteredPositions()); return; }
+    var done = (r.data || []).length;
+    picked = {};
+    await afterPositionChange(false);
+    if (openId && openId !== "new" && ids.indexOf(openId) >= 0) openPosition(openId);
+    RR.notice((status === "closed" ? "Closed " : "Opened ") + done + " position" + (done === 1 ? "" : "s") + "." +
+      (done < ids.length ? " " + (ids.length - done) + " could not be changed." : ""));
+  }
 
   function renderUnmatched() {
     var st = RR.state();
@@ -1187,5 +1345,14 @@
   $("posStatus").addEventListener("change", function () { filters.status = this.value; renderTable(statsByPosition()); });
   $("posLoc").addEventListener("change", function () { filters.loc = this.value; renderTable(statsByPosition()); });
   $("posAddBtn").addEventListener("click", function () { newPosition({}); });
+  $("posSelAll").addEventListener("change", function () {
+    var on = this.checked;
+    picked = {};
+    if (on) filteredPositions().forEach(function (p) { picked[p.id] = true; });
+    renderTable(statsByPosition());
+  });
+  $("posBulkOpen").addEventListener("click", function () { bulkSetStatus("open"); });
+  $("posBulkClose").addEventListener("click", function () { bulkSetStatus("closed"); });
+  $("posBulkClear").addEventListener("click", function () { picked = {}; renderTable(statsByPosition()); });
   $("posRelinkBtn").addEventListener("click", relinkAll);
 })();
