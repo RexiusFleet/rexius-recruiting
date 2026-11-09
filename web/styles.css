@@ -197,6 +197,14 @@ th.num, td.num { text-align: right; white-space: nowrap; }
 .drift li { padding: 2px 0; }
 .drift .link, .drift .hint { color: inherit; }
 .drift .link { text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; }
+.drift .forms { opacity: .85; }
+.drift .hint .link { margin-left: 4px; }
+.bulkbar { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 3; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); box-shadow: var(--shadow); font-size: 13.5px; }
+.bulkbar #posBulkCount { font-weight: 600; margin-right: 4px; }
+th.col-sel, td.col-sel { width: 30px; padding-right: 0; cursor: default; }
+th.col-sel input, td.col-sel input { margin: 0; width: 16px; height: 16px; vertical-align: middle; cursor: pointer; }
+tbody tr.picked { background: var(--accent-soft); }
+tbody tr.picked.selected { background: var(--select); }
 .unmatched { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); }
 .unmatched h2 { font-size: 15px; margin: 0 0 4px; }
 .unmatched select { max-width: 260px; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); }

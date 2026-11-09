@@ -326,7 +326,7 @@
   async function loadRefs() {
     var r = await Promise.all([
       sb.from("stages").select("id, name, sort_order, is_terminal, is_hired, is_archive").order("sort_order"),
-      sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map"),
+      sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map, is_active, updated_at"),
       sb.from("positions").select(POSITION_COLUMNS).order("location").order("title"),
       sb.from("profiles").select("user_id, name, role")
     ]);
