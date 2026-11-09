@@ -3,7 +3,7 @@
  * decides what each role may read and write, so this file only has to pick the right source:
  *   admin / hr  -> applications (+ application_status, application_files, forms, positions)
  *   manager     -> applications_for_managers (curated view; no notes, tags, offers, contacts,
- *                  raw answers) and their own manager_feedback rows
+ *                  raw answers; the good-lead flag without its reason) and their own manager_feedback rows
  *   no profile  -> the "no access" screen
  * This file owns sign-in, the Applications page and the drawer. positions.js, documents.js and
  * reports.js register the other pages through window.RR (bottom of this file) and get the
@@ -63,7 +63,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  function emptyFilters() { return { q: "", forms: {}, locs: {}, pos: {}, src: {}, stages: {}, from: "", to: "", resumeOnly: false, dupOnly: false, showArchived: false }; }
+  function emptyFilters() { return { q: "", forms: {}, locs: {}, pos: {}, src: {}, stages: {}, from: "", to: "", resumeOnly: false, dupOnly: false, leadOnly: false, showArchived: false }; }
 
   // ---------- Text helpers ----------
   function toText(v) {
@@ -266,7 +266,7 @@
   }
   function resetData() {
     apps = []; appById = {}; selectedId = null; filters = emptyFilters(); shown = SHOW_STEP; lastLoaded = null;
-    $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…"; $("showArchived").checked = false;
+    $("rows").innerHTML = ""; $("pipeline").innerHTML = ""; $("meta").textContent = "Loading…"; $("showArchived").checked = false; $("leadOnly").checked = false;
     // The next sign-in may be a different role: every page drops what it cached.
     Object.keys(pages).forEach(function (n) { if (pages[n].reset) pages[n].reset(); });
   }
@@ -355,8 +355,16 @@
   }
 
   // ---------- Applications ----------
+  var LEAD_COLUMNS = "is_lead, lead_reason, lead_revisit_on, lead_keep_until, lead_flagged_by, lead_flagged_at";
   var STAFF_COLUMNS = "id, jotform_submission_id, form_id, submitted_at, name, email, email_norm, phone, phone_norm, contact_purged_at, files_purged_at, city, state, location, position_text, position_id, source, source_detail, referred_by, available_start, has_resume, language, jotform_url, origin, entered_by, entered_at, " +
-    "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at), application_files(id, storage_path, original_name, kind), status_history(to_stage_id)";
+    "application_status(stage_id, assigned_to, notes, tags, stage_since, updated_at, " + LEAD_COLUMNS + "), application_files(id, storage_path, original_name, kind), status_history(to_stage_id)";
+
+  // Good lead (migration 20261113000100): a flag beside the stage, with a reason, an optional
+  // revisit date and the day the flag stops holding the contact details and files.
+  function leadFrom(st) {
+    if (!st || !st.is_lead) return null;
+    return { reason: st.lead_reason || "", revisitOn: st.lead_revisit_on || "", keepUntil: st.lead_keep_until || "", flaggedBy: st.lead_flagged_by || null, flaggedAt: st.lead_flagged_at ? new Date(st.lead_flagged_at) : null };
+  }
 
   async function fetchAll(table, columns) {
     var out = [], from = 0;
@@ -390,6 +398,7 @@
       origin: row.origin || "jotform", enteredBy: row.entered_by || null, enteredAt: row.entered_at ? new Date(row.entered_at) : null,
       jotformUrl: row.jotform_url || "", submissionId: row.jotform_submission_id,
       stageId: st.stage_id, assignedTo: st.assigned_to || "", notes: st.notes || "", tags: st.tags || [], stageSince: st.stage_since ? new Date(st.stage_since) : null,
+      lead: leadFrom(st),
       furthestSort: furthest,
       files: files
     });
@@ -408,6 +417,7 @@
       origin: row.origin || "jotform", enteredBy: row.entered_by || null, enteredAt: row.entered_at ? new Date(row.entered_at) : null,
       jotformUrl: "", submissionId: null,
       stageId: row.stage_id, assignedTo: row.assigned_to || "", notes: "", tags: [], stageSince: row.stage_since ? new Date(row.stage_since) : null,
+      lead: row.is_lead ? { reason: "", revisitOn: "", keepUntil: "", flaggedBy: null, flaggedAt: null } : null, // managers get the flag only
       furthestSort: stageById[row.furthest_stage_id] ? stageById[row.furthest_stage_id].sort_order : 0,
       files: files,
       curated: {
@@ -436,6 +446,7 @@
       var others = {};
       a.dupKeys.forEach(function (k) { index[k].forEach(function (id) { if (id !== a.id) others[id] = true; }); });
       a.dups = Object.keys(others).map(function (id) { return appById[id]; }).filter(Boolean).sort(function (x, y) { return y.when - x.when; });
+      a.leadDups = a.dups.filter(function (o) { return o.lead && o.when < a.when; }); // earlier applications flagged as a good lead
     });
   }
 
@@ -501,6 +512,22 @@
     queue(id, function () { return sb.from("application_status").update(patch).eq("application_id", id); });
   }
 
+  // Set, change or remove the good-lead flag. The database stamps who and when, defaults and
+  // caps the keep-until date and blanks everything when the flag goes off, so the row is read
+  // back rather than guessed.
+  function saveLead(id, patch) {
+    var a = appById[id]; if (!a) return;
+    patch.updated_by = session.user.id;
+    queue(id, function () {
+      return sb.from("application_status").update(patch).eq("application_id", id).select(LEAD_COLUMNS).single().then(function (res) {
+        if (!res.error) { a.lead = leadFrom(res.data); buildDupIndex(); render(); if (selectedId === id) renderDrawer(); }
+        return res;
+      });
+    });
+  }
+  // Last day a lead may be kept: twelve months after the application (the database enforces it).
+  function leadCap(a) { var d = new Date(a.when.getTime()); d.setFullYear(d.getFullYear() + 1); return ymd(d); }
+
   // ---------- Filters ----------
   function uniqCounts(key) {
     var m = {};
@@ -527,7 +554,8 @@
   function isArchived(a) { return archiveId !== null && a.stageId === archiveId; }
   // Archived applications stay out of the list, the pipeline bar and the CSV unless "Include
   // archived" is ticked (or the Archived chip is picked, which ticks it).
-  function archivedHidden() { return archiveId !== null && !filters.showArchived; }
+  // "Good leads" lists every lead whatever its stage, so it lifts the archive rule too.
+  function archivedHidden() { return archiveId !== null && !filters.showArchived && !filters.leadOnly; }
   function setShowArchived(on) {
     filters.showArchived = on;
     if (!on && archiveId !== null) delete filters.stages[archiveId];
@@ -552,9 +580,12 @@
       if (filters.to && a.dateKey > filters.to) return false;
       if (filters.resumeOnly && !a.files.length) return false;
       if (filters.dupOnly && !(a.dups && a.dups.length)) return false;
+      if (filters.leadOnly && !a.lead) return false;
       return true;
     });
   }
+  // Leads with a revisit date first (soonest on top), then leads without one, then everyone else.
+  function revisitKey(a) { return a.lead ? (a.lead.revisitOn || "9999") : "~"; }
   function sortRows(rows) {
     var k = sort.key, dir = sort.dir === "asc" ? 1 : -1;
     rows.sort(function (a, b) {
@@ -562,6 +593,7 @@
       if (k === "date") r = a.when - b.when;
       else if (k === "name") r = a.nameKey.localeCompare(b.nameKey);
       else if (k === "status") { r = stageIndex(a.stageId) - stageIndex(b.stageId); if (!r) r = b.when - a.when; }
+      else if (k === "revisit") { r = revisitKey(a).localeCompare(revisitKey(b)); if (!r) r = b.when - a.when; }
       else if (k === "position") { r = (a.positionText || "zz").localeCompare(b.positionText || "zz"); if (!r) r = b.when - a.when; }
       return r * dir;
     });
@@ -650,6 +682,8 @@
     var hiddenMatches = hidden ? applyFilters(true).length - rows.length : 0; // archived rows the other filters would match
     var filtered = rows.length !== base;
     $("archivedN").textContent = archivedTotal ? String(archivedTotal) : "";
+    var leadTotal = apps.filter(function (a) { return a.lead; }).length;
+    $("leadN").textContent = leadTotal ? String(leadTotal) : "";
     var count = $("count"); count.textContent = "";
     if (apps.length) {
       count.appendChild(document.createTextNode(filtered ? rows.length.toLocaleString() + " of " + base.toLocaleString() + " applications match" : rows.length.toLocaleString() + " applications"));
@@ -673,6 +707,8 @@
       var tdN = el("td", "name");
       tdN.appendChild(document.createTextNode(a.name));
       if (a.dups && a.dups.length) { var dup = el("span", "dup", "×" + (a.dups.length + 1)); dup.title = "Applied " + (a.dups.length + 1) + " times (same email or phone)"; tdN.appendChild(dup); }
+      if (a.lead) { var star = el("span", "lead", "★"); star.title = "Good lead" + (a.lead.reason ? ": " + a.lead.reason : "") + (a.lead.revisitOn ? " (revisit " + fmtDay(a.lead.revisitOn) + ")" : ""); star.setAttribute("aria-label", "Good lead"); tdN.appendChild(star); }
+      else if (a.leadDups && a.leadDups.length) { var past = el("span", "lead past", "★ earlier lead"); past.title = "An earlier application from this person is flagged as a good lead"; tdN.appendChild(past); }
       tdN.appendChild(el("small", null, a.contactPurged ? "contact details removed" : (a.email || a.phone || "")));
       tr.appendChild(tdN);
       var tdD = el("td", "date", fmtDate(a.when)); tdD.title = fmtDateTime(a.when); tr.appendChild(tdD);
@@ -763,11 +799,26 @@
       body.appendChild(badge);
     }
 
+    // This person applied before and that application is a good lead: say so up front.
+    if (!a.lead && a.leadDups && a.leadDups.length) {
+      a.leadDups.forEach(function (o) {
+        var note = el("div", "notice-inline");
+        note.appendChild(el("span", "lead", "★"));
+        note.appendChild(document.createTextNode(" Flagged as a good lead on an earlier application: "));
+        var open = el("a", null, fmtDate(o.when) + ", " + (o.positionText || "no position")); open.href = "#";
+        open.addEventListener("click", function (e) { e.preventDefault(); openDrawer(o.id); });
+        note.appendChild(open);
+        if (o.lead.reason) note.appendChild(document.createTextNode(". " + o.lead.reason));
+        body.appendChild(note);
+      });
+    }
+
     // Review / status
     var sec = section(body, staff ? "Review" : "Status");
     var rv = el("div", "review");
     if (staff) {
       var l1 = el("label", null, "Status"); l1.appendChild(statusControl(a)); rv.appendChild(l1);
+      rv.appendChild(leadControl(a));
       var l2 = el("label", null, "Sent to / hiring manager"); var inp = el("input"); inp.type = "text"; inp.value = a.assignedTo; inp.placeholder = "Name of the manager you passed this to";
       inp.addEventListener("change", function () { saveStatusFields(a.id, { assigned_to: inp.value.trim() || null }); }); l2.appendChild(inp); rv.appendChild(l2);
       var l4 = el("label", null, "Tags (comma separated)"); var tg = el("input"); tg.type = "text"; tg.value = a.tags.join(", "); tg.placeholder = "spring, bilingual, CDL";
@@ -783,6 +834,7 @@
       var dd = el("dd"); dd.appendChild(statusControl(a)); dl0.appendChild(el("dt", null, "Status")); dl0.appendChild(dd);
       kv(dl0, "Since", a.stageSince ? fmtDateTime(a.stageSince) : "");
       kv(dl0, "Sent to", a.assignedTo);
+      kv(dl0, "Good lead", a.lead ? "Yes. HR flagged this applicant to follow up later." : "");
       rv.appendChild(dl0);
     }
     sec.appendChild(rv);
@@ -873,6 +925,56 @@
       loadManagerFeedback(a);
     }
     body.scrollTop = 0;
+  }
+
+  // Good lead (staff): a button until flagged, then the reason and dates with Save and Remove.
+  function leadControl(a) {
+    var box = el("div", "lead-box" + (a.lead ? " on" : ""));
+    var today = ymd(new Date()), cap = leadCap(a);
+    if (!a.lead && cap < today) { box.appendChild(el("div", "hint", "This application is more than twelve months old, so it cannot be kept as a good lead.")); return box; }
+    var form = el("form", "review");
+    var head = el("div", "lead-head");
+    if (a.lead) {
+      head.appendChild(el("span", "lead", "★"));
+      head.appendChild(document.createTextNode(" Good lead" + (a.lead.flaggedAt ? " · flagged " + fmtDate(a.lead.flaggedAt) : "") + (a.lead.flaggedBy ? " by " + (profileNames[a.lead.flaggedBy] || "a removed user") : "")));
+    } else {
+      var flag = el("button", "btn small", "☆ Flag as a good lead"); flag.type = "button";
+      flag.title = "Someone worth calling back later, whatever happened with this application";
+      flag.addEventListener("click", function () { form.hidden = false; flag.hidden = true; reason.focus(); });
+      head.appendChild(flag);
+      form.hidden = true;
+    }
+    box.appendChild(head);
+    var lr = el("label", null, "Why they are worth following up (HR and admin only)"); var reason = el("textarea"); reason.required = true; reason.maxLength = 500; reason.style.minHeight = "48px";
+    reason.value = a.lead ? a.lead.reason : ""; reason.placeholder = "Experienced crew lead; no opening until spring"; lr.appendChild(reason); form.appendChild(lr);
+    var row = el("div", "row");
+    var keepMin = a.lead && a.lead.keepUntil && a.lead.keepUntil < today ? a.lead.keepUntil : today;
+    var lv = el("label", null, "Revisit around (optional)"); var revisit = el("input"); revisit.type = "date"; revisit.value = a.lead ? a.lead.revisitOn : ""; lv.appendChild(revisit); row.appendChild(lv);
+    var lk = el("label", null, "Keep contact details until"); var keep = el("input"); keep.type = "date"; keep.required = true; keep.min = keepMin; keep.max = cap; keep.value = a.lead && a.lead.keepUntil ? a.lead.keepUntil : cap; lk.appendChild(keep); row.appendChild(lk);
+    form.appendChild(row);
+    form.appendChild(el("div", "hint", (a.contactPurged ? "Email and phone were already removed, so the flag only marks the record. " : "A good lead keeps its email, phone and files past the usual six months, until the date above (at most " + fmtDay(cap) + ", twelve months after applying). ") + "After that date the flag clears itself."));
+    var btns = el("div", "row");
+    var save = el("button", "btn small", a.lead ? "Save" : "Flag as a good lead"); save.type = "submit"; btns.appendChild(save);
+    if (a.lead) {
+      var rm = el("button", "link", "Remove flag"); rm.type = "button";
+      rm.addEventListener("click", function () {
+        if (!confirm("Remove the good-lead flag from " + a.name + "? The reason is deleted, and the six-month retention applies to the contact details and files again.")) return;
+        saveLead(a.id, { is_lead: false });
+      });
+      btns.appendChild(rm);
+    } else {
+      var cancel = el("button", "link", "Cancel"); cancel.type = "button";
+      cancel.addEventListener("click", function () { form.hidden = true; head.firstChild.hidden = false; });
+      btns.appendChild(cancel);
+    }
+    form.appendChild(btns);
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var why = reason.value.trim(); if (!why) { reason.focus(); return; }
+      saveLead(a.id, { is_lead: true, lead_reason: why, lead_revisit_on: revisit.value || null, lead_keep_until: keep.value || null });
+    });
+    box.appendChild(form);
+    return box;
   }
 
   function fillDetails(d) {
@@ -1262,13 +1364,13 @@
   }
   function exportCsv() {
     var rows = sortRows(applyFilters());
-    var head = ["Name", "Email", "Phone", "City", "State", "Applied", "Form", "Origin", "Entered by", "Location", "Position", "Matched opening", "Heard from", "Referred by", "Can start", "Status", "In stage since", "Sent to", "Resume", "Files"];
-    if (staff) head = head.concat(["Tags", "Notes", "Jotform link"]);
+    var head = ["Name", "Email", "Phone", "City", "State", "Applied", "Form", "Origin", "Entered by", "Location", "Position", "Matched opening", "Heard from", "Referred by", "Can start", "Status", "In stage since", "Sent to", "Resume", "Files", "Good lead"];
+    if (staff) head = head.concat(["Tags", "Notes", "Jotform link", "Lead reason", "Lead revisit", "Lead kept until"]);
     var lines = [head.join(",")];
     rows.forEach(function (a) {
       var cells = [a.name, a.email, a.phone, a.city, a.state, a.dateKey, a.form, a.origin, a.enteredBy ? (profileNames[a.enteredBy] || "removed user") : "", a.location, a.positionText, a.positionTitle, a.source + (a.sourceDetail ? " (" + a.sourceDetail + ")" : ""), a.referredBy, a.availableStart,
-        stageName(a.stageId), a.stageSince ? ymd(a.stageSince) : "", a.assignedTo, a.files.some(function (f) { return f.kind === "resume"; }) ? "yes" : "no", a.files.map(fileLabel).join("; ")];
-      if (staff) cells = cells.concat([a.tags.join("; "), a.notes, a.jotformUrl]);
+        stageName(a.stageId), a.stageSince ? ymd(a.stageSince) : "", a.assignedTo, a.files.some(function (f) { return f.kind === "resume"; }) ? "yes" : "no", a.files.map(fileLabel).join("; "), a.lead ? "yes" : ""];
+      if (staff) cells = cells.concat([a.tags.join("; "), a.notes, a.jotformUrl, a.lead ? a.lead.reason : "", a.lead ? a.lead.revisitOn : "", a.lead ? a.lead.keepUntil : ""]);
       lines.push(cells.map(csvCell).join(","));
     });
     var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
@@ -1389,11 +1491,12 @@
   $("to").addEventListener("change", function () { filters.to = this.value; render(); });
   $("resumeOnly").addEventListener("change", function () { filters.resumeOnly = this.checked; render(); });
   $("dupOnly").addEventListener("change", function () { filters.dupOnly = this.checked; render(); });
+  $("leadOnly").addEventListener("change", function () { filters.leadOnly = this.checked; shown = SHOW_STEP; render(); });
   $("showArchived").addEventListener("change", function () { setShowArchived(this.checked); render(); });
   $("sort").addEventListener("change", function () { var p = this.value.split(":"); sort = { key: p[0], dir: p[1] }; render(); });
   $("clearBtn").addEventListener("click", function () {
     filters = emptyFilters();
-    $("q").value = ""; $("from").value = ""; $("to").value = ""; $("resumeOnly").checked = false; $("dupOnly").checked = false; $("showArchived").checked = false;
+    $("q").value = ""; $("from").value = ""; $("to").value = ""; $("resumeOnly").checked = false; $("dupOnly").checked = false; $("leadOnly").checked = false; $("showArchived").checked = false;
     buildFilterOptions(); shown = SHOW_STEP; render();
   });
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });

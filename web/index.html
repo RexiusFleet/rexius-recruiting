@@ -131,6 +131,7 @@
       <h2>Other</h2>
       <label class="check"><input type="checkbox" id="resumeOnly"> Has a resume</label>
       <label class="check"><input type="checkbox" id="dupOnly"> Applied more than once</label>
+      <label class="check" title="Applicants flagged to follow up later, in any stage, archived included"><input type="checkbox" id="leadOnly"> Good leads <span class="n" id="leadN"></span></label>
       <label class="check"><input type="checkbox" id="showArchived"> Include archived <span class="n" id="archivedN"></span></label>
       <button class="btn clear" id="clearBtn" type="button">Clear filters</button>
     </aside>
@@ -144,6 +145,7 @@
           <option value="name:asc">Name A–Z</option>
           <option value="status:asc">Status</option>
           <option value="position:asc">Position</option>
+          <option value="revisit:asc">Good leads by revisit date</option>
         </select></label>
       </div>
       <div id="tableWrap" style="overflow-x:auto">

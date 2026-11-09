@@ -29,7 +29,7 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
-| `scripts/test-policies.sql` | Policy checks as every role against the local stack (225 checks after Phase 9b) | 3+ |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack (244 checks after the good-leads change) | 3+ |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
 | `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
@@ -610,6 +610,10 @@ for them: the applicant was hired, passed over, withdrew or was archived, and Jo
 original submission for the rare case someone needs it. A candidate who applies again arrives as
 a new row with fresh contact details.
 
+One exception since 2026-11-09: an application staff have flagged as a good lead keeps its contact
+details and files until the flag's keep-until date, at most twelve months after it was submitted
+("What the good-leads change created").
+
 - Migration `20261109000100_contact_retention.sql`: `applications.contact_purged_at`;
   `recruiting.purge_contact_details(retention interval default '6 months')`, security definer,
   executable by `service_role` only (never by a browser session), which nulls `email`,
@@ -1025,6 +1029,49 @@ is new. Step 1 was done on 2026-11-09 (version 1 active; it answers 401 without 
 2. Merge the pull request; the Pages workflow publishes `web/`. If the site publishes before the
    function exists, the warning says it could not check Jotform and uses the stored copy, as
    before; nothing else is affected.
+
+## What the good-leads change created
+
+A way to keep a list of people worth calling back (2026-11-09, branch `claude/good-leads`,
+migration `20261113000100`): an experienced crew member there was no opening for, a strong
+applicant who declined, anyone staff want on file for the spring.
+
+- **A flag, not a stage.** `application_status.is_lead` sits beside the stage, so the stage keeps
+  recording what happened (Not selected, Withdrawn, Archived) and no report changes. With it go
+  `lead_reason` (required), `lead_revisit_on` (optional: when to look again), `lead_keep_until`,
+  and `lead_flagged_by` / `lead_flagged_at`, which a trigger stamps from the session.
+- **Retention exception.** A good lead keeps its email, phone, resume and scans past the usual
+  six months, until `lead_keep_until`. That date defaults to twelve months after the application
+  and the trigger refuses anything later; staff can shorten it. The day after it passes, the
+  daily purge job (`purge_contact_details()`, which now calls `expire_leads()` first) clears the
+  flag with its reason and dates and then purges the application like any other. Removing the
+  flag by hand has the same effect at the next run. The file purge follows `contact_purged_at`,
+  so files are held exactly as long as the contact details. An application more than twelve
+  months old cannot be flagged. To tighten this later, change the `12 months` in
+  `recruiting.keep_lead_fields()`.
+- **In the tracker (HR and admin).** The drawer's Review section has **Flag as a good lead**,
+  which asks for the reason, an optional revisit date and the keep-until date; once flagged the
+  same box edits them and has **Remove flag**. Flagged rows carry a ★ in the list. The filter
+  rail has **Good leads**, which lists every lead in any stage, archived included, and the sort
+  menu has **Good leads by revisit date**. The CSV export gains "Good lead" and, for staff,
+  "Lead reason", "Lead revisit" and "Lead kept until".
+- **When a lead applies again.** The duplicate check (same email or phone) marks the new
+  application "★ earlier lead" in the list, and its drawer opens with the earlier application's
+  date, position and reason. This works only while the earlier application still has its contact
+  details, which is what the retention exception is for.
+- **On a position.** The position drawer's applicant list starts with "N good leads on file for
+  this role": the people to call first when a seasonal role opens again.
+- **Managers** see the ★ and "Good lead: Yes" through `applications_for_managers.is_lead`. The
+  reason and dates are not in the view, and managers cannot set or remove the flag.
+- **Claude is not involved.** The flag is a person's judgment; nothing suggests or ranks leads.
+- `scripts/test-policies.sql`: 19 more checks (244 in all).
+
+**Deploying.** The migration must be on the hosted project before the page publishes: the new
+page asks for the lead columns and will not load applications without them. The old page works
+unchanged with the migration applied.
+
+1. `npm run db:migrate` (applies `20261113000100_good_leads.sql`).
+2. Merge the pull request; the Pages workflow publishes `web/`.
 
 ## What Phase 9b created
 
@@ -1699,7 +1746,7 @@ on the developer's machine.
 | Files | Resumes, portfolios, library documents and scanned paper applications are never public | Bucket `recruiting-files` is private. A file is reachable only through a signed URL that expires in minutes, issued only to a signed-in user a storage policy allows. Library documents (`documents/` prefix) are further gated by the document's `min_role`: the storage policy requires a `recruiting.documents` row the caller may read. Scans of paper applications typed in by staff live under the `manual/` prefix with the same read rule as resumes (any user with a profile); only admin and hr can upload there, and nothing can be replaced or deleted from the browser. A scan is stored as an image only, so anything on the paper that section 5 says is never stored (SSN, licence number, date of birth, signature) must be blacked out before upload; the form says so |
 | Reports | Managers get no aggregate figures | Every `report_*` view filters on `recruiting.is_staff()` inside the view; the views carry counts, sums and dates only, never notes, answers, pay or contact details |
 | Transport and storage | Encrypted in transit and at rest | TLS everywhere; Supabase encrypts database and storage volumes (AWS us-west-2) |
-| Contact details and files | Email, phone, resumes, portfolios and scans are held for six months, then removed | A daily pg_cron job calls `recruiting.purge_contact_details()`, which nulls email, phone and their normalised forms and drops the alternate phone from `answers` on applications submitted more than six months ago that are in a terminal stage or have not changed stage in six months, stamping `contact_purged_at`. A trigger keeps a purged row purged through a `--refresh` backfill or a webhook redelivery. The same day the Edge Function `recruiting-retention` (called through pg_net with the market-check vault secret) deletes the application's files from Storage and their rows, and a trigger refuses new ones. Neither helper is callable by app users. Name, city, state, position, source, stage and history stay, so reports are unchanged; the drawer and PDF say "removed after six months" ("What the contact-retention change created") |
+| Contact details and files | Email, phone, resumes, portfolios and scans are held for six months, then removed (up to twelve months for an application staff flagged as a good lead, "What the good-leads change created") | A daily pg_cron job calls `recruiting.purge_contact_details()`, which nulls email, phone and their normalised forms and drops the alternate phone from `answers` on applications submitted more than six months ago that are in a terminal stage or have not changed stage in six months, stamping `contact_purged_at`. A trigger keeps a purged row purged through a `--refresh` backfill or a webhook redelivery. The same day the Edge Function `recruiting-retention` (called through pg_net with the market-check vault secret) deletes the application's files from Storage and their rows, and a trigger refuses new ones. Neither helper is callable by app users. Name, city, state, position, source, stage and history stay, so reports are unchanged; the drawer and PDF say "removed after six months" ("What the contact-retention change created") |
 | Never stored | SSNs, bank details, dates of birth, government IDs, wages, signed offer letters, driver licence numbers and expiry dates, signatures, initials, street addresses | No column exists for them; the importer drops the licence number and expiry, signature, initials and street-address answers before writing `answers` (CLAUDE.md section 5); only the applicant's city and state are kept. The licence class or type is kept (since 2026-10-28; many roles need a CDL) and the importer drops it when it looks like a number. The test script and the backfill tests assert none of the rest remain. Offers (Phase 7) have no pay field; positions hold only the advertised range |
 
 ### Credentials that bypass all of the above

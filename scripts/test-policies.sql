@@ -975,3 +975,95 @@ select pg_temp.check('summaries: deleting an application deletes its summaries a
 select pg_temp.check('forms: every form has the four keys the summary reads',
   (select count(*) from recruiting.forms where field_map ?& array['certifications', 'worked_before_details', 'applied_before_details', 'other_qualifications']) = (select count(*) from recruiting.forms));
 rollback;
+
+-- ----- Good leads (20261113000100) ------------------------------------------------------------
+-- The flag needs a reason, stamps who and when, is capped at twelve months after the
+-- application, holds off the six-month purge until it expires, and shows managers the flag only.
+create or replace function pg_temp.app(n int) returns uuid language sql as $$ select id from recruiting.applications where jotform_submission_id = '600000000000000000' || n $$;
+create or replace function pg_temp.lead_cap(n int) returns date language sql as $$ select ((submitted_at at time zone 'America/Los_Angeles')::date + interval '12 months')::date from recruiting.applications where id = pg_temp.app(n) $$;
+
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('leads: nobody is a lead to begin with', (select count(*) from recruiting.application_status where is_lead) = 0);
+savepoint sp;
+do $$ begin
+  update recruiting.application_status set is_lead = true where application_id = pg_temp.app(1);
+  raise notice 'UNEXPECTED: a lead was flagged without a reason';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('leads: a flag without a reason is refused', (select count(*) from recruiting.application_status where is_lead) = 0);
+update recruiting.application_status set is_lead = true, lead_reason = '  Experienced crew lead; no opening until spring  ', lead_revisit_on = current_date + 90,
+  lead_flagged_by = '11111111-1111-1111-1111-111111111111', lead_flagged_at = '2020-01-01'
+  where application_id = pg_temp.app(1);
+select pg_temp.check('leads: hr can flag a lead', (select is_lead from recruiting.application_status where application_id = pg_temp.app(1)));
+select pg_temp.check('leads: who and when are stamped from the session, not the request',
+  (select lead_flagged_by = '22222222-2222-2222-2222-222222222222' and lead_flagged_at > now() - interval '1 minute' from recruiting.application_status where application_id = pg_temp.app(1)));
+select pg_temp.check('leads: the reason is trimmed', (select lead_reason from recruiting.application_status where application_id = pg_temp.app(1)) = 'Experienced crew lead; no opening until spring');
+select pg_temp.check('leads: keep-until defaults to twelve months after the application', (select lead_keep_until from recruiting.application_status where application_id = pg_temp.app(1)) = pg_temp.lead_cap(1));
+savepoint sp;
+do $$ begin
+  update recruiting.application_status set lead_keep_until = pg_temp.lead_cap(1) + 1 where application_id = pg_temp.app(1);
+  raise notice 'UNEXPECTED: a lead was kept past twelve months';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('leads: keep-until cannot pass twelve months', (select lead_keep_until from recruiting.application_status where application_id = pg_temp.app(1)) = pg_temp.lead_cap(1));
+savepoint sp;
+do $$ begin
+  update recruiting.application_status set lead_keep_until = current_date - 2 where application_id = pg_temp.app(1);
+  raise notice 'UNEXPECTED: keep-until was set in the past';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+update recruiting.application_status set lead_keep_until = current_date + 30, notes = 'Call in March.' where application_id = pg_temp.app(1);
+select pg_temp.check('leads: keep-until can be shortened, and the stamp survives other edits',
+  (select lead_keep_until = current_date + 30 and lead_flagged_by = '22222222-2222-2222-2222-222222222222' from recruiting.application_status where application_id = pg_temp.app(1)));
+select pg_temp.check('leads: helper functions are not callable by app users',
+  not has_function_privilege('authenticated', 'recruiting.expire_leads()', 'execute') and not has_function_privilege('authenticated', 'recruiting.purge_contact_details(interval)', 'execute'));
+
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('leads: manager sees the flag through the view', (select count(*) from recruiting.applications_for_managers where is_lead) = 1);
+select pg_temp.check('leads: the view carries no reason or dates',
+  (select count(*) from information_schema.columns where table_schema = 'recruiting' and table_name = 'applications_for_managers' and column_name like 'lead\_%') = 0);
+update recruiting.application_status set is_lead = false;
+reset role;
+select pg_temp.check('leads: manager cannot change the flag', (select count(*) from recruiting.application_status where is_lead) = 1);
+
+-- Retention: two applications seven months old in a terminal stage; only the lead keeps its details.
+update recruiting.applications set submitted_at = now() - interval '7 months' where id in (pg_temp.app(1), pg_temp.app(5));
+update recruiting.application_status set stage_id = (select id from recruiting.stages where is_terminal and not is_hired and not is_archive order by sort_order limit 1)
+  where application_id in (pg_temp.app(1), pg_temp.app(5));
+select recruiting.purge_contact_details();
+select pg_temp.check('leads: the six-month purge skips a good lead', (select contact_purged_at is null and email is not null from recruiting.applications where id = pg_temp.app(1)));
+select pg_temp.check('leads: the purge still reaches everyone else', (select contact_purged_at is not null and email is null from recruiting.applications where id = pg_temp.app(5)));
+select pg_temp.check('leads: files are not due while the lead holds', (select count(*) from recruiting.applications where contact_purged_at is not null and files_purged_at is null and id = pg_temp.app(1)) = 0);
+-- The keep-until date passes (set behind the trigger's back): the next run clears the flag and purges.
+alter table recruiting.application_status disable trigger application_status_keep_lead_fields;
+update recruiting.application_status set lead_keep_until = (now() at time zone 'America/Los_Angeles')::date - 1 where application_id = pg_temp.app(1);
+alter table recruiting.application_status enable trigger application_status_keep_lead_fields;
+select recruiting.purge_contact_details();
+select pg_temp.check('leads: an expired flag clears itself with its reason and dates',
+  (select not is_lead and lead_reason is null and lead_revisit_on is null and lead_keep_until is null and lead_flagged_by is null and lead_flagged_at is null from recruiting.application_status where application_id = pg_temp.app(1)));
+select pg_temp.check('leads: once expired the six-month purge applies again', (select contact_purged_at is not null and email is null from recruiting.applications where id = pg_temp.app(1)));
+
+-- Removing the flag by hand blanks the lead columns; an application over twelve months old cannot be flagged.
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+update recruiting.application_status set is_lead = true, lead_reason = 'Strong interview' where application_id = pg_temp.app(2);
+update recruiting.application_status set is_lead = false where application_id = pg_temp.app(2);
+select pg_temp.check('leads: removing the flag deletes the reason', (select not is_lead and lead_reason is null and lead_keep_until is null from recruiting.application_status where application_id = pg_temp.app(2)));
+reset role;
+update recruiting.applications set submitted_at = now() - interval '13 months' where id = pg_temp.app(3);
+savepoint sp;
+do $$ begin
+  update recruiting.application_status set is_lead = true, lead_reason = 'Too late' where application_id = pg_temp.app(3);
+  raise notice 'UNEXPECTED: an application over twelve months old was flagged';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('leads: an application over twelve months old cannot be flagged', (select not is_lead from recruiting.application_status where application_id = pg_temp.app(3)));
+rollback;
