@@ -22,6 +22,9 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `supabase/functions/recruiting-jotform-webhook/` | Edge Function that receives Jotform's webhook for each new submission, fetches the submission from Jotform's API and inserts it with the backfill's rules (step 14; its README has the request and response shapes) | 5 |
 | `supabase/functions/_shared/clean.mjs` | The cleanup, field-map and never-import rules, one submission in and one `applications` row plus its files out. Canonical copy, used by the webhook and re-exported by `scripts/backfill/lib/clean.mjs` | 4, 5 |
 | `supabase/functions/recruiting-retention/` | Edge Function the daily job calls to delete the files of applications past the six-month retention ("What the contact-retention change created") | retention |
+| `supabase/functions/recruiting-careers-sync/` | Edge Function the daily job (and "Check now") calls to keep positions in step with the job pages on rexius.com ("What the careers sync created") | careers sync |
+| `supabase/functions/_shared/careers.mjs` | The careers sync rules: feed parsing, the pay line reader and `planSync()`; shared by the function and `scripts/careers-sync/` | careers sync |
+| `scripts/careers-sync/` | Tests for the sync rules (`npm run careers:test`), a read-only dry run against the live site (`npm run careers:dry-run`) and a stand-in careers site for the local stack (`npm run careers:stub`) | careers sync |
 | `supabase/functions/.env.example` | Names of the webhook's local variables; copy to the gitignored `supabase/functions/.env` for `functions serve` | 5 |
 | `supabase/functions/recruiting-applicant-summary/` | Edge Function for applicant summaries and the reply translator (Phase 9b, step 16) | 9b |
 | `scripts/summary-test/stub-anthropic.mjs` | Stand-in for the Claude API so summaries can be tested on the local stack with no key, no cost and no data leaving the machine (`npm run summary:stub`) | 9b |
@@ -1072,6 +1075,84 @@ unchanged with the migration applied.
 
 1. `npm run db:migrate` (applies `20261113000100_good_leads.sql`).
 2. Merge the pull request; the Pages workflow publishes `web/`.
+
+## What the careers sync created
+
+Positions follow the job pages on rexius.com (2026-11-10, branch `claude/careers-sync`,
+migration `20261114000100`). Until now HR published or took down a page on
+https://rexius.com/blogs/careers and then had to open or close the position in the tracker and
+retype its pay range. A daily job now does that.
+
+- **Where it reads.** The careers page is a Shopify blog with one article per job. Its Atom feed
+  (`/blogs/careers.atom`) lists every published job with title, body and dates in one request,
+  and one feed per location tag (`eugene`, `central-oregon`, `lake-oswego`) says where each job
+  is. No page scraping, and the only addresses the function can request are that feed and job
+  pages under `rexius.com/blogs/careers` (`normalizeUrl()` refuses everything else, and the
+  table has a matching check constraint).
+- **Pages are tied to positions by address, not title.** `recruiting.careers_pages` holds one
+  row per job page ever seen, with `position_id`. The migration seeds it from the rexius.com
+  posting rows, which already held each page's address. A new page ties itself only through a
+  posting row with its address, or when exactly one position at its location has exactly its
+  title; otherwise staff tie it on the Positions page ("Tie to position", "Add position", or
+  "Not a job"). The General Application page is seeded as not a job.
+- **Status follows changes on the site, not its state.** A position closes when its last live
+  page is taken down and opens when a page is published for it. A position staff open or close
+  by hand stays that way until the site changes again, and a position that never had a page (a
+  role advertised only on Indeed, the CAS roles) is never touched. The opening that starts or
+  ends gets a note saying the sync did it.
+- **Pay follows the page's "Pay:" line** when the line changes (or is seen for the first time)
+  and can be read with confidence: a range, a single amount, "$22.00+", "Up to $82,000
+  annually", per hour or per year. `position_pay_history` gets its usual row with a note quoting
+  the page. A line with no unit is read as hourly under $200 and yearly from $15,000, and the
+  note says so. A line that cannot be read (per week, two different amounts, both hourly and
+  yearly) is flagged and the position keeps its range. A range staff edit by hand stays until
+  the page's line changes. A page with no pay line never clears a range.
+- **Posting rows follow the pages.** One open rexius.com posting row per live tied page, ended
+  the day the page goes, so the channel reports show how long each role was on the site.
+- **What stops a bad day on the site from closing positions.** A page counts as gone only when
+  it is missing from the feed and its own address answers 404, 410 or a permanent redirect. A
+  feed that cannot be fetched, is not a feed (a block page), is empty, or lists under half the
+  pages the tracker last saw changes nothing; the run is recorded with the reason and the
+  Positions page shows it.
+- **Each run is logged** in `recruiting.careers_sync_runs` (what changed, what was flagged, or
+  why nothing changed). The Positions page shows the last check, the changes of the last 14
+  days, and what needs a decision; HR and admins have a "Check now" link.
+
+The pieces:
+
+- Migration `20261114000100_careers_sync.sql`: `careers_pages` and `careers_sync_runs` (every
+  app user reads them; staff may change only a page's `position_id` and `ignored`; nobody
+  inserts or deletes from the browser), the seed, `recruiting.request_careers_sync()` (pg_cron
+  to pg_net with the vault entries the market-check jobs already use, not callable by app
+  users), the daily job `recruiting-careers-sync` at 14:15 UTC, and `update (note)` on
+  `position_pay_history` for `service_role`.
+- `supabase/functions/_shared/careers.mjs`: the rules as pure functions (feed parsing, the pay
+  line reader, `planSync()`), with 26 tests in `scripts/careers-sync/careers.test.mjs`
+  (`npm run careers:test`), including every pay line seen on the site.
+- `supabase/functions/recruiting-careers-sync/`: fetches, calls `planSync()` and writes what it
+  returns. Called by the daily job with `MARKET_CHECK_SECRET`, or by an HR or admin session
+  ("Check now"); `{"dry_run": true}` plans without writing. No new secret.
+- `web/positions.js`, `web/index.html`, `web/styles.css`: the "rexius.com careers page" box.
+  It shows nothing until the tables exist, so the page works before the migration is applied.
+- `scripts/careers-sync/dry-run.mjs` (`npm run careers:dry-run`): reads the live site and the
+  tracker and prints what the sync would change, writing nothing. It works before the migration
+  too. `scripts/careers-sync/stub-site.mjs` (`npm run careers:stub`) is a stand-in careers site
+  for the local stack (`CAREERS_BASE` in `supabase/functions/.env`).
+- `scripts/test-policies.sql`: twelve checks (256 in all).
+
+Verified on the local stack against the stand-in site: first run, a pay change, a page taken
+down and brought back, a hand-reopened position left alone, the site down, a block page, a page
+hidden from the list but still up, and the staff session path from the browser. The dry run
+against the live site on 2026-11-10 showed one change (Blower Truck Operator, $28–$38/hr to
+$35–$40/hr) and five stale posting rows to end.
+
+Deploy order: apply the migration (`npm run db:migrate`), deploy the function
+(`npx supabase functions deploy recruiting-careers-sync --no-verify-jwt`), then merge so the
+page publishes. `npm run careers:dry-run` at any point shows what the next run would do.
+
+What it does not do: it does not create positions on its own, it does not change the Jotform
+dropdowns (the dropdown check on the Positions page still reports those), and it reads nothing
+from Indeed or any other channel.
 
 ## What Phase 9b created
 
