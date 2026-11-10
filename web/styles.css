@@ -206,6 +206,20 @@ th.num, td.num { text-align: right; white-space: nowrap; }
 .drift .link { text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; }
 .drift .forms { opacity: .85; }
 .drift .hint .link { margin-left: 4px; }
+.sitebox { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.sitebox.warn { border-color: transparent; background: var(--warn-bg); color: var(--warn-ink); }
+.sitebox h2 { margin: 0 0 4px; font-size: 13.5px; }
+.sitebox h3 { margin: 8px 0 2px; font-size: 12.5px; font-weight: 600; }
+.sitebox p { margin: 0; }
+.sitebox p.hint { margin-top: 6px; }
+.sitebox ul { margin: 4px 0 0; padding-left: 18px; }
+.sitebox li { padding: 2px 0; }
+.sitebox li .row { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: 2px; }
+.sitebox li .row select { max-width: 260px; }
+.sitebox li.more { list-style: none; color: var(--mute); }
+.sitebox .link { text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; color: var(--accent); }
+.sitebox .hint .link { margin-left: 4px; }
+.sitebox.warn a, .sitebox.warn .link, .sitebox.warn .hint, .sitebox.warn li.more { color: inherit; }
 .bulkbar { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 3; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); box-shadow: var(--shadow); font-size: 13.5px; }
 .bulkbar #posBulkCount { font-weight: 600; margin-right: 4px; }
 th.col-sel, td.col-sel { width: 30px; padding-right: 0; cursor: default; }

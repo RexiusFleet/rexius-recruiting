@@ -1067,3 +1067,77 @@ end $$;
 rollback to sp;
 select pg_temp.check('leads: an application over twelve months old cannot be flagged', (select not is_lead from recruiting.application_status where application_id = pg_temp.app(3)));
 rollback;
+
+-- ----- Careers page sync (20261114000100) --------------------------------------------------------
+-- careers_pages and careers_sync_runs: every app user reads them; staff change only a page's
+-- position and its ignored flag; nobody inserts or deletes from the browser; the seed from the
+-- rexius.com posting rows normalises addresses.
+begin;
+delete from recruiting.careers_pages;
+insert into recruiting.careers_pages (url, title, location, pay_text, pay_applied_text, last_seen_at)
+values ('https://rexius.com/blogs/careers/crew1', 'Crew Member', 'Eugene/Springfield', '$20-$24/hr', '$20-$24/hr', now());
+insert into recruiting.careers_sync_runs (trigger, ok, pages_listed) values ('schedule', true, 1);
+
+select pg_temp.check('careers: anon has no table privilege on pages or runs',
+  not has_table_privilege('anon', 'recruiting.careers_pages', 'select') and not has_table_privilege('anon', 'recruiting.careers_sync_runs', 'select'));
+
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+select pg_temp.check('careers: a password-only session reads nothing', (select count(*) from recruiting.careers_pages) = 0 and (select count(*) from recruiting.careers_sync_runs) = 0);
+reset role;
+
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('careers: manager reads pages and runs', (select count(*) from recruiting.careers_pages) = 1 and (select count(*) from recruiting.careers_sync_runs) = 1);
+update recruiting.careers_pages set ignored = true;
+update recruiting.careers_pages set position_id = (select id from recruiting.positions limit 1);
+reset role;
+select pg_temp.check('careers: manager cannot link or ignore a page', (select not ignored and position_id is null from recruiting.careers_pages));
+
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.careers_pages set position_id = (select id from recruiting.positions order by title limit 1);
+reset role;
+select pg_temp.check('careers: hr can tie a page to a position; the link is recorded as staff and the pay line is due again',
+  (select position_id is not null and link_source = 'staff' and linked_by = '22222222-2222-2222-2222-222222222222' and pay_applied_text is null from recruiting.careers_pages));
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.careers_pages set ignored = true;
+reset role;
+select pg_temp.check('careers: hr can mark a page as not a job', (select ignored from recruiting.careers_pages));
+select pg_temp.check('careers: app users can change only position_id and ignored',
+  has_column_privilege('authenticated', 'recruiting.careers_pages', 'position_id', 'update') and has_column_privilege('authenticated', 'recruiting.careers_pages', 'ignored', 'update')
+  and not has_column_privilege('authenticated', 'recruiting.careers_pages', 'url', 'update') and not has_column_privilege('authenticated', 'recruiting.careers_pages', 'pay_min', 'update')
+  and not has_column_privilege('authenticated', 'recruiting.careers_pages', 'gone_at', 'update') and not has_column_privilege('authenticated', 'recruiting.careers_pages', 'pay_applied_text', 'update'));
+select pg_temp.check('careers: app users cannot insert or delete pages, or write runs',
+  not has_table_privilege('authenticated', 'recruiting.careers_pages', 'insert') and not has_table_privilege('authenticated', 'recruiting.careers_pages', 'delete')
+  and not has_table_privilege('authenticated', 'recruiting.careers_sync_runs', 'insert') and not has_table_privilege('authenticated', 'recruiting.careers_sync_runs', 'update')
+  and not has_table_privilege('authenticated', 'recruiting.careers_sync_runs', 'delete'));
+select pg_temp.check('careers: the job trigger function is not callable by app users',
+  not has_function_privilege('authenticated', 'recruiting.request_careers_sync()', 'execute') and not has_function_privilege('anon', 'recruiting.request_careers_sync()', 'execute'));
+select pg_temp.check('careers: the sync may note where a pay range came from', has_column_privilege('service_role', 'recruiting.position_pay_history', 'note', 'update'));
+
+savepoint sp;
+do $$ begin
+  insert into recruiting.careers_pages (url) values ('https://example.com/blogs/careers/x');
+  raise notice 'UNEXPECTED: a page outside rexius.com/blogs/careers was stored';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('careers: only job pages under rexius.com/blogs/careers can be stored', (select count(*) from recruiting.careers_pages where url like '%example.com%') = 0);
+
+-- The seed: one page per rexius.com posting address, normalised; an ended posting seeds a gone page.
+delete from recruiting.careers_pages;
+insert into recruiting.postings (position_id, channel, url, posted_at, ended_at)
+select id, 'rexius_com', u.url, '2026-02-01', u.ended::date
+from (select id from recruiting.positions order by title limit 1) p,
+     (values ('https://rexius.com/blogs/careers/Truck-Driver8/?utm_source=x', null), ('http://www.rexius.com/blogs/careers/old-role3', '2026-06-01'),
+             ('https://rexius.com/blogs/careers', null), ('https://www.indeed.com/job/1', null), ('https://rexius.com/blogs/careers/truck-driver8', '2026-03-01')) as u(url, ended);
+insert into recruiting.careers_pages (url, position_id, link_source, gone_at)
+select distinct on (u.url) u.url, po.position_id, 'posting', po.ended_at::timestamptz
+from recruiting.postings po
+cross join lateral (
+  select 'https://rexius.com/blogs/careers/' || lower(substring(po.url from '(?i)^https?://(?:www\.)?rexius\.com/blogs/careers/([a-z0-9][a-z0-9-]*)/?(?:[?#].*)?$')) as url
+) u
+where po.channel = 'rexius_com' and u.url is not null and u.url <> 'https://rexius.com/blogs/careers/tagged'
+order by u.url, (po.ended_at is null) desc, po.posted_at desc;
+select pg_temp.check('careers: the seed keeps one normalised page per posting address, live if any posting is',
+  (select string_agg(regexp_replace(url, '.*/', '') || ':' || (gone_at is null), ',' order by url) from recruiting.careers_pages) = 'old-role3:false,truck-driver8:true');
+rollback;

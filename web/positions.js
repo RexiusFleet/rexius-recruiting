@@ -1,6 +1,7 @@
 /* Positions page (Phase 7). Lists and edits recruiting.positions, shows applicants per position
  * and a funnel, flags drift between open positions and the application forms' live dropdowns in
- * Jotform, manages position aliases (so applications match), and, for staff, postings, channel
+ * Jotform, shows what the daily rexius.com careers page sync changed and what it needs staff to
+ * decide, manages position aliases (so applications match), and, for staff, postings, channel
  * spend, and opening or closing several positions at once from the list.
  * A position is the role, kept for good: each period it was open is an opening, and each change
  * of the advertised range is logged in its pay history (both written by database triggers).
@@ -29,7 +30,7 @@
     hide: function () {},
     appsChanged: function () { renderAll(); if (openId && openId !== "new") openPosition(openId); },
     drawerClosed: function () { openId = null; stopMarketPoll(); stopNationalPoll(); history.replaceState(null, "", "#/positions"); },
-    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; picked = {}; live = { data: null, error: null, loading: null }; stopMarketPoll(); stopNationalPoll(); }
+    reset: function () { aliases = []; postings = []; spend = []; docs = []; loaded = false; openId = null; picked = {}; live = { data: null, error: null, loading: null }; site = { pages: [], runs: [], loaded: false, busy: false }; stopMarketPoll(); stopNationalPoll(); }
   });
 
   async function show(param) {
@@ -55,6 +56,7 @@
       var failed = r.filter(function (x) { return x.error; });
       if (failed.length) RR.notice("Could not load positions data: " + RR.errText(failed[0].error));
       aliases = r[0].data || []; postings = r[1].data || []; docs = r[2].data || []; spend = (r[3] && r[3].data) || [];
+      await loadSite();
       loaded = true;
     })();
     await loading; loading = null;
@@ -210,6 +212,7 @@
     locations().forEach(function (l) { var o = el("option", null, l); o.value = l; sel.appendChild(o); });
     sel.value = cur; filters.loc = sel.value;
     renderDrift();
+    renderSite();
     renderTable(statsByPosition());
     renderUnmatched();
   }
@@ -259,6 +262,127 @@
     hint.appendChild(linkBtn(live.loading ? "Checking…" : "Check again", function () { refreshDropdowns(true); }));
     box.appendChild(hint);
   }
+  // ---------- rexius.com careers page ----------
+  // The Edge Function recruiting-careers-sync compares the job pages on rexius.com/blogs/careers
+  // with the positions every morning: a position closes when its page is taken down, opens when
+  // one is published, and takes its pay range from the page. This box shows the last check, what
+  // recent checks changed, and what the sync will not decide alone (a new page it cannot tie to
+  // a position, a pay line it cannot read). Nothing shows until the tables exist.
+  var site = { pages: [], runs: [], loaded: false, busy: false };
+  var SITE_CHANGE_DAYS = 14, SITE_CHANGE_MAX = 8;
+  async function loadSite() {
+    var r = await Promise.all([
+      sb.from("careers_pages").select("id, url, title, location, pay_text, pay_problem, pay_applied_text, gone_at, last_seen_at, position_id, ignored"),
+      sb.from("careers_sync_runs").select("id, ran_at, trigger, ok, pages_listed, changes, flags, error").order("ran_at", { ascending: false }).limit(20)
+    ]);
+    if (r[0].error || r[1].error) { site.loaded = false; return; }
+    site.pages = r[0].data || []; site.runs = r[1].data || []; site.loaded = true;
+  }
+  function sitePageLink(pg) { return extLink(pg.url, pg.title || pg.url.split("/").pop()); }
+  function renderSite() {
+    var box = $("posSite"); if (!box) return;
+    box.innerHTML = "";
+    var st = RR.state(), latest = site.runs[0] || null;
+    if (!site.loaded || (!latest && !st.staff)) { box.hidden = true; return; }
+    box.hidden = false;
+    box.appendChild(el("h2", null, "rexius.com careers page"));
+
+    var livePages = site.pages.filter(function (pg) { return !pg.gone_at && !pg.ignored && pg.last_seen_at; });
+    var attention = el("ul"), n = 0;
+    livePages.filter(function (pg) { return !pg.position_id; }).forEach(function (pg) {
+      var li = el("li"); n++;
+      li.appendChild(el("b", null, "Job page not tied to a position: "));
+      li.appendChild(sitePageLink(pg));
+      li.appendChild(document.createTextNode((pg.location ? " (" + pg.location + ")" : " (no single location tag)") + (pg.pay_text ? ", " + pg.pay_text.replace(/[.\s]+$/, "") : "") + ". "));
+      if (st.staff) {
+        var row = el("span", "row");
+        var sel = positionSelectAt(pg.location || "");
+        row.appendChild(sel);
+        var btn = el("button", "btn small", "Tie to position"); btn.type = "button";
+        btn.addEventListener("click", function () { if (!sel.value) { RR.notice("Pick a position first."); return; } btn.disabled = true; setSitePage(pg, { position_id: sel.value }); });
+        row.appendChild(btn);
+        row.appendChild(linkBtn("Add position", function () { newPosition({ title: pg.title || "", location: pg.location || "", jotform_option_label: pg.title || "", status: "open" }); }));
+        row.appendChild(linkBtn("Not a job", function () { setSitePage(pg, { ignored: true }); }));
+        li.appendChild(row);
+      }
+      attention.appendChild(li);
+    });
+    livePages.filter(function (pg) { return pg.position_id && pg.pay_problem && pg.pay_text !== pg.pay_applied_text; }).forEach(function (pg) {
+      var li = el("li"), p = st.positionById[pg.position_id]; n++;
+      li.appendChild(el("b", null, "Pay line not understood: "));
+      li.appendChild(sitePageLink(pg));
+      li.appendChild(document.createTextNode(" says \u201c" + pg.pay_text + "\u201d (" + pg.pay_problem + "). " + (p ? "The position keeps " + (fmtPay(p) || "no range") + "; set it by hand or reword the page. " : "")));
+      if (p) li.appendChild(linkBtn("Open", function () { openPosition(p.id); }));
+      attention.appendChild(li);
+    });
+    if (latest && latest.ok) (latest.flags || []).forEach(function (f) {
+      var li = el("li"), p = f.position_id ? st.positionById[f.position_id] : null;
+      if (f.kind === "not_listed") li.appendChild(document.createTextNode("A job page left the careers list but still opens: "));
+      else if (f.kind === "unreachable") li.appendChild(document.createTextNode("A job page left the careers list and could not be checked, so nothing was changed: "));
+      else if (f.kind === "pay_conflict") li.appendChild(document.createTextNode("Two live pages for " + (f.title || "one position") + " show different pay, so the range was left alone. "));
+      else if (f.kind === "tags_unavailable") li.appendChild(document.createTextNode("The location lists on the site could not be read; new pages will be placed at the next check."));
+      else return;
+      if (f.url) li.appendChild(extLink(f.url, f.title || f.url.split("/").pop()));
+      if (p) { li.appendChild(document.createTextNode(" ")); li.appendChild(linkBtn("Open", function () { openPosition(p.id); })); }
+      attention.appendChild(li); n++;
+    });
+
+    var status = el("p", "status");
+    if (!latest) status.textContent = "The careers page has not been checked yet.";
+    else if (!latest.ok && !(latest.changes || []).length) status.textContent = "The check on " + RR.fmtDateTime(new Date(latest.ran_at)) + " changed nothing: " + (latest.error || "it failed") + ".";
+    else {
+      var tied = livePages.filter(function (pg) { return pg.position_id; }).length;
+      status.textContent = "Checked " + RR.fmtDateTime(new Date(latest.ran_at)) + ": " + livePages.length + " job page" + (livePages.length === 1 ? "" : "s") + " up, " + (tied === livePages.length ? "all" : tied) + " tied to positions." + (latest.ok ? "" : " Some changes could not be saved and will be retried.");
+    }
+    box.appendChild(status);
+    if (n) box.appendChild(attention);
+    box.classList.toggle("warn", n > 0 || !!(latest && !latest.ok));
+
+    var since = Date.now() - SITE_CHANGE_DAYS * 86400000, recent = [];
+    site.runs.forEach(function (run) {
+      if (new Date(run.ran_at).getTime() < since) return;
+      (run.changes || []).forEach(function (c) { if (c.kind === "pay" || c.kind === "closed" || c.kind === "opened") recent.push({ at: run.ran_at, c: c }); });
+    });
+    if (recent.length) {
+      box.appendChild(el("h3", null, "Changed by the sync in the last " + SITE_CHANGE_DAYS + " days"));
+      var ul = el("ul", "changes");
+      recent.slice(0, SITE_CHANGE_MAX).forEach(function (x) {
+        var c = x.c, li = el("li");
+        var what = c.kind === "pay" ? "pay " + c.from + " \u2192 " + c.to : c.kind === "closed" ? "closed, its job page was taken down" : "opened, its job page was published";
+        li.appendChild(document.createTextNode(RR.fmtDate(new Date(x.at)) + " \u00b7 " + c.title + " (" + c.location + "): " + what + ". "));
+        if (st.positionById[c.position_id]) li.appendChild(linkBtn("Open", function () { openPosition(c.position_id); }));
+        ul.appendChild(li);
+      });
+      if (recent.length > SITE_CHANGE_MAX) ul.appendChild(el("li", "more", "and " + (recent.length - SITE_CHANGE_MAX) + " more"));
+      box.appendChild(ul);
+    }
+
+    var hint = el("p", "hint", "Checked every morning. A position closes when its job page is taken down, opens when one is published, and takes its pay range from the page\u2019s Pay line. A position you open or close by hand stays that way until the site changes, and positions that never had a page are left alone.");
+    if (st.staff) hint.appendChild(linkBtn(site.busy ? "Checking\u2026" : "Check now", function () { if (!site.busy) checkSiteNow(); }));
+    box.appendChild(hint);
+  }
+  async function setSitePage(pg, patch) {
+    var r = await sb.from("careers_pages").update(patch).eq("id", pg.id);
+    if (r.error) { RR.notice("Could not save: " + RR.errText(r.error)); renderSite(); return; }
+    await loadSite(); renderSite();
+    var p = patch.position_id ? RR.state().positionById[patch.position_id] : null;
+    if (p) RR.notice("Tied to " + p.title + ". The next check adds its rexius.com posting and pay." + (p.status !== "open" ? " The position is " + STATUS_LABEL[p.status].toLowerCase() + " while its page is up: set it to Open if it is hiring." : ""));
+  }
+  async function checkSiteNow() {
+    site.busy = true; renderSite();
+    var r = await sb.functions.invoke("recruiting-careers-sync", { body: {} });
+    var payload = r.data || null;
+    if (r.error && r.error.context && typeof r.error.context.json === "function") { try { payload = await r.error.context.json(); } catch (e) { payload = null; } }
+    site.busy = false;
+    if (r.error || !payload) { RR.notice("Could not check the careers page: " + ((payload && payload.error) || (r.error ? RR.errText(r.error) : "no answer"))); renderSite(); return; }
+    var made = (payload.changes || []).filter(function (c) { return c.kind === "pay" || c.kind === "closed" || c.kind === "opened"; }).length;
+    RR.notice(payload.ok ? "Careers page checked: " + (made ? made + " change" + (made === 1 ? "" : "s") + " made." : "nothing to change.") : "Careers page check: " + (payload.error || "it failed") + ".");
+    loaded = false;
+    await Promise.all([load(), RR.reloadPositions()]);
+    renderAll();
+    if (openId && openId !== "new") openPosition(openId);
+  }
+
   function linkBtn(label, onClick) { var b = el("button", "link", label); b.type = "button"; b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); onClick(); }); return b; }
 
   function filteredPositions() {
