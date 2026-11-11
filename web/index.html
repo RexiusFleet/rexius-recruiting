@@ -38,6 +38,17 @@
 </section>
 
 <!-- Arrived from an invite or password-reset email: choose a password before going on -->
+<!-- Opened from an invite link an admin copied (no email): redeemed only on Continue -->
+<section class="gate" id="acceptView" hidden>
+  <form class="card" id="acceptForm">
+    <h1>Welcome to Rexius Recruiter</h1>
+    <p class="meta">An admin has set up an account for you. Continue to choose your password and set up an authenticator app on your phone.</p>
+    <div class="err" id="acceptError" role="alert"></div>
+    <button class="btn primary" id="acceptBtn" type="submit">Continue</button>
+    <p class="meta"><button type="button" class="linkbtn" id="acceptSkip">I already have an account: sign in</button></p>
+  </form>
+</section>
+
 <section class="gate" id="setPasswordView" hidden>
   <form class="card" id="setPasswordForm" autocomplete="on">
     <h1>Choose a password</h1>
@@ -267,12 +278,12 @@
     <div class="prose">
       <h2>Who can use the tracker</h2>
       <p class="meta"><strong>Admin</strong>: everything, plus this page. <strong>HR</strong>: everything except this page: applications, stages, notes, offers, positions, spend, documents and reports. <strong>Manager</strong>: read only. Sees applicants' contact details, position, availability, experience, resume and the downloadable application; never notes, offers, summaries or reports.</p>
-      <p class="meta">An invite emails a link to this site. The person chooses a password, then sets up an authenticator app on their first sign-in. The link works for a limited time; "Re-send invite" sends a fresh one.</p>
+      <p class="meta"><b>Add user</b> sets someone up with a role at once. They get a sign-in link, either one you copy and send them yourself or an email from the tracker, then choose their own password and set up an authenticator app on their first sign-in. A link works once and for a limited time; <b>Copy sign-in link</b> on their row makes a fresh one.</p>
     </div>
     <div class="toolbar">
       <span class="grow"></span>
       <button class="btn" id="usersRefresh" type="button">Refresh</button>
-      <button class="btn primary" id="usersInviteBtn" type="button">Invite someone</button>
+      <button class="btn primary" id="usersInviteBtn" type="button">Add user</button>
     </div>
     <div class="tablewrap">
       <table id="usersTable" hidden>
@@ -381,8 +392,8 @@
   <form class="card modal-card" id="inviteForm" autocomplete="off">
     <div class="modal-head">
       <div>
-        <h2 id="inviteTitle">Invite someone</h2>
-        <p class="meta">They get an email with a link to this site to choose a password. If they already have a login for another Rexius app on the same system, they get the role straight away and sign in with the password they have.</p>
+        <h2 id="inviteTitle">Add a user</h2>
+        <p class="meta">They are set up with this role at once. The first time they sign in they choose their own password and set up an authenticator app. If they already have a login for another Rexius app on the same system, they sign in with the password they have.</p>
       </div>
       <button class="close" id="inviteClose" aria-label="Close" type="button">×</button>
     </div>
@@ -396,13 +407,37 @@
           <option value="admin">Admin</option>
         </select>
       </label>
+      <fieldset class="span2 choice">
+        <legend>How they get their sign-in link</legend>
+        <label><input type="radio" name="inviteDelivery" value="link" checked> Give me a link to send them myself (Teams, text or my own email)</label>
+        <label><input type="radio" name="inviteDelivery" value="email"> Email it to them from the tracker</label>
+      </fieldset>
     </div>
     <div class="err" id="inviteError" role="alert"></div>
     <div class="modal-actions">
       <button class="btn" id="inviteCancel" type="button">Cancel</button>
-      <button class="btn primary" id="inviteSave" type="submit">Send invite</button>
+      <button class="btn primary" id="inviteSave" type="submit">Add user</button>
     </div>
   </form>
+</div>
+
+<div class="modal" id="linkModal" hidden role="dialog" aria-modal="true" aria-labelledby="linkTitle">
+  <div class="card modal-card">
+    <div class="modal-head">
+      <div>
+        <h2 id="linkTitle">Sign-in link</h2>
+        <p class="meta" id="linkFor"></p>
+      </div>
+      <button class="close" id="linkClose" aria-label="Close" type="button">×</button>
+    </div>
+    <input type="text" id="linkText" readonly aria-label="Sign-in link">
+    <p class="meta">Send it to that person only: it lets them set their password. It works once and expires after a while (an hour unless the Supabase setting has been raised). If it expires, use <b>Copy sign-in link</b> on their row for a fresh one; a new link replaces the old one.</p>
+    <div class="note" id="linkNote" role="status"></div>
+    <div class="modal-actions">
+      <button class="btn" id="linkDone" type="button">Done</button>
+      <button class="btn primary" id="linkCopy" type="button">Copy link</button>
+    </div>
+  </div>
 </div>
 
 <!-- Theme toggle for the sign-in screens; hidden once the tracker (with its own header button) shows -->

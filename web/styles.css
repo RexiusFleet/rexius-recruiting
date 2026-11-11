@@ -366,3 +366,11 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
   .kv { grid-template-columns: 1fr; gap: 2px 0; }
   .kv dt { margin-top: 6px; }
 }
+/* Users page: Add user delivery choice, sign-in link dialog, invite accept screen */
+#inviteModal fieldset.choice{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0;display:grid;gap:6px}
+#inviteModal fieldset.choice legend{padding:0 4px;font-size:12px;color:var(--mute)}
+#inviteModal fieldset.choice label{display:flex;gap:8px;align-items:flex-start;font-weight:normal}
+#inviteModal fieldset.choice input{width:auto;margin-top:3px}
+#linkText{width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+#linkNote{min-height:1.2em;color:var(--mute)}
+#page-users td:first-child .linkish{white-space:nowrap}

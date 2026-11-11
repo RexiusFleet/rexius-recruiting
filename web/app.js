@@ -30,6 +30,15 @@
     if (link.error) history.replaceState(null, "", location.pathname + location.search);
     return link;
   })();
+  // A link an admin copied from the Users page (no email) opens this page with #invite=<token
+  // hash>. It is redeemed only when the person clicks Continue, so a mail or chat link scanner that
+  // opens the link cannot use it up. The hash is cleared at once so the token stays out of history.
+  var INVITE_TOKEN = (function () {
+    var m = /^#invite=([^&]+)/.exec(location.hash || "");
+    if (!m) return "";
+    history.replaceState(null, "", location.pathname + location.search);
+    try { return decodeURIComponent(m[1]); } catch (e) { return ""; }
+  })();
   var sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { db: { schema: "recruiting" } });
 
   var PAGE = 1000;              // PostgREST max rows per request (config.toml max_rows)
@@ -123,7 +132,7 @@
 
   // ---------- Views ----------
   function show(view) {
-    ["loginView", "setPasswordView", "mfaEnrollView", "mfaChallengeView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
+    ["loginView", "acceptView", "setPasswordView", "mfaEnrollView", "mfaChallengeView", "noAccessView", "appView"].forEach(function (id) { $(id).hidden = id !== view; });
     if (view !== "appView") { hideDrawer(); currentPage = null; }
   }
 
@@ -135,6 +144,9 @@
     return { name: (i < 0 ? h : h.slice(0, i)) || "applications", param: i < 0 ? "" : decodeURIComponent(h.slice(i + 1)) };
   }
   function route() {
+    // A sign-in link pasted into a tab that already shows the tracker only changes the hash:
+    // reload so the boot code above picks it up.
+    if (/^#invite=/.test(location.hash)) { location.reload(); return; }
     if ($("appView").hidden) return;
     var r = parseHash();
     if (!pages[r.name] || (r.name === "reports" && !staff) || (r.name === "users" && role !== "admin")) { if (location.hash && location.hash !== "#/applications") { location.hash = "#/applications"; return; } r = { name: "applications", param: "" }; }
@@ -179,6 +191,22 @@
   // The page's own address without hash or query: what invite and reset links must come back to
   // (it has to be on the redirect allow list in Supabase Auth; README step 6).
   function pageUrl() { return location.origin + location.pathname; }
+  // Copied invite link: sign out whoever was signed in on this browser, redeem the token, then
+  // continue exactly as an emailed invite does (choose a password, set up an authenticator).
+  async function acceptInvite() {
+    $("acceptError").textContent = "";
+    $("acceptBtn").disabled = true;
+    await sb.auth.signOut({ scope: "local" });
+    var res = await sb.auth.verifyOtp({ token_hash: INVITE_TOKEN, type: "invite" });
+    $("acceptBtn").disabled = false;
+    if (res.error || !res.data || !res.data.session) {
+      $("acceptError").textContent = "This link did not work" + (res.error ? " (" + res.error.message + ")" : "") + ". It works once and expires after a while; ask an admin for a new one. If you already set up your account, sign in instead.";
+      return;
+    }
+    INVITE_TOKEN = ""; AUTH_LINK.type = "invite"; booted = true;
+    onSession(res.data.session);
+  }
+  function skipInvite() { INVITE_TOKEN = ""; booted = true; sb.auth.getSession().then(function (r) { onSession(r.data ? r.data.session : null); }); }
   // After an invite or reset link: save the chosen password, then continue as a normal sign-in.
   async function savePassword() {
     var p1 = $("setPassword1").value, p2 = $("setPassword2").value;
@@ -1480,6 +1508,8 @@
   $("loginForm").addEventListener("submit", function (e) { e.preventDefault(); signIn($("loginEmail").value.trim(), $("loginPassword").value); });
   $("forgotBtn").addEventListener("click", forgotPassword);
   $("setPasswordForm").addEventListener("submit", function (e) { e.preventDefault(); savePassword(); });
+  $("acceptForm").addEventListener("submit", function (e) { e.preventDefault(); acceptInvite(); });
+  $("acceptSkip").addEventListener("click", skipInvite);
   $("signOutBtn").addEventListener("click", signOut);
   $("noAccessSignOut").addEventListener("click", signOut);
   $("mfaEnrollForm").addEventListener("submit", function (e) { e.preventDefault(); finishEnroll(); });
@@ -1502,7 +1532,7 @@
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });
   $("toggleFilters").addEventListener("click", function () { $("filters").classList.toggle("open"); });
   $("dClose").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
+  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("linkModal").hidden) $("linkModal").hidden = true; else if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
   $("refreshBtn").addEventListener("click", loadApps);
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);
@@ -1537,6 +1567,7 @@
   // sign-out and token refresh after that.
   var booted = false;
   sb.auth.getSession().then(function (res) {
+    if (INVITE_TOKEN) { show("acceptView"); return; } // acceptInvite() or skipInvite() boots
     booted = true;
     onSession(res.data ? res.data.session : null);
   });

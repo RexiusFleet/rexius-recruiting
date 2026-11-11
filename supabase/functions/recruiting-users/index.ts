@@ -7,6 +7,14 @@
 // and covers the rest of the job: change a role or name, remove access, re-send an invite, and
 // clear someone's authenticator apps when they lose their phone.
 //
+// Invite links without email (2026-11-11): `invite` with delivery "link", and `invite_link` for
+// someone already invited, make the same one-time invite but send nothing; the admin copies the
+// link and passes it on (Teams, text, their own mail). The link is the tracker's own address with
+// `#invite=<token hash>` in the fragment, so the token never reaches a server log, and the page
+// only redeems it when the person clicks Continue (verifyOtp). Mail and chat link scanners that
+// open every link therefore cannot use it up, which they would with Supabase's /verify URL.
+// Making a new link replaces the previous link or email for that person.
+//
 // Scope: only people with a recruiting.profiles row are listed or touched. auth.users is shared
 // with the inventory app on the same project, so this function never lists other logins and
 // never deletes a login: "remove" deletes the tracker profile, which ends access at once
@@ -19,7 +27,8 @@
 //   checked through recruiting.current_role() like every table policy. The gateway's JWT check is
 //   off (`verify_jwt = false`) as for the other tracker functions; the function checks itself.
 //   {action: "list"}
-//   {action: "invite", email, name, role, redirect_to}
+//   {action: "invite", email, name, role, redirect_to, delivery?: "email" | "link"}
+//   {action: "invite_link", user_id, redirect_to}
 //   {action: "update", user_id, name?, role?}
 //   {action: "resend", user_id, redirect_to}
 //   {action: "reset_mfa", user_id}
@@ -89,6 +98,16 @@ function siteFor(requested: unknown): string {
   return allowed.includes(want) ? want : allowed[0];
 }
 /** Supabase's own messages are fine to show an admin; log the detail either way. */
+/**
+ * A one-time invite link that sends no email. generateLink creates the login when it is new and
+ * refuses one that is already confirmed. The hashed token is what verifyOtp({token_hash}) takes.
+ */
+async function inviteLink(admin: SupabaseClient, email: string, redirectTo: string): Promise<{ link: string; userId: string }> {
+  const r = await admin.auth.admin.generateLink({ type: "invite", email, options: { redirectTo } });
+  const hash = r.data?.properties?.hashed_token;
+  if (r.error || !hash || !r.data?.user) fail("make the invite link", r.error);
+  return { link: `${redirectTo}#invite=${encodeURIComponent(hash)}`, userId: r.data.user.id };
+}
 function fail(where: string, err: { message?: string } | null | undefined): never {
   const msg = err?.message ?? "unknown error";
   console.error(`[${FUNCTION}] ${where}: ${msg}`);
@@ -152,6 +171,7 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
   if (!name) throw new Refused(400, "Enter the person's name.");
   if (!isRole(role)) throw new Refused(400, "Pick a role: admin, hr or manager.");
   const redirectTo = siteFor(body.redirect_to);
+  const byLink = body.delivery === "link";
 
   const existing = await findLoginByEmail(admin, email);
   if (existing) {
@@ -162,11 +182,16 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
 
   let userId: string;
   let emailed = false;
+  let link: string | null = null;
   if (existing && existing.email_confirmed_at) {
     // Someone with a working login on the shared project (the other app): give them the role.
     // They sign in with the password they have; the tracker asks them to set up an
     // authenticator on the first sign-in.
     userId = existing.id;
+  } else if (byLink) {
+    // New, or invited before and never accepted: a link for the admin to pass on, no email.
+    const made = await inviteLink(admin, email, redirectTo);
+    userId = made.userId; link = made.link;
   } else {
     // New, or invited before and never accepted: Supabase (re)sends the invite email.
     const r = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
@@ -181,8 +206,8 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
     if (!existing) await admin.auth.admin.deleteUser(userId);
     fail("save the profile", ins.error);
   }
-  console.log(`[${FUNCTION}] invite: ${role} added by ${selfId}${emailed ? ", email sent" : ", existing login"}`);
-  return { user: await describe(admin, await profileOf(admin, userId), selfId), emailed, redirect_to: emailed ? redirectTo : null };
+  console.log(`[${FUNCTION}] invite: ${role} added by ${selfId}${emailed ? ", email sent" : link ? ", link made" : ", existing login"}`);
+  return { user: await describe(admin, await profileOf(admin, userId), selfId), emailed, link, redirect_to: emailed || link ? redirectTo : null };
 }
 
 async function update(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
@@ -221,6 +246,19 @@ async function resend(admin: SupabaseClient, body: Json, selfId: string): Promis
   if (r.error) fail("re-send the invite", r.error);
   console.log(`[${FUNCTION}] resend by ${selfId}`);
   return { user: await describe(admin, p, selfId), redirect_to: redirectTo };
+}
+
+async function inviteLinkFor(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
+  if (!isUuid(body.user_id)) throw new Refused(400, "Missing user_id.");
+  const p = await profileOf(admin, body.user_id);
+  const u = await admin.auth.admin.getUserById(p.user_id);
+  if (u.error || !u.data?.user?.email) fail("read the login", u.error);
+  if (u.data.user.email_confirmed_at) {
+    throw new Refused(409, "They have already accepted the invite. If they forgot their password, they can use \"Forgot your password?\" on the sign-in screen.");
+  }
+  const made = await inviteLink(admin, u.data.user.email, siteFor(body.redirect_to));
+  console.log(`[${FUNCTION}] invite_link by ${selfId}`);
+  return { user: await describe(admin, p, selfId), link: made.link };
 }
 
 async function resetMfa(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
@@ -290,6 +328,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       case "invite": return json(200, await invite(admin, body, selfId));
       case "update": return json(200, await update(admin, body, selfId));
       case "resend": return json(200, await resend(admin, body, selfId));
+      case "invite_link": return json(200, await inviteLinkFor(admin, body, selfId));
       case "reset_mfa": return json(200, await resetMfa(admin, body, selfId));
       case "remove": return json(200, await remove(admin, body, selfId));
       default: return json(400, { error: "unknown action" });
