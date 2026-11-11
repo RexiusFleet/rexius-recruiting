@@ -189,10 +189,16 @@ export function zonedPartsToDate(parts, timeZone) {
 }
 
 /**
- * Submitted time for a submission. Jotform's REST `created_at` is wall-clock time in the
- * account's time zone (Rexius: America/Los_Angeles); the inbox `subtitle` is the same clock.
+ * The clock Jotform's REST API writes `created_at` in: US Eastern, whatever the account's own
+ * time zone setting says. Checked 2026-11-11: the Rexius account is set to America/Los_Angeles,
+ * yet a submission that reached the webhook at 17:20 Pacific had `created_at` "20:20". Reading it
+ * as Pacific had stored every submission three hours late (README "What the Jotform time fix
+ * did"). The inbox `subtitle` is assumed to be the same clock. JOTFORM_TIMEZONE overrides it.
  */
-export function submittedAt(submission, timeZone) {
+export const JOTFORM_CLOCK = "America/New_York";
+
+/** Submitted time for a submission: `created_at` (or the inbox `subtitle`) read on `timeZone`. */
+export function submittedAt(submission, timeZone = JOTFORM_CLOCK) {
   const parts = parseCreatedAt(submission.created_at) ?? parseSubtitle(submission.subtitle);
   return parts ? zonedPartsToDate(parts, timeZone) : null;
 }
@@ -307,9 +313,9 @@ function cleanAnswerValue(qid, value, type, { language, positionQids }) {
  * @param form        row of recruiting.forms: { id, jotform_form_id, language, default_location,
  *                    questions, field_map }
  * @param positions   array of { id, title, location, jotform_option_label }
- * @param options     { timeZone }
+ * @param options     { timeZone }: the zone of Jotform's `created_at`, default JOTFORM_CLOCK
  */
-export function buildApplication(submission, form, positions, { timeZone = "America/Los_Angeles" } = {}) {
+export function buildApplication(submission, form, positions, { timeZone = JOTFORM_CLOCK } = {}) {
   const warnings = [];
   const fm = form.field_map ?? {};
   const language = form.language === "es" ? "es" : "en";

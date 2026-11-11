@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   beforeFirstSlash, buildApplication, cleanOption, fileNameFromUrl, isSignatureUrl, isUploadUrl, jotformDateToIso,
   normalizeEmail, normalizeLocation, normalizePhone, parseSubtitle, storageSafeName,
-  stripTrailingSlash, zonedPartsToDate,
+  stripTrailingSlash, submittedAt, zonedPartsToDate, JOTFORM_CLOCK,
 } from "./lib/clean.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -141,7 +141,7 @@ test("English submission: fields, position link, files, never-import", () => {
   assert.equal(row.source, "Indeed.com");
   assert.equal(row.source_detail, "Saw the truck | also: Rexius.com");
   assert.equal(row.available_start, "2026-11-02");
-  assert.equal(row.submitted_at, "2026-10-23T07:56:12.000Z");
+  assert.equal(row.submitted_at, "2026-10-23T04:56:12.000Z", "created_at is US Eastern (EDT, UTC-4)");
   assert.equal(row.has_resume, true);
   assert.equal(row.language, "en");
   assert.equal(row.jotform_url, "https://www.jotform.com/inbox/260115636145148/6000000000000000001");
@@ -208,7 +208,7 @@ test("Spanish submission: bilingual values, location alias, position keeps inner
   assert.equal(row.answers["266"], "Cell");
   assert.deepEqual(row.answers["21"], ["Email"]);
   assert.equal(row.answers["348"], "04/2024", "free-text dates keep their slash");
-  assert.equal(row.submitted_at, "2026-01-15T17:00:00.000Z");
+  assert.equal(row.submitted_at, "2026-01-15T14:00:00.000Z", "created_at is US Eastern (EST, UTC-5)");
   assert.equal(row.has_resume, false);
   assert.equal(files.length, 0);
 });
@@ -291,7 +291,7 @@ test("inbox shape (submission_answers + subtitle) and inferred location", () => 
     },
   };
   const { row, warnings } = buildApplication(sub, forms.en, positions);
-  assert.equal(row.submitted_at, "2025-07-04T20:05:00.000Z");
+  assert.equal(row.submitted_at, "2025-07-04T17:05:00.000Z", "the inbox clock is read as US Eastern too");
   assert.equal(row.location, "Central Oregon", "location inferred from the dropdown that was answered");
   assert.equal(row.position_id, "p-co-maint");
   assert.ok(!("created_at" in row.answers));
@@ -349,4 +349,16 @@ test("licence class: kept when it is a class, dropped when it looks like a licen
     assert.equal(warnings.length, 1);
     assert.ok(!JSON.stringify(row).includes("9876543"));
   }
+});
+
+test("Jotform writes created_at in US Eastern, whatever the account's own zone (2026-11-11 check)", () => {
+  assert.equal(JOTFORM_CLOCK, "America/New_York");
+  // A submission that reached the webhook at 2026-11-08 01:20:08 UTC (17:20 Pacific) came back
+  // from the API with created_at "2026-11-07 20:20:04".
+  assert.equal(submittedAt({ created_at: "2026-11-07 20:20:04" }).toISOString(), "2026-11-08T01:20:04.000Z");
+  const { row } = buildApplication({ id: "7", created_at: "2026-11-07 20:20:04", answers: {} }, forms.en, positions);
+  assert.equal(row.submitted_at, "2026-11-08T01:20:04.000Z");
+  // JOTFORM_TIMEZONE still overrides; Pacific was the old, wrong reading: three hours late.
+  const old = buildApplication({ id: "7", created_at: "2026-11-07 20:20:04", answers: {} }, forms.en, positions, { timeZone: "America/Los_Angeles" });
+  assert.equal(old.row.submitted_at, "2026-11-08T04:20:04.000Z");
 });

@@ -38,13 +38,15 @@
 //   JOTFORM_WEBHOOK_SECRET   required; the value Jotform sends as ?secret=
 //   JOTFORM_API_KEY          required; read-only Jotform key
 //   JOTFORM_API_BASE         optional; default https://api.jotform.com (EU: https://eu-api.jotform.com)
-//   JOTFORM_TIMEZONE         optional; default America/Los_Angeles (zone of Jotform's created_at)
+//   JOTFORM_TIMEZONE         optional; the zone Jotform's created_at is written in, default
+//                            America/New_York (JOTFORM_CLOCK in _shared/clean.mjs: Jotform's API
+//                            reports US Eastern whatever the account's own setting says)
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   injected by Supabase
 //
 // Logs carry form and submission IDs only, never answers, names or secrets.
 
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
-import { buildApplication } from "../_shared/clean.mjs";
+import { buildApplication, JOTFORM_CLOCK } from "../_shared/clean.mjs";
 import { downloadJotformUpload } from "../_shared/download.mjs";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
@@ -234,7 +236,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 5. Clean and insert.
     const positions = await db.from("positions").select("id, title, location, jotform_option_label");
     if (positions.error) throw new Error(`select positions: ${positions.error.message}`);
-    const timeZone = env("JOTFORM_TIMEZONE") ?? "America/Los_Angeles";
+    const timeZone = env("JOTFORM_TIMEZONE") ?? JOTFORM_CLOCK;
     const { row, files, warnings } = buildApplication({ ...submission, id: submissionId }, form, positions.data ?? [], { timeZone });
     for (const w of warnings) warn(`${tag}: ${w}`);
     if (!row.submitted_at) {

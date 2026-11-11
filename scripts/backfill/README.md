@@ -26,7 +26,7 @@ commit.
 | `JOTFORM_API_KEY` | Jotform → account settings → **API** → create a key (read-only is enough) |
 | `SUPABASE_URL` | Local stack: `http://127.0.0.1:54321`. Hosted: `https://<ref>.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Local: `npx supabase status` prints it. Hosted: Dashboard → **Project Settings** → **API Keys** → `service_role` (Legacy tab) or an `sb_secret_…` key. It bypasses RLS; it is for this script and Edge Functions only, never the browser |
-| `JOTFORM_TIMEZONE` (optional) | IANA zone the Jotform account is set to; default `America/Los_Angeles`. Jotform's `created_at` is wall-clock time in that zone |
+| `JOTFORM_TIMEZONE` (optional) | The zone Jotform's API writes `created_at` in; default `America/New_York`. Jotform reports US Eastern whatever the account's own setting says (the Rexius account is set to Pacific); reading it as Pacific stored every submission three hours late until 2026-11-11 (README "What the Jotform time fix did") |
 | `JOTFORM_API_BASE` (optional) | Default `https://api.jotform.com`; EU accounts use `https://eu-api.jotform.com` |
 
 The database must already have the Phase 3 schema and seed (forms with their field maps,
@@ -50,7 +50,7 @@ npm run backfill -- --refresh                       # re-clean rows already impo
 | `--refresh` | Update rows that already exist and re-upload their files. Status, notes and history are untouched |
 | `--skip-files` | Rows only; no file downloads or uploads |
 | `--sample` | Print one cleaned row per form and stop (implies `--dry-run`); useful for checking a form's mapping |
-| `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in the Jotform account's time zone. Default `2026-10-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |
+| `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in Oregon (America/Los_Angeles), whatever `JOTFORM_TIMEZONE` says. Default `2026-10-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |
 
 Re-running without `--refresh` changes nothing already imported: submissions are matched on
 `jotform_submission_id` and files on their object key, and both are skipped when present. A run
