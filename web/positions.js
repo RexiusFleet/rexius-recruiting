@@ -401,7 +401,7 @@
     fs.forEach(function (s) {
       var n = stats ? stats.funnel[s.id] : 0;
       var c = el("span", "fcell" + (n ? "" : " zero"), String(n));
-      c.style.background = RR.stageColor(s.id);
+      c.style.setProperty("--c", RR.stageColor(s.id));
       c.title = s.name + ": " + n + (base ? " (" + Math.round(100 * n / base) + "%)" : "");
       wrap.appendChild(c);
     });

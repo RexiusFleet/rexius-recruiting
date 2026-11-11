@@ -9,6 +9,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="light dark">
+<script>
+  // Theme before first paint (theme.js wires the toggle). "light" or "dark" pins it; anything else follows the system.
+  (function () { var t = null; try { t = localStorage.getItem("rr.theme"); } catch (e) {}
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); })();
+</script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,7 +23,7 @@
 <section class="gate" id="loginView" hidden>
   <form class="card" id="loginForm" autocomplete="on">
     <picture class="logo">
-      <source srcset="assets/rexius-logo-white.webp" media="(prefers-color-scheme: dark)">
+      <source srcset="assets/rexius-logo-white.webp" media="(prefers-color-scheme: dark)" data-dark>
       <img src="assets/rexius-logo.webp" alt="Rexius" width="2000" height="391">
     </picture>
     <h1>Rexius Recruiter</h1>
@@ -96,6 +102,7 @@
       <button class="btn primary apps-only" id="addBtn" type="button" hidden>Add application</button>
       <button class="btn apps-only" id="exportBtn" type="button" disabled>Export CSV</button>
       <button class="btn apps-only" id="refreshBtn" type="button" disabled>Refresh</button>
+      <button class="btn theme-btn" type="button" data-theme-toggle aria-label="Theme" title="Theme"></button>
       <button class="btn" id="signOutBtn" type="button">Sign out</button>
     </div>
   </header>
@@ -348,6 +355,10 @@
   </form>
 </div>
 
+<!-- Theme toggle for the sign-in screens; hidden once the tracker (with its own header button) shows -->
+<button class="btn theme-btn theme-corner" type="button" data-theme-toggle aria-label="Theme" title="Theme"></button>
+
+<script src="theme.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@3.0.3/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
