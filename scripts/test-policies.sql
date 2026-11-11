@@ -1141,3 +1141,45 @@ order by u.url, (po.ended_at is null) desc, po.posted_at desc;
 select pg_temp.check('careers: the seed keeps one normalised page per posting address, live if any posting is',
   (select string_agg(regexp_replace(url, '.*/', '') || ':' || (gone_at is null), ',' order by url) from recruiting.careers_pages) = 'old-role3:false,truck-driver8:true');
 rollback;
+
+-- ----- Users page: the tracker always keeps one admin (migration 20261115000100) -------------
+begin;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+savepoint sp;
+do $$ begin
+  update recruiting.profiles set role = 'hr' where user_id = '11111111-1111-1111-1111-111111111111';
+  raise notice 'UNEXPECTED: the last admin was demoted';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('users: the last admin cannot be demoted',
+  (select role from recruiting.profiles where user_id = '11111111-1111-1111-1111-111111111111') = 'admin');
+do $$ begin
+  delete from recruiting.profiles where user_id = '11111111-1111-1111-1111-111111111111';
+  raise notice 'UNEXPECTED: the last admin was deleted';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('users: the last admin cannot be removed',
+  (select count(*) from recruiting.profiles where role = 'admin') = 1);
+update recruiting.profiles set name = 'Renamed Manager' where user_id = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('users: renaming is unaffected by the guard',
+  (select name from recruiting.profiles where user_id = '33333333-3333-3333-3333-333333333333') = 'Renamed Manager');
+update recruiting.profiles set role = 'admin' where user_id = '22222222-2222-2222-2222-222222222222';
+update recruiting.profiles set role = 'hr' where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.check('users: an admin can step down once another admin exists',
+  (select string_agg(role::text, ',' order by user_id) from recruiting.profiles where user_id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) = 'hr,admin');
+rollback;
+
+begin;
+reset role;
+savepoint sp;
+do $$ begin
+  delete from auth.users where id = '11111111-1111-1111-1111-111111111111';
+  raise notice 'UNEXPECTED: deleting the last admin''s login removed the last admin';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('users: deleting the last admin''s login in the dashboard is refused too',
+  (select count(*) from recruiting.profiles where role = 'admin') = 1);
+rollback;

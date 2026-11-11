@@ -419,6 +419,11 @@ verify_jwt = false
 # HOSTED PROJECT TOO: deploy with `--no-verify-jwt` (README "What the bulk status change created").
 [functions.recruiting-form-dropdowns]
 verify_jwt = false
+# Users page: invite, change, remove tracker users and reset their authenticators. Admins only
+# (the user's JWT, checked by the function through recruiting.current_role()), same scheme as the
+# market check. HOSTED PROJECT TOO: deploy with `--no-verify-jwt` (README "What the Users page created").
+[functions.recruiting-users]
+verify_jwt = false
 # Secrets (JOTFORM_API_KEY, JOTFORM_WEBHOOK_SECRET, ANTHROPIC_API_KEY_RECRUITING,
 # MARKET_CHECK_SECRET) are never written here; set them with `npx supabase secrets set` or in
 # the dashboard. See README.md step 8.

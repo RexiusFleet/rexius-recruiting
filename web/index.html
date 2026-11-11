@@ -113,6 +113,7 @@
     <a href="#/documents" data-page="documents">Documents</a>
     <a href="#/reports" data-page="reports" class="staff-only">Reports</a>
     <a href="#/security" data-page="security">Security</a>
+    <a href="#/users" data-page="users" class="admin-only">Users</a>
   </nav>
 
   <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="btn small" id="noticeBtn" type="button" hidden></button></div>
@@ -261,6 +262,27 @@
     <div class="empty" id="secEmpty" hidden></div>
   </div>
 
+  <!-- Users: admins invite, change and remove tracker users (web/users.js) -->
+  <div class="page pad" id="page-users" hidden>
+    <div class="prose">
+      <h2>Who can use the tracker</h2>
+      <p class="meta"><strong>Admin</strong>: everything, plus this page. <strong>HR</strong>: everything except this page: applications, stages, notes, offers, positions, spend, documents and reports. <strong>Manager</strong>: read only. Sees applicants' contact details, position, availability, experience, resume and the downloadable application; never notes, offers, summaries or reports.</p>
+      <p class="meta">An invite emails a link to this site. The person chooses a password, then sets up an authenticator app on their first sign-in. The link works for a limited time; "Re-send invite" sends a fresh one.</p>
+    </div>
+    <div class="toolbar">
+      <span class="grow"></span>
+      <button class="btn" id="usersRefresh" type="button">Refresh</button>
+      <button class="btn primary" id="usersInviteBtn" type="button">Invite someone</button>
+    </div>
+    <div class="tablewrap">
+      <table id="usersTable" hidden>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Authenticators</th><th></th></tr></thead>
+        <tbody id="usersRows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="usersEmpty" hidden></div>
+  </div>
+
   <!-- Reports -->
   <div class="page" id="page-reports" hidden>
     <div class="reports">
@@ -355,6 +377,34 @@
   </form>
 </div>
 
+<div class="modal" id="inviteModal" hidden role="dialog" aria-modal="true" aria-labelledby="inviteTitle">
+  <form class="card modal-card" id="inviteForm" autocomplete="off">
+    <div class="modal-head">
+      <div>
+        <h2 id="inviteTitle">Invite someone</h2>
+        <p class="meta">They get an email with a link to this site to choose a password. If they already have a login for another Rexius app on the same system, they get the role straight away and sign in with the password they have.</p>
+      </div>
+      <button class="close" id="inviteClose" aria-label="Close" type="button">×</button>
+    </div>
+    <div class="form-grid">
+      <label class="span2">Email <input type="email" id="inviteEmail" maxlength="254" required placeholder="name@rexius.com"></label>
+      <label>Name <input type="text" id="inviteName" maxlength="120" required placeholder="First Last"></label>
+      <label>Role
+        <select id="inviteRole" required>
+          <option value="manager">Manager (read only)</option>
+          <option value="hr">HR</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+    </div>
+    <div class="err" id="inviteError" role="alert"></div>
+    <div class="modal-actions">
+      <button class="btn" id="inviteCancel" type="button">Cancel</button>
+      <button class="btn primary" id="inviteSave" type="submit">Send invite</button>
+    </div>
+  </form>
+</div>
+
 <!-- Theme toggle for the sign-in screens; hidden once the tracker (with its own header button) shows -->
 <button class="btn theme-btn theme-corner" type="button" data-theme-toggle aria-label="Theme" title="Theme"></button>
 
@@ -371,5 +421,6 @@
 <script src="documents.js"></script>
 <script src="reports.js"></script>
 <script src="security.js"></script>
+<script src="users.js"></script>
 </body>
 </html>
