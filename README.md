@@ -32,14 +32,15 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
-| `scripts/test-policies.sql` | Policy checks as every role against the local stack (244 checks after the good-leads change) | 3+ |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack (261 checks after the Users page) | 3+ |
+| `supabase/functions/recruiting-users/` | Edge Function behind the admin Users page: invite, change role or name, re-send, reset authenticators, remove ("What the Users page created") | users |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
 | `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
-| `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `summary.js` (applicant summaries and translation in the drawer), `config.js` (project URL and publishable key only). No build step | 6, 7, 9b |
+| `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `summary.js` (applicant summaries and translation in the drawer), `users.js` (admin Users page), `config.js` (project URL and publishable key only). No build step | 6, 7, 9b |
 | `.claude/launch.json` | Lets the Claude desktop app start `npx serve web` on port 3000 for the in-app browser | 6 |
 | `.github/workflows/pages.yml` | Publishes `web/` to GitHub Pages on every push to `main`, writing `config.js` from two repository variables on the way (step 13) | 8 |
-| `scripts/make-profile.sql` | Give an invited user a role (`admin`, `hr` or `manager`) by pasting into SQL Editor | 8 |
+| `scripts/make-profile.sql` | Give an invited user a role by pasting into SQL Editor. The Users page does this now; the script is the fallback when no admin can sign in | 8 |
 | `docs/` | `database-conventions.md`, `positions-seed.csv` (seeded in Phase 3; department, manager and pay still to fill), `applicant-summary-rules.md` (what applicant summaries send, return and never say; for HR) | 2+ |
 | `reference/` | Jotform question maps, submission shape, the Phase 0 prototype | 0 |
 
@@ -1217,6 +1218,78 @@ comes back and what a summary must never say; HR agrees to it before the feature
 Cost at 2026-11 list prices: about five cents a summary and under a cent a message. Every
 summary row stores its own cost.
 
+## What the Users page created
+
+Adding someone used to take the Supabase dashboard (Authentication → Invite user) and then
+`scripts/make-profile.sql` in the SQL Editor, and an invite sent from the dashboard returned to
+the project's Site URL, which on the hosted project was still `http://localhost:3000`. Admins now
+do all of it on a **Users** tab in the tracker.
+
+- `web/users.js` (new), `web/index.html`, `web/app.js`, `web/styles.css`: the **Users** page,
+  shown to admins only (the tab is hidden for hr and managers, and typing `#/users` sends them to
+  Applications). It lists every tracker user with email, role, whether the invite was accepted,
+  last sign-in and how many authenticators they have, and offers:
+  - **Invite someone**: email, name and role in one form. Supabase emails a link back to the
+    address the page is on (the Pages site, or localhost when working locally); the person
+    chooses a password and sets up an authenticator, as in step 13. A non-rexius.com address
+    asks for confirmation first. Someone who already has a working login for the other app on the
+    shared project gets the role at once and signs in with the password they have;
+  - **Role**: a select in each row. Your own row is locked, and the last admin's row is locked;
+  - **Rename**: click the name;
+  - **Re-send invite** while an invite is not yet accepted;
+  - **Reset authenticator**: removes every authenticator a person has, for a lost or replaced
+    phone. Their next sign-in is password, then setting up a new authenticator. This replaces
+    deleting rows in `auth.mfa_factors` by hand. Your own authenticators stay on the Security page;
+  - **Remove**: deletes the tracker profile, which ends access at once, because every policy goes
+    through `recruiting.current_role()`. Their notes, stage changes and contact-log entries stay.
+    The login itself is deleted only if the invite was never accepted; a used login stays, since
+    `auth.users` is shared with the other app. To delete it too, use Authentication → Users in the
+    dashboard.
+- `supabase/functions/recruiting-users/index.ts` (new): the Edge Function behind the page, with the
+  actions `list`, `invite`, `update`, `resend`, `reset_mfa` and `remove`. The caller must be an
+  admin with a two-factor session, checked through `recruiting.current_role()` like every policy;
+  the gateway's JWT check is off as for the other tracker functions. It uses the service role,
+  which the page never sees, for sending invites, reading logins and removing another person's
+  authenticators. It lists and changes only people who have a `recruiting.profiles` row, so the
+  other app's logins are never shown or touched. Invite links return only to an address on its
+  own list (`RECRUITING_SITE_URLS`, optional; default the Pages site plus `http://localhost:3000/`
+  and `http://127.0.0.1:3000/`), whatever the page sends.
+- `supabase/migrations/20261115000100_last_admin_guard.sql`: a trigger on `profiles` that refuses
+  to delete or demote the last admin, so nobody can lock the tracker out of user management. It
+  holds for the page, the SQL Editor and the dashboard's Delete user (which cascades to profiles).
+- `scripts/test-policies.sql`: 5 more checks (261 in all): the last admin cannot be demoted,
+  removed, or deleted with their login; an admin can step down once another admin exists;
+  renaming is unaffected.
+- `scripts/make-profile.sql` stays as the fallback when no admin can sign in.
+
+Verified on the local stack: every action and refusal through the function (an hr user and an
+admin without a second factor get 403; your own role, removal and authenticators are refused; an
+unknown or foreign return address falls back to the allowed one); in the browser, an invite as HR,
+the email's link to "Choose a password", authenticator setup, no Users tab for that HR user, then
+as admin a promotion to admin, an authenticator reset and a removal; light and dark themes and
+phone width.
+
+On the hosted project (done when the change was merged, or do it by hand):
+
+1. `npm run db:migrate` applies `20261115000100_last_admin_guard.sql`.
+2. `npx supabase functions deploy recruiting-users --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`.
+   It needs no secrets of its own.
+3. Merge the pull request; the Pages workflow publishes the page.
+
+Two Auth settings matter before you invite more than a person or two (an organization
+Administrator changes them in the dashboard):
+
+- **Email sending** (step 13.7): with Supabase's built-in mailer the hosted project sends 2 emails
+  an hour, from a supabase.io address. Set **Authentication → Emails → SMTP Settings** to Rexius'
+  mail provider.
+- **Invite link lifetime**: **Authentication → Sign In / Providers → Email → Email OTP Expiration**
+  is 3600 seconds (one hour) on the hosted project. Raise it (86400 is a day) if people do not
+  open their email that fast, or use Re-send invite.
+
+The Site URL no longer affects tracker invites, because the page always says where the link
+returns to. It is still the default for anything sent without one; setting it to the Pages
+address (step 6) is harmless for the apparel app, which uses password sign-in only.
+
 ---
 ## Manual steps in Supabase (do these in order)
 
@@ -1567,19 +1640,16 @@ row-level security and the page ships only the public key.
    come from a rexius.com address and are not rate-limited (an organization Administrator does
    this). The invite and recovery templates under **Authentication → Emails → Templates** can
    stay as they are; both link to the Site URL.
-8. **Invite each HR user and manager.** For each person:
-   1. **Authentication → Users → Invite user** → their rexius.com email. The user row appears at
-      once and the email goes out.
-   2. **SQL Editor**: `scripts/make-profile.sql` with their email, name and role (`hr` or
-      `manager`; `admin` for a second admin). Do this straight after the invite, before they
-      open the email, so they do not land on the "No access" screen.
-   3. They click the link, land on the site, choose a password, and are in. The link is good
-      for 24 hours by default (**Authentication → Sign In / Providers → Email → Email OTP
-      Expiration**); if it has expired, they type their email on the sign-in card and use
-      **Forgot your password?**, which sends a fresh link.
+8. **Invite each HR user and manager.** Sign in as an admin and open the **Users** tab
+   ("What the Users page created"). **Invite someone** takes their email, name and role and sends
+   the email; they click the link, land on the site, choose a password, set up an authenticator,
+   and are in. If the link has expired, **Re-send invite** sends a fresh one. Changing a role,
+   resetting a lost authenticator and removing access are on the same page.
+   Without an admin who can sign in, the old route still works: **Authentication → Users →
+   Invite user** in the dashboard, then `scripts/make-profile.sql` in the SQL Editor straight
+   away, before they open the email, so they do not land on the "No access" screen.
    Managers see every location for now; the `profiles.location` column is for a later scoping
-   policy. Removing someone: delete their `profiles` row (`delete from recruiting.profiles where
-   user_id = …`) and the auth user (**Authentication → Users → … → Delete user**).
+   policy.
 9. **Local development keeps working.** `npx serve web` uses the committed `config.js` with the
    local stack's values. Do not commit hosted values into it; the workflow supplies them.
 

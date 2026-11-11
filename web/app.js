@@ -137,7 +137,7 @@
   function route() {
     if ($("appView").hidden) return;
     var r = parseHash();
-    if (!pages[r.name] || (r.name === "reports" && !staff)) { if (location.hash && location.hash !== "#/applications") { location.hash = "#/applications"; return; } r = { name: "applications", param: "" }; }
+    if (!pages[r.name] || (r.name === "reports" && !staff) || (r.name === "users" && role !== "admin")) { if (location.hash && location.hash !== "#/applications") { location.hash = "#/applications"; return; } r = { name: "applications", param: "" }; }
     if (currentPage && currentPage !== r.name) { hideDrawer(); if (pages[currentPage].hide) pages[currentPage].hide(); }
     var changed = currentPage !== r.name;
     currentPage = r.name;
@@ -1502,7 +1502,7 @@
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });
   $("toggleFilters").addEventListener("click", function () { $("filters").classList.toggle("open"); });
   $("dClose").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
+  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
   $("refreshBtn").addEventListener("click", loadApps);
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);

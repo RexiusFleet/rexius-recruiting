@@ -178,6 +178,11 @@ td.att a, td.att button { text-decoration: none; background: none; border: 0; pa
 .nav a:hover { color: var(--ink); background: var(--hover); }
 .nav a.on { color: var(--ink); border-bottom-color: var(--accent); }
 body[data-role="manager"] .staff-only { display: none !important; }
+body:not([data-role="admin"]) .admin-only { display: none !important; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+#page-users td select { padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); color: var(--ink); }
+#page-users .actions { flex-wrap: nowrap; }
+#page-users .actions .btn { white-space: nowrap; }
 body:not([data-page="applications"]) .apps-only { display: none !important; }
 #page-applications .layout { border-top: 0; }
 .page.pad { padding: 14px 24px 40px; }
