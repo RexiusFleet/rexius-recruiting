@@ -1,4 +1,4 @@
-/* Users page (admins only): invite people, change their role or name, re-send an invite, clear
+/* Users page (admins only): add people (by emailed invite or a sign-in link the admin passes on), change their role or name, re-send an invite, clear
  * someone's authenticator apps after a lost phone, and remove access. Everything goes through
  * the Edge Function recruiting-users, which checks for an admin with a two-factor session and
  * uses the service role for the parts the browser cannot do (sending invites, reading logins,
@@ -93,6 +93,7 @@
       tr.appendChild(el("td", null, u.accepted ? (u.authenticators ? String(u.authenticators) : "None yet") : "—"));
 
       var tdAct = el("td"), acts = el("div", "actions"); tdAct.appendChild(acts);
+      if (!u.accepted) addBtn(acts, "Copy sign-in link", function () { copyLinkFor(u); });
       if (!u.accepted) addBtn(acts, "Re-send invite", function () { resend(u); });
       if (!u.is_self && u.authenticators > 0) addBtn(acts, "Reset authenticator", function () { resetMfa(u); });
       if (!u.is_self && !(u.role === "admin" && lastAdmin)) addBtn(acts, "Remove", function () { remove(u); });
@@ -145,6 +146,13 @@
     RR.notice("A fresh invite is on its way to " + u.email + ".");
     replace(r.data.user);
   }
+  async function copyLinkFor(u) {
+    var r = await invoke({ action: "invite_link", user_id: u.user_id, redirect_to: pageUrl() });
+    if (r.error) { RR.notice("Could not make a sign-in link: " + r.error); return; }
+    RR.clearNotice();
+    replace(r.data.user);
+    showLink(u, r.data.link);
+  }
   async function resetMfa(u) {
     if (!confirm("Remove every authenticator " + u.name + " has set up? Use this when they have lost or replaced their phone. On their next sign-in they enter their password and set up an authenticator again.")) return;
     var r = await invoke({ action: "reset_mfa", user_id: u.user_id });
@@ -166,6 +174,7 @@
     $("inviteError").textContent = "";
     $("inviteEmail").value = ""; $("inviteName").value = ""; $("inviteRole").value = "manager";
     $("inviteSave").disabled = false;
+    var d = document.querySelector('input[name="inviteDelivery"][value="link"]'); if (d) d.checked = true;
     $("inviteModal").hidden = false;
     $("inviteEmail").focus();
   }
@@ -177,20 +186,40 @@
     if (!email || !name) { $("inviteError").textContent = "Enter an email and a name."; return; }
     if (!/@rexius\.com$/i.test(email) && !confirm(email + " is not a rexius.com address. Invite them anyway?")) return;
     $("inviteSave").disabled = true;
-    var r = await invoke({ action: "invite", email: email, name: name, role: role, redirect_to: pageUrl() });
+    var delivery = (document.querySelector('input[name="inviteDelivery"]:checked') || {}).value || "link";
+    var r = await invoke({ action: "invite", email: email, name: name, role: role, redirect_to: pageUrl(), delivery: delivery });
     $("inviteSave").disabled = false;
     if (r.error) { $("inviteError").textContent = r.error; return; }
     closeInvite();
     users = users.concat([r.data.user]).sort(function (a, b) { return a.name.localeCompare(b.name); });
     render();
+    if (r.data.link) { RR.clearNotice(); showLink(r.data.user, r.data.link); return; }
     RR.notice(r.data.emailed
       ? "Invite sent to " + email + ". The link opens this site; they choose a password and set up an authenticator."
       : email + " already had a login for another Rexius app, so they can sign in now with that password and will be asked to set up an authenticator.");
   }
+
+  // ---------- Sign-in link (no email) ----------
+  function showLink(u, link) {
+    $("linkFor").textContent = "For " + u.name + " (" + (u.email || "") + "), " + ROLE_LABEL[u.role] + ".";
+    $("linkText").value = link;
+    $("linkNote").textContent = "";
+    $("linkModal").hidden = false;
+    copyLink();
+  }
+  async function copyLink() {
+    var t = $("linkText");
+    try { await navigator.clipboard.writeText(t.value); $("linkNote").textContent = "Copied. Paste it into a message to them."; }
+    catch (e) { t.focus(); t.select(); $("linkNote").textContent = "Select the link above and copy it (Ctrl+C or ⌘C)."; }
+  }
+  function closeLink() { $("linkModal").hidden = true; $("linkText").value = ""; }
 
   $("usersInviteBtn").addEventListener("click", openInvite);
   $("usersRefresh").addEventListener("click", load);
   $("inviteForm").addEventListener("submit", sendInvite);
   $("inviteCancel").addEventListener("click", closeInvite);
   $("inviteClose").addEventListener("click", closeInvite);
+  $("linkCopy").addEventListener("click", copyLink);
+  $("linkDone").addEventListener("click", closeLink);
+  $("linkClose").addEventListener("click", closeLink);
 })();

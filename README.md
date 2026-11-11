@@ -1229,7 +1229,8 @@ do all of it on a **Users** tab in the tracker.
   shown to admins only (the tab is hidden for hr and managers, and typing `#/users` sends them to
   Applications). It lists every tracker user with email, role, whether the invite was accepted,
   last sign-in and how many authenticators they have, and offers:
-  - **Invite someone**: email, name and role in one form. Supabase emails a link back to the
+  - **Add user** (called Invite someone until 2026-11-11; see "Sign-in links without email"
+    below): email, name and role in one form. Supabase emails a link back to the
     address the page is on (the Pages site, or localhost when working locally); the person
     chooses a password and sets up an authenticator, as in step 13. A non-rexius.com address
     asks for confirmation first. Someone who already has a working login for the other app on the
@@ -1246,7 +1247,8 @@ do all of it on a **Users** tab in the tracker.
     `auth.users` is shared with the other app. To delete it too, use Authentication → Users in the
     dashboard.
 - `supabase/functions/recruiting-users/index.ts` (new): the Edge Function behind the page, with the
-  actions `list`, `invite`, `update`, `resend`, `reset_mfa` and `remove`. The caller must be an
+  actions `list`, `invite`, `update`, `resend`, `reset_mfa` and `remove` (and `invite_link` since
+  2026-11-11). The caller must be an
   admin with a two-factor session, checked through `recruiting.current_role()` like every policy;
   the gateway's JWT check is off as for the other tracker functions. It uses the service role,
   which the page never sees, for sending invites, reading logins and removing another person's
@@ -1289,6 +1291,45 @@ Administrator changes them in the dashboard):
 The Site URL no longer affects tracker invites, because the page always says where the link
 returns to. It is still the default for anything sent without one; setting it to the Pages
 address (step 6) is harmless for the apparel app, which uses password sign-in only.
+
+### Sign-in links without email (2026-11-11)
+
+**Invite someone** became **Add user**: the admin types the name, email and role and the person
+is set up with that role at once. The form asks how they get their sign-in link:
+
+- **Give me a link to send them myself** (the default): nothing is emailed. The tracker shows a
+  one-time link and copies it; the admin sends it by Teams, text or their own mail. This avoids the
+  built-in mailer's limit of 2 emails an hour and its supabase.io sender.
+- **Email it to them from the tracker**: as before.
+
+Rows whose invite is not yet accepted get **Copy sign-in link**, which makes a fresh link (for an
+expired link, or for someone first invited by email). A new link or email replaces the previous
+one. Nobody sets a password for someone else: the link only lets the person choose their own, then
+set up an authenticator, exactly as an emailed invite does.
+
+How the link works: the function calls Supabase's `auth.admin.generateLink` (type `invite`), which
+creates the login without sending mail, and returns the tracker's own address with
+`#invite=<token hash>`. The page clears that from the address bar at once and shows "Welcome to
+Rexius Recruiter" with a **Continue** button; only the click redeems the token (`verifyOtp`). Mail
+and chat link scanners (Outlook Safe Links, Teams previews) that open every link would otherwise
+use up a one-time link before the person sees it, which can happen to Supabase's emailed links.
+The token sits after `#`, so it never reaches a server log. A used or expired link says so and
+points to sign-in. The lifetime is the same **Email OTP Expiration** setting as above.
+
+- `supabase/functions/recruiting-users/index.ts`: `invite` takes `delivery: "link"`; new action
+  `invite_link {user_id, redirect_to}`, refused (409) once the invite has been accepted.
+- `web/users.js`, `web/index.html`, `web/styles.css`: the delivery choice, the link dialog, the
+  row button; `web/app.js`: the welcome screen, and a reload when the link is pasted into a tab
+  that already shows the tracker.
+
+Verified on the local stack: a link-added person gets no email, the link opens the welcome screen
+(also in a tab where an admin was signed in, who is signed out first), Continue leads to "Choose
+a password" and authenticator setup, the same link a second time and an older link replaced by a
+newer one are both refused, an hr user gets 403, and phone width has no sideways scroll.
+
+On the hosted project: deploy the function again
+(`npx supabase functions deploy recruiting-users --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`)
+before merging; there is no migration.
 
 ---
 ## Manual steps in Supabase (do these in order)
