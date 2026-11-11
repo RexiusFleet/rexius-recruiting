@@ -27,8 +27,10 @@
 //   SUPABASE_SERVICE_ROLE_KEY   service-role key (local: `npx supabase status`; hosted:
 //                               Project Settings -> API Keys). Bypasses RLS; server-side only.
 //   JOTFORM_API_BASE            optional, default https://api.jotform.com (EU: https://eu-api.jotform.com)
-//   JOTFORM_TIMEZONE            optional, default America/Los_Angeles: the Jotform account's
-//                               time zone, in which `created_at` is expressed
+//   JOTFORM_TIMEZONE            optional, default America/New_York: the zone Jotform's API
+//                               writes `created_at` in (US Eastern, whatever the account's own
+//                               setting says; see JOTFORM_CLOCK in lib/clean.mjs). The --since
+//                               cutoff is always an Oregon (America/Los_Angeles) date.
 //
 // Idempotent on jotform_submission_id: a submission already in applications is skipped (or
 // updated with --refresh). Inserting an application fires the trigger that creates its
@@ -40,7 +42,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { buildApplication } from "./lib/clean.mjs";
+import { buildApplication, JOTFORM_CLOCK } from "./lib/clean.mjs";
 import { JotformClient } from "./lib/jotform.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -97,7 +99,7 @@ if (existsSync(envFile) && typeof process.loadEnvFile === "function") {
 const env = {
   jotformKey: process.env.JOTFORM_API_KEY,
   jotformBase: process.env.JOTFORM_API_BASE || "https://api.jotform.com",
-  timeZone: process.env.JOTFORM_TIMEZONE || "America/Los_Angeles",
+  timeZone: process.env.JOTFORM_TIMEZONE || JOTFORM_CLOCK, // the clock of Jotform's created_at
   supabaseUrl: process.env.SUPABASE_URL,
   serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 };
@@ -154,7 +156,7 @@ const totals = { forms: [], filesCopied: 0, filesSkipped: 0, filesFailed: 0, war
 
 async function main() {
   console.log(`Backfill ${opts.dryRun ? "(dry run) " : ""}-> ${env.supabaseUrl}${isLocal ? " (local stack)" : ""}`);
-  console.log(`Importing submissions made on or after ${opts.since} (${env.timeZone}); older ones are skipped.`);
+  console.log(`Importing submissions made on or after ${opts.since} (Oregon time; Jotform's clock read as ${env.timeZone}); older ones are skipped.`);
   if (!isLocal && !opts.dryRun) {
     console.log("Target is not the local stack. Writing real data to the hosted project.");
   }
@@ -193,9 +195,10 @@ async function main() {
   if (!opts.dryRun) await duplicateReport();
 }
 
-// The cutoff is a calendar date in the Jotform account's zone; compare on the local date of the
-// submission there, so "2026-10-01" keeps a 12:30 AM October 1 submission in Oregon.
-const sinceDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: env.timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+// The cutoff is an Oregon calendar date, whatever clock Jotform writes in: compare on the
+// submission's local date in Oregon, so "2026-10-01" keeps a 12:30 AM October 1 submission there.
+const OREGON = "America/Los_Angeles";
+const sinceDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: OREGON, year: "numeric", month: "2-digit", day: "2-digit" });
 function isBeforeSince(submittedAtIso) {
   return sinceDateFmt.format(new Date(submittedAtIso)) < opts.since;
 }

@@ -1331,6 +1331,36 @@ On the hosted project: deploy the function again
 (`npx supabase functions deploy recruiting-users --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`)
 before merging; there is no migration.
 
+## What the Jotform time fix did
+
+Every Jotform application was stored with a submitted time three hours late, from the first
+backfill until 2026-11-11. Jotform's REST API writes a submission's `created_at` in US Eastern
+time, whatever the account's own time zone setting says, and the import read it as Pacific. The
+Rexius account is set to America/Los_Angeles, which made Pacific look right. The check that
+settled it: a submission that reached the webhook at 5:20 pm Pacific on 2026-11-07 came back from
+the API with `created_at` "2026-11-07 20:20:04". Effect: the drawer, PDF and CSV showed times three
+hours late, and anything submitted after 9 pm Pacific counted towards the next day in reports.
+
+- **Live fix, 2026-11-11 21:09:59 UTC**: the function secret `JOTFORM_TIMEZONE=America/New_York`
+  on the hosted project, so the deployed webhook stores the right time from then on.
+- **Code**: `JOTFORM_CLOCK = "America/New_York"` in `supabase/functions/_shared/clean.mjs` is the
+  default for both the webhook and the backfill; `JOTFORM_TIMEZONE` still overrides it. The
+  backfill's `--since` cutoff is now always an Oregon date (`America/Los_Angeles`) instead of
+  following the Jotform zone. `npm run backfill:test` has the 2026-11-07 case as a test.
+- **Data**: migration `20261116000100_jotform_times_eastern.sql`, applied to the hosted project on
+  2026-11-11, re-read all 156 Jotform applications' times as Eastern (paper applications were
+  never affected), with their first history row ("Applied"). Two openings that the
+  reopenable-positions migration had dated from a first application moved one day earlier with
+  it: Landscape Construction Lead (Central Oregon) to 2026-10-17 and Digital Marketer
+  (Eugene/Springfield) to 2026-10-01, so those applications still count towards their opening.
+  The "last updated" stamps were not touched. Afterwards every application since November 1 shows
+  arriving four to five seconds after its submitted time.
+- **One application now shows September 30**, before the October 1 records start, because it was
+  submitted after 9 pm Pacific that evening. It was left in place.
+
+To undo the data change, the inverse of the migration's expression is
+`((t at time zone 'America/New_York') at time zone 'America/Los_Angeles')`.
+
 ---
 ## Manual steps in Supabase (do these in order)
 
@@ -1708,8 +1738,9 @@ secrets but not create them).
    in step 3). The CLI alternative is a gitignored file with those two lines and
    `npx supabase secrets set --env-file supabase/functions/.env`. `SUPABASE_URL` and
    `SUPABASE_SERVICE_ROLE_KEY` are injected by Supabase; do not add them. Optional:
-   `JOTFORM_TIMEZONE` if the Jotform account is not on Pacific time, `JOTFORM_API_BASE` for an
-   EU account. Nothing is pasted into chat, a file in this repo, or a commit.
+   `JOTFORM_TIMEZONE`, the zone Jotform's API writes submission times in (default and hosted
+   value `America/New_York`: US Eastern, whatever the Jotform account's own setting says; see
+   "What the Jotform time fix did"), and `JOTFORM_API_BASE` for an EU account. Nothing is pasted into chat, a file in this repo, or a commit.
 2. **Deploy** (Developer is enough; the CLI must be linked, step 3):
 
    ```sh

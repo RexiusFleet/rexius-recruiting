@@ -46,7 +46,7 @@ cannot send a Supabase JWT.
 | `JOTFORM_WEBHOOK_SECRET` | yes | Edge Function secret; the same value goes on the webhook URL in Jotform |
 | `JOTFORM_API_KEY` | yes | Edge Function secret; read-only Jotform key |
 | `JOTFORM_API_BASE` | no | Default `https://api.jotform.com`; EU accounts `https://eu-api.jotform.com`; the local stub for tests |
-| `JOTFORM_TIMEZONE` | no | Default `America/Los_Angeles`, the zone Jotform's `created_at` is expressed in |
+| `JOTFORM_TIMEZONE` | no | The zone Jotform's `created_at` is written in; default `America/New_York`, because Jotform's API reports US Eastern whatever the account's own setting says. Set to `America/New_York` on the hosted project since 2026-11-11 |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | injected | Set by Supabase on deploy and by `functions serve` locally |
 
 Secrets are created by an organization Administrator (Dashboard → Edge Functions → Secrets, or
