@@ -1150,7 +1150,8 @@ retype its pay range. A daily job now does that.
   Positions page shows it.
 - **Each run is logged** in `recruiting.careers_sync_runs` (what changed, what was flagged, or
   why nothing changed). The Positions page shows the last check, the changes of the last 14
-  days, and what needs a decision; HR and admins have a "Check now" link.
+  days, and what needs a decision in a box under the list of positions (moved there from above
+  the list on 2026-11-19 so the positions come first); HR and admins have a "Check now" link.
 
 The pieces:
 
