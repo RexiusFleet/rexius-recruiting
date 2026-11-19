@@ -384,3 +384,12 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .update-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:1000;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 32px);box-sizing:border-box;padding:10px 12px 10px 16px;background:var(--panel);color:var(--ink);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 .update-bar span{flex:1 1 auto;min-width:12em}
 @media (max-width:600px){.update-bar{width:calc(100vw - 32px)}}
+/* Drawer: Full application folds away (a <details> section), closed by default */
+.sec.fold > summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:8px}
+.sec.fold > summary::-webkit-details-marker{display:none}
+.sec.fold > summary::before{content:"▶";color:var(--mute);font-size:10px;width:10px;transition:transform .15s}
+.sec.fold[open] > summary::before{transform:rotate(90deg)}
+.sec.fold > summary h3{margin:0}
+.sec.fold[open] > summary{margin-bottom:8px}
+.sec.fold .fold-count{font-size:12px;color:var(--faint)}
+.sec.fold > summary:hover h3{color:var(--ink)}

@@ -867,6 +867,10 @@
     }
     sec.appendChild(rv);
 
+    // Files and links: right under the review, since the resume and the PDF are what gets sent on
+    // (moved up from below Employment history, 2026-11-19).
+    filesSection(body, a, manual);
+
     // Summary by Claude (Phase 9b, summary.js): staff only; managers never see a summary.
     if (staff) {
       sec = section(body, "Summary"); sec.id = "summarySec";
@@ -903,21 +907,6 @@
       RR.summary.managerTranslation(sec, a.curated.translation);
     }
 
-    // Files and links
-    sec = section(body, "Files and links");
-    var links = el("div", "links");
-    a.files.forEach(function (f) { links.appendChild(fileButton(f, fileIcon(f) + " " + fileLabel(f))); });
-    if (!a.files.length) links.appendChild(el("div", "meta", a.filesPurged ? "Files were removed after six months (retention). The original submission in Jotform still has them." : manual ? "No scan or resume attached." : "No resume uploaded."));
-    var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
-    if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
-    sec.appendChild(links);
-    var dlWrap = el("div", "links");
-    var dl2 = el("button", "btn small", "Download application (PDF)"); dl2.type = "button";
-    dl2.title = "A printable copy of this application built from the tracker's data, named " + (window.RR && RR.applicationPdf ? RR.applicationPdf.fileName(a.name) : "Last-First-application.pdf") + ". Send it to the hiring manager with the resume.";
-    dl2.addEventListener("click", function () { downloadApplication(a.id, dl2); });
-    dlWrap.appendChild(dl2);
-    sec.appendChild(dlWrap);
-
     // Duplicates
     if (a.dups && a.dups.length) {
       sec = section(body, "Also applied (same email or phone)");
@@ -943,8 +932,11 @@
       // Manager feedback (read)
       sec = section(body, "Manager feedback"); sec.id = "feedbackSec";
       sec.appendChild(el("div", "hint", "Loading…"));
-      // Full application
-      sec = section(body, "Full application"); sec.id = "answersSec";
+      // Full application: every answer, folded away by default so the drawer reads short
+      // (2026-11-19); a click on the heading opens it.
+      sec = el("details", "sec fold"); sec.id = "answersSec";
+      var sum = el("summary"); sum.appendChild(el("h3", null, "Full application")); sum.appendChild(el("span", "fold-count", ""));
+      sec.appendChild(sum); body.appendChild(sec);
       sec.appendChild(el("div", "hint", "Loading…"));
       loadStaffDetails(a);
     } else {
@@ -953,6 +945,23 @@
       loadManagerFeedback(a);
     }
     body.scrollTop = 0;
+  }
+
+  function filesSection(body, a, manual) {
+    var sec = section(body, "Files and links");
+    var links = el("div", "links");
+    a.files.forEach(function (f) { links.appendChild(fileButton(f, fileIcon(f) + " " + fileLabel(f))); });
+    if (!a.files.length) links.appendChild(el("div", "meta", a.filesPurged ? "Files were removed after six months (retention). The original submission in Jotform still has them." : manual ? "No scan or resume attached." : "No resume uploaded."));
+    var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
+    if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
+    sec.appendChild(links);
+    var dlWrap = el("div", "links");
+    var dl2 = el("button", "btn small", "Download application (PDF)"); dl2.type = "button";
+    dl2.title = "A printable copy of this application built from the tracker's data, named " + (window.RR && RR.applicationPdf ? RR.applicationPdf.fileName(a.name) : "Last-First-application.pdf") + ". Send it to the hiring manager with the resume.";
+    dl2.addEventListener("click", function () { downloadApplication(a.id, dl2); });
+    dlWrap.appendChild(dl2);
+    sec.appendChild(dlWrap);
+    return sec;
   }
 
   // Good lead (staff): a button until flagged, then the reason and dates with Save and Remove.
@@ -1303,6 +1312,7 @@
     items.forEach(function (it) { var box = el("div"); box.appendChild(el("div", "q", it.q)); box.appendChild(el("div", "a", it.a)); wrap.appendChild(box); });
     if (!items.length) wrap.appendChild(el("div", "hint", "No answers to show."));
     sec.appendChild(wrap);
+    var cnt = sec.querySelector(".fold-count"); if (cnt) cnt.textContent = items.length ? items.length + (items.length === 1 ? " answer" : " answers") : "";
   }
 
   // ---------- Application PDF ----------
