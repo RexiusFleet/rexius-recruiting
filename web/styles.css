@@ -393,3 +393,6 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .sec.fold[open] > summary{margin-bottom:8px}
 .sec.fold .fold-count{font-size:12px;color:var(--faint)}
 .sec.fold > summary:hover h3{color:var(--ink)}
+/* Drawer contact log: the add form folds behind "+ Log a contact" */
+.contact-add{margin-top:8px}
+.contact-acts{display:flex;gap:8px;justify-content:flex-end}
