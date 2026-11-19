@@ -15,6 +15,14 @@
 // open every link therefore cannot use it up, which they would with Supabase's /verify URL.
 // Making a new link replaces the previous link or email for that person.
 //
+// Testing window (2026-11-19, migration 20261119000100): `invite` with delivery "password" and
+// `temp_password` for someone already listed make a login with a generated temporary password and
+// send nothing; the password is returned once for the admin to pass on, is never logged or
+// stored, and the person must replace it at the first sign-in (`change_password`, the one action
+// a non-admin may call, and only for themselves while their profile says must_change_password).
+// It stops working after seven days if it was never replaced. `update` with `mfa_required`
+// switches two-factor sign-in on or off for one person.
+//
 // Scope: only people with a recruiting.profiles row are listed or touched. auth.users is shared
 // with the inventory app on the same project, so this function never lists other logins and
 // never deletes a login: "remove" deletes the tracker profile, which ends access at once
@@ -27,9 +35,11 @@
 //   checked through recruiting.current_role() like every table policy. The gateway's JWT check is
 //   off (`verify_jwt = false`) as for the other tracker functions; the function checks itself.
 //   {action: "list"}
-//   {action: "invite", email, name, role, redirect_to, delivery?: "email" | "link"}
+//   {action: "invite", email, name, role, redirect_to, delivery?: "email" | "link" | "password", mfa_required?}
 //   {action: "invite_link", user_id, redirect_to}
-//   {action: "update", user_id, name?, role?}
+//   {action: "update", user_id, name?, role?, mfa_required?}
+//   {action: "temp_password", user_id}
+//   {action: "change_password", password}   any signed-in tracker user with a temporary password
 //   {action: "resend", user_id, redirect_to}
 //   {action: "reset_mfa", user_id}
 //   {action: "remove", user_id}
@@ -115,7 +125,33 @@ function fail(where: string, err: { message?: string } | null | undefined): neve
   throw new Refused(500, `${where}: ${msg}`);
 }
 
-interface Profile { user_id: string; role: Role; name: string; location: string | null; created_at: string }
+interface Profile {
+  user_id: string; role: Role; name: string; location: string | null; created_at: string;
+  mfa_required: boolean; must_change_password: boolean; temp_password_expires_at: string | null;
+}
+const PROFILE_COLS = "user_id, role, name, location, created_at, mfa_required, must_change_password, temp_password_expires_at";
+const TEMP_PASSWORD_DAYS = 7;
+
+/**
+ * A temporary password: 16 random characters in four groups, without the look-alikes (0 O 1 l I),
+ * always with an upper-case letter, a lower-case letter and a digit so it passes whatever
+ * character rules the project's Auth settings ask for. About 92 bits.
+ */
+function tempPassword(): string {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const limit = 256 - (256 % abc.length);
+  for (;;) {
+    let out = "";
+    while (out.length < 16) {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      for (const b of bytes) if (b < limit && out.length < 16) out += abc[b % abc.length];
+    }
+    if (/[A-Z]/.test(out) && /[a-z]/.test(out) && /[0-9]/.test(out)) return out.match(/.{4}/g)!.join("-");
+  }
+}
+function tempExpiry(): string {
+  return new Date(Date.now() + TEMP_PASSWORD_DAYS * 86400_000).toISOString();
+}
 
 async function findLoginByEmail(admin: SupabaseClient, email: string): Promise<User | null> {
   // The project has a few dozen logins at most (two small apps); page through them.
@@ -130,7 +166,7 @@ async function findLoginByEmail(admin: SupabaseClient, email: string): Promise<U
 }
 
 async function profileOf(admin: SupabaseClient, userId: string): Promise<Profile> {
-  const r = await admin.schema("recruiting").from("profiles").select("user_id, role, name, location, created_at").eq("user_id", userId).maybeSingle();
+  const r = await admin.schema("recruiting").from("profiles").select(PROFILE_COLS).eq("user_id", userId).maybeSingle();
   if (r.error) fail("read the profile", r.error);
   if (!r.data) throw new Refused(404, "That person is not a tracker user.");
   return r.data as Profile;
@@ -152,12 +188,15 @@ async function describe(admin: SupabaseClient, p: Profile, selfId: string): Prom
     accepted: !!(user?.email_confirmed_at),
     last_sign_in_at: user?.last_sign_in_at ?? null,
     authenticators,
+    mfa_required: p.mfa_required,
+    must_change_password: p.must_change_password,
+    temp_password_expires_at: p.temp_password_expires_at,
     is_self: p.user_id === selfId,
   };
 }
 
 async function list(admin: SupabaseClient, selfId: string): Promise<Json> {
-  const r = await admin.schema("recruiting").from("profiles").select("user_id, role, name, location, created_at").order("name");
+  const r = await admin.schema("recruiting").from("profiles").select(PROFILE_COLS).order("name");
   if (r.error) fail("read the users", r.error);
   const users = await Promise.all((r.data as Profile[]).map((p) => describe(admin, p, selfId)));
   return { users };
@@ -172,6 +211,8 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
   if (!isRole(role)) throw new Refused(400, "Pick a role: admin, hr or manager.");
   const redirectTo = siteFor(body.redirect_to);
   const byLink = body.delivery === "link";
+  const byPassword = body.delivery === "password";
+  const mfaRequired = body.mfa_required !== false;
 
   const existing = await findLoginByEmail(admin, email);
   if (existing) {
@@ -183,11 +224,20 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
   let userId: string;
   let emailed = false;
   let link: string | null = null;
+  let password: string | null = null;
   if (existing && existing.email_confirmed_at) {
     // Someone with a working login on the shared project (the other app): give them the role.
     // They sign in with the password they have; the tracker asks them to set up an
     // authenticator on the first sign-in.
     userId = existing.id;
+  } else if (byPassword) {
+    // New, or invited before and never accepted: a login with a temporary password, no email.
+    password = tempPassword();
+    const r = existing
+      ? await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true })
+      : await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    if (r.error || !r.data?.user) fail("make the login", r.error);
+    userId = r.data.user.id;
   } else if (byLink) {
     // New, or invited before and never accepted: a link for the admin to pass on, no email.
     const made = await inviteLink(admin, email, redirectTo);
@@ -200,14 +250,17 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
     emailed = true;
   }
 
-  const ins = await admin.schema("recruiting").from("profiles").insert({ user_id: userId, role, name });
+  const ins = await admin.schema("recruiting").from("profiles").insert({
+    user_id: userId, role, name, mfa_required: mfaRequired,
+    must_change_password: !!password, temp_password_expires_at: password ? tempExpiry() : null,
+  });
   if (ins.error) {
     // Do not leave a fresh login behind without a profile; an existing one is not ours to delete.
     if (!existing) await admin.auth.admin.deleteUser(userId);
     fail("save the profile", ins.error);
   }
-  console.log(`[${FUNCTION}] invite: ${role} added by ${selfId}${emailed ? ", email sent" : link ? ", link made" : ", existing login"}`);
-  return { user: await describe(admin, await profileOf(admin, userId), selfId), emailed, link, redirect_to: emailed || link ? redirectTo : null };
+  console.log(`[${FUNCTION}] invite: ${role} added by ${selfId}${emailed ? ", email sent" : link ? ", link made" : password ? ", temporary password made" : ", existing login"}${mfaRequired ? "" : ", two-factor off"}`);
+  return { user: await describe(admin, await profileOf(admin, userId), selfId), emailed, link, password, redirect_to: emailed || link ? redirectTo : null };
 }
 
 async function update(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
@@ -225,6 +278,10 @@ async function update(admin: SupabaseClient, body: Json, selfId: string): Promis
       throw new Refused(409, "You cannot take away your own admin role. Ask another admin to do it.");
     }
     patch.role = body.role;
+  }
+  if (body.mfa_required !== undefined) {
+    if (typeof body.mfa_required !== "boolean") throw new Refused(400, "mfa_required must be true or false.");
+    patch.mfa_required = body.mfa_required;
   }
   if (!Object.keys(patch).length) throw new Refused(400, "Nothing to change.");
   const r = await admin.schema("recruiting").from("profiles").update(patch).eq("user_id", p.user_id);
@@ -259,6 +316,49 @@ async function inviteLinkFor(admin: SupabaseClient, body: Json, selfId: string):
   const made = await inviteLink(admin, u.data.user.email, siteFor(body.redirect_to));
   console.log(`[${FUNCTION}] invite_link by ${selfId}`);
   return { user: await describe(admin, p, selfId), link: made.link };
+}
+
+/** A fresh temporary password for someone already listed (forgotten password, or an invite never opened). */
+async function setTempPassword(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
+  if (!isUuid(body.user_id)) throw new Refused(400, "Missing user_id.");
+  if (body.user_id === selfId) throw new Refused(409, "You cannot give yourself a temporary password. Ask another admin.");
+  const p = await profileOf(admin, body.user_id);
+  const password = tempPassword();
+  const r = await admin.auth.admin.updateUserById(p.user_id, { password, email_confirm: true });
+  if (r.error) fail("set the temporary password", r.error);
+  const up = await admin.schema("recruiting").from("profiles")
+    .update({ must_change_password: true, temp_password_expires_at: tempExpiry() }).eq("user_id", p.user_id);
+  if (up.error) fail("mark the password as temporary", up.error);
+  console.log(`[${FUNCTION}] temp_password by ${selfId}`);
+  return { user: await describe(admin, await profileOf(admin, p.user_id), selfId), password };
+}
+
+/**
+ * The person replaces their temporary password. Not an admin action: the caller is whoever holds
+ * the session, and it works only while their own profile says must_change_password.
+ */
+async function changePassword(admin: SupabaseClient, supabaseUrl: string, anonKey: string, user: User, body: Json): Promise<Json> {
+  const password = typeof body.password === "string" ? body.password : "";
+  if (password.length < 10) throw new Refused(400, "Use at least 10 characters.");
+  if (password.length > 72) throw new Refused(400, "Use at most 72 characters.");
+  const p = await profileOf(admin, user.id);
+  if (!p.must_change_password) throw new Refused(409, "This account has no temporary password to replace.");
+  if (p.temp_password_expires_at && new Date(p.temp_password_expires_at).getTime() < Date.now()) {
+    throw new Refused(409, "The temporary password has expired. Ask an admin for a new one.");
+  }
+  // Refuse the temporary password itself as the new one: if it still signs in, it is the same.
+  if (user.email) {
+    const probe = createClient(supabaseUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const same = await probe.auth.signInWithPassword({ email: user.email, password });
+    if (!same.error) throw new Refused(400, "Choose a password different from the temporary one.");
+  }
+  const r = await admin.auth.admin.updateUserById(user.id, { password });
+  if (r.error) throw new Refused(400, r.error.message || "That password was not accepted.");
+  const up = await admin.schema("recruiting").from("profiles")
+    .update({ must_change_password: false, temp_password_expires_at: null }).eq("user_id", user.id);
+  if (up.error) fail("finish the password change", up.error);
+  console.log(`[${FUNCTION}] change_password by ${user.id}`);
+  return { changed: true };
 }
 
 async function resetMfa(admin: SupabaseClient, body: Json, selfId: string): Promise<Json> {
@@ -306,15 +406,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const serviceKey = env("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !anonKey || !serviceKey) return json(503, { error: "function not configured (Supabase environment)" });
 
-  // 1. Who is calling: an admin with a two-factor session.
+  // 1. Who is calling: an admin whose session current_role() accepts (two-factor unless an admin
+  //    switched it off for them). `change_password` is the exception, handled before that check.
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return json(401, { error: "sign in first" });
   const asUser = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
   const who = await asUser.auth.getUser(token);
   if (who.error || !who.data.user) return json(401, { error: "invalid session" });
-  const role = await asUser.schema("recruiting").rpc("current_role");
-  if (role.error) { console.error(`[${FUNCTION}] current_role: ${role.error.message}`); return json(500, { error: "could not check your role" }); }
-  if (role.data !== "admin") return json(403, { error: "only admins can manage users" });
   const selfId = who.data.user.id;
 
   let body: Json;
@@ -323,12 +421,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
+    if (body.action === "change_password") return json(200, await changePassword(admin, supabaseUrl, anonKey, who.data.user, body));
+    const role = await asUser.schema("recruiting").rpc("current_role");
+    if (role.error) { console.error(`[${FUNCTION}] current_role: ${role.error.message}`); return json(500, { error: "could not check your role" }); }
+    if (role.data !== "admin") return json(403, { error: "only admins can manage users" });
     switch (body.action) {
       case "list": return json(200, await list(admin, selfId));
       case "invite": return json(200, await invite(admin, body, selfId));
       case "update": return json(200, await update(admin, body, selfId));
       case "resend": return json(200, await resend(admin, body, selfId));
       case "invite_link": return json(200, await inviteLinkFor(admin, body, selfId));
+      case "temp_password": return json(200, await setTempPassword(admin, body, selfId));
       case "reset_mfa": return json(200, await resetMfa(admin, body, selfId));
       case "remove": return json(200, await remove(admin, body, selfId));
       default: return json(400, { error: "unknown action" });
