@@ -13,6 +13,7 @@ The frontend (Phases 6 and 7). Plain HTML, CSS and JavaScript; no build step. Pa
 | `documents.js` | Document library: uploads under `documents/` in the private bucket, inline text templates, `min_role` (Phase 7) |
 | `reports.js` | Reports page over the `report_*` views with CSV export (Phase 7) |
 | `users.js` | Users page, admins only: invite with a role, change role or name, re-send an invite, reset someone's authenticators, remove access, all through the Edge Function `recruiting-users` |
+| `update-check.js` | Update prompt: compares the page's deployed version with `version.json` when the app comes back to the front, on focus and every five minutes, and shows a bar with Restart when a newer deploy is live. Off in a local copy (version `dev`) |
 | `assets/` | Approved Rexius logo files: `rexius-mark.png` (green square mark, header and favicon sizes), `rexius-logo.webp` (dark wordmark, light mode) and `rexius-logo-white.webp` (white wordmark, dark mode) |
 | `config.js` | Supabase URL and publishable key. Committed with the local stack's values; `.github/workflows/pages.yml` overwrites it with the hosted project's at deploy time (README step 13) |
 
