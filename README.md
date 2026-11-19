@@ -1394,6 +1394,29 @@ hours late, and anything submitted after 9 pm Pacific counted towards the next d
 To undo the data change, the inverse of the migration's expression is
 `((t at time zone 'America/New_York') at time zone 'America/Los_Angeles')`.
 
+## What the update prompt created
+
+The tracker is also used as an installed app: "Add to Home Screen" on an iPhone and "Add to Dock"
+in Safari on a Mac. Those stay open for days and never reload by themselves, so after a deploy
+they kept running the old page. Now they offer a restart.
+
+- `scripts/pages/stamp-version.sh` (new), run by `.github/workflows/pages.yml` on the deployed
+  copy only: writes `version.json` with the first 12 characters of the commit, sets
+  `<meta name="app-version">` in `index.html` to the same value, and adds `?v=<version>` to the
+  page's own script and stylesheet addresses so a restart loads the new files rather than cached
+  ones. The committed `web/` keeps `content="dev"`.
+- `web/update-check.js` (new): reads `version.json` (never from cache) when the app comes back to
+  the front, when the window gets focus, and every five minutes while it is visible. When the
+  version differs it shows "A new version of Rexius Recruiter is ready" with **Later** and
+  **Restart**. It never reloads by itself, so a note or form being typed is not lost. A local copy
+  (`npx serve web`) is version `dev` and never checks.
+- `web/index.html`, `web/styles.css`: the meta tag, the script, the bar.
+
+Verified with a stamped copy served locally: no bar while the versions match; the bar after
+`version.json` changed; Restart loaded the new version (`app.js?v=` the new value) and the bar was
+gone; phone width with no sideways scroll. Nothing to do by hand: the next deploy after the merge
+carries it, and installed apps opened before then pick it up on their next manual reload.
+
 ---
 ## Manual steps in Supabase (do these in order)
 

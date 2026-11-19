@@ -5,7 +5,8 @@
 # hosted project's URL and publishable key, read from repository variables (Settings -> Secrets
 # and variables -> Actions -> Variables; README step 13). Both values are public by design: the
 # key only identifies the project and row-level security in schema `recruiting` decides what a
-# signed-in user can see. Nothing else in web/ changes, and nothing is built.
+# signed-in user can see. The only other change is the version stamp for the update prompt
+# (scripts/pages/stamp-version.sh); nothing is built.
 name: Deploy web to GitHub Pages
 
 on:
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
       - "web/**"
+      - "scripts/pages/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -58,6 +60,10 @@ jobs:
           };
           CFG
           echo "config.js written for ${SUPABASE_URL}"
+
+      - name: Stamp the version for the update prompt
+        # web/update-check.js compares this with version.json and offers a restart after a deploy.
+        run: scripts/pages/stamp-version.sh web "${GITHUB_SHA::12}"
 
       - uses: actions/configure-pages@v5
 
