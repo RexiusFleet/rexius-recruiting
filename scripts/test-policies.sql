@@ -1204,3 +1204,38 @@ select pg_temp.check('manager: reads a position''s benefits', (select count(*) f
 update recruiting.positions set benefits = array['bonus'];
 select pg_temp.check('manager: cannot change benefits', (select count(*) from recruiting.positions where benefits = array['bonus']) = 0);
 rollback;
+
+-- ----- Contact log: when it happened vs when it was logged (migration 20261118000100) ----------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+insert into recruiting.contacts (application_id, kind, summary, at, logged_at)
+  select id, 'call', 'Backdated call.', now() - interval '3 days', '2000-01-01' from recruiting.applications limit 1;
+select pg_temp.check('contacts: a backdated contact keeps the time it happened',
+  (select at::date from recruiting.contacts where summary = 'Backdated call.') = (now() - interval '3 days')::date);
+select pg_temp.check('contacts: logged_at is stamped by the database, whatever the browser sends',
+  (select logged_at > now() - interval '1 minute' from recruiting.contacts where summary = 'Backdated call.'));
+update recruiting.contacts set logged_at = '2000-01-01', summary = 'Backdated call, edited.' where summary = 'Backdated call.';
+select pg_temp.check('contacts: logged_at cannot be changed afterwards',
+  (select logged_at > now() - interval '1 minute' from recruiting.contacts where summary = 'Backdated call, edited.'));
+savepoint sp;
+do $$ begin
+  insert into recruiting.contacts (application_id, kind, summary, at)
+    select id, 'call', 'Future call.', now() + interval '1 day' from recruiting.applications limit 1;
+  raise notice 'UNEXPECTED: a future contact was accepted';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('contacts: a contact dated in the future is refused',
+  (select count(*) from recruiting.contacts where summary = 'Future call.') = 0);
+do $$ begin
+  update recruiting.contacts set at = now() + interval '1 day' where summary = 'Backdated call, edited.';
+  raise notice 'UNEXPECTED: a contact was moved into the future';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('contacts: an existing contact cannot be moved into the future',
+  (select at < now() from recruiting.contacts where summary = 'Backdated call, edited.'));
+insert into recruiting.contacts (application_id, kind, summary) select id, 'email', 'Now email.' from recruiting.applications limit 1;
+select pg_temp.check('contacts: without a time, a contact is dated now as before',
+  (select abs(extract(epoch from at - logged_at)) < 1 from recruiting.contacts where summary = 'Now email.'));
+rollback;
