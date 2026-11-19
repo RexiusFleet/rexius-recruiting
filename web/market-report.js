@@ -29,6 +29,27 @@
   function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
   var TRIGGER = { manual: "run by hand", schedule: "scheduled run", opened: "run when the position opened" };
 
+  // Benefit categories a market check records (the same keys as positions.benefits), in order.
+  var BENEFITS = [["health", "Health insurance"], ["dental", "Dental"], ["vision", "Vision"], ["retirement", "Retirement plan"], ["retirement_match", "Retirement match"], ["pto", "Paid time off"], ["holidays", "Paid holidays"], ["bonus", "Bonus or profit sharing"], ["year_round", "Year-round work"], ["training", "Paid training or licence"], ["gear", "Uniform, boots or tools"], ["life_disability", "Life or disability insurance"]];
+  var BENEFIT_LABEL = {}; BENEFITS.forEach(function (b) { BENEFIT_LABEL[b[0]] = b[1]; });
+  function benefitLabel(k) { return BENEFIT_LABEL[k] || k; }
+  function benefitList(keys) { return (keys || []).map(benefitLabel).join(", "); }
+  // What the run says about benefits, as rows and sentences both renderers use. Null on runs
+  // from before benefits were recorded or where no posting listed any.
+  function benefitsModel(check) {
+    var b = check.benefits; if (!b || !b.categories || !b.categories.length) return null;
+    var rex = b.rexius || null;
+    var rows = b.categories.map(function (c) { return { label: benefitLabel(c.key), count: c.count, share: c.share, common: (b.common || []).indexOf(c.key) >= 0, rexius: rex ? rex.indexOf(c.key) >= 0 : null }; });
+    var basis = b.postings_with_benefits + " of " + b.postings_total + " postings listed benefits";
+    var line;
+    if (!rex) line = "Rexius' benefits for this position are not filled in, so nothing is compared.";
+    else if ((b.gaps || []).length) line = "Commonly listed and not among Rexius' benefits for this position: " + benefitList(b.gaps) + ".";
+    else if ((b.common || []).length) line = "Rexius offers every benefit that at least half of these postings list.";
+    else line = "No benefit was listed by at least half of these postings.";
+    return { rows: rows, basis: basis, line: line, gaps: b.gaps || [], common: b.common || [], rexius: rex, also: b.also_offered || [],
+      caveat: "Counted from the postings that listed any benefit; a posting that shows none is not counted as offering none." };
+  }
+
   // Verdict wording shared by both reports. `what` names the market side of the comparison.
   function verdict(below, what) {
     if (below === true) return { chip: "Below market", tone: "warn", text: "The top of Rexius' range is below the median low end " + what + "." };
@@ -52,7 +73,10 @@
     if (hasMarket) figures.push(["Others advertise", rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) + " (medians of " + plural(cmp.ranges_compared, "range", "ranges") + " found)"]);
     figures.push(["Against the market", v.chip + ": " + v.text]);
     figures.push(["Postings found", postings.length + (ranges.length ? ", " + ranges.length + " with pay shown" : "")]);
+    var ben = benefitsModel(check);
+    if (ben) figures.push(["Benefits", ben.basis + ". " + ben.line]);
     return {
+      benefits: ben,
       title: position.title + " · " + position.location,
       subtitle: "Run " + fmtDateTime(ran) + " · " + (TRIGGER[check.trigger] || check.trigger),
       rexius: rMin != null || rMax != null ? rangeText(rMin, rMax, rUnit) : "No range set",
@@ -78,6 +102,12 @@
       out.push("Pay others advertise");
       m.ranges.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + ": " + rangeText(r.min, r.max, r.unit) + (r.url ? " (" + r.url + ")" : "")); });
       out.push("");
+    }
+    if (m.benefits) {
+      out.push("Benefits others list (" + m.benefits.basis + ")");
+      m.benefits.rows.forEach(function (r) { out.push("- " + r.label + ": " + r.count + " (" + r.share + "%)" + (r.rexius === true ? ", Rexius offers" : r.rexius === false ? ", not among Rexius' benefits" : "")); });
+      if (m.benefits.rexius && m.benefits.also.length) out.push("Rexius also offers: " + benefitList(m.benefits.also) + ".");
+      out.push(m.benefits.line, m.benefits.caveat, "");
     }
     if (m.postings.length) {
       out.push("Who else is hiring");
@@ -112,6 +142,14 @@
       w.heading("Pay others advertise", 50);
       w.table([{ label: "Employer", width: 30 }, { label: "Title as posted", width: 52 }, { label: "Pay", width: 18, align: "right" }],
         m.ranges.map(function (r) { return [linkCell(r.employer || "Unknown", r.url, "semibold"), clean(r.title), rangeText(r.min, r.max, r.unit)]; }));
+    }
+    if (m.benefits) {
+      w.heading("Benefits others list", 50);
+      w.paragraph(m.benefits.basis + ". " + m.benefits.line, { size: 10, leading: 1.4, after: 6 });
+      w.table([{ label: "Benefit", width: 44 }, { label: "Postings listing it", width: 28, align: "right" }, { label: "Rexius", width: 28, align: "right" }],
+        m.benefits.rows.map(function (r) { return [{ text: r.label, style: r.common ? "semibold" : null }, r.count + " (" + r.share + "%)", r.rexius === true ? "Offers" : r.rexius === false ? "Not listed" : "—"]; }), { size: 9.5 });
+      if (m.benefits.rexius && m.benefits.also.length) w.paragraph("Rexius also offers: " + benefitList(m.benefits.also) + ".", { size: 9.5, after: 4 });
+      w.paragraph(m.benefits.caveat + " Benefits in bold are listed by at least half of them.", { size: 8.5, color: kit.C.mute, after: 6 });
     }
     if (m.postings.length) {
       w.heading("Who else is hiring", 50);
@@ -246,6 +284,6 @@
   async function copyNationalText(position, check, preparedBy) { return copy(nationalText(position, check, preparedBy)); }
 
   window.RR = window.RR || {};
-  window.RR.marketReport = { build: build, download: download, copyText: copyText, text: text, fileName: fileName,
+  window.RR.marketReport = { BENEFITS: BENEFITS, benefitLabel: benefitLabel, benefitsModel: benefitsModel, build: build, download: download, copyText: copyText, text: text, fileName: fileName,
     buildNational: buildNational, downloadNational: downloadNational, copyNationalText: copyNationalText, nationalText: nationalText, nationalFileName: nationalFileName };
 })();

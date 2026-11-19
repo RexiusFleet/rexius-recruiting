@@ -371,7 +371,7 @@
 
   // A position is the role, kept for good; each period it was open is a position_openings row,
   // embedded here newest first. lastOpening is the current one while the position is open.
-  var POSITION_COLUMNS = "id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, jotform_option_label, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, created_at, updated_at, " +
+  var POSITION_COLUMNS = "id, title, location, department, hiring_manager, pay_min, pay_max, pay_unit, status, jotform_option_label, description_doc_id, market_tracking, market_interval_days, market_max_searches, national_max_searches, benefits, benefits_note, created_at, updated_at, " +
     "openings:position_openings(id, opened_at, closed_at, note, opened_by, closed_by)";
   function setPositions(rows) {
     positions = rows; positionById = {};

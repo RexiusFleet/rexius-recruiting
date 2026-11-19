@@ -58,6 +58,10 @@ export const marketCheck = {
   summary: "Found nine blower truck operator and bark blower driver postings in the Portland metro and the northern Willamette Valley, six of them with pay shown. Hourly figures ran from $24 to $40 an hour, with most clustered between $27 and $34. Two postings asked for a CDL Class B with air brakes; the others accepted a standard licence with a clean record and offered to train on the truck.\n\nThe Rexius range of $28–$38 sits inside what others advertise; the top of the range is above the median low end of $27.50. Three employers advertised a signing or seasonal retention bonus, which no Rexius posting mentions.\n\nThis is a sample from search results, not a complete count.",
   comparison: { unit: "hour", position_min: 28, position_max: 38, market_low_median: 27.5, market_high_median: 33, ranges_compared: 6 },
   below_market: false,
+  benefits: { postings_with_benefits: 5, postings_total: 9,
+    categories: [{ key: "health", count: 5, share: 100 }, { key: "retirement", count: 4, share: 80 }, { key: "retirement_match", count: 3, share: 60 }, { key: "pto", count: 3, share: 60 }, { key: "bonus", count: 3, share: 60 }, { key: "dental", count: 2, share: 40 }, { key: "training", count: 2, share: 40 }, { key: "year_round", count: 1, share: 20 }],
+    common: ["health", "retirement", "retirement_match", "pto", "bonus"], rexius: ["health", "dental", "vision", "retirement", "pto", "holidays"],
+    gaps: ["retirement_match", "bonus"], also_offered: ["dental", "vision", "holidays"] },
   pay_ranges: [
     { employer: "Pacific Bark & Soil", title: "Bark Blower Truck Driver (CDL B)", min: 30, max: 36, unit: "hour", url: "https://www.indeed.com/viewjob?jk=1" },
     { employer: "Tualatin Valley Landscape Supply", title: "Blower Truck Operator", min: 26, max: 32, unit: "hour", url: "https://www.indeed.com/viewjob?jk=2" },

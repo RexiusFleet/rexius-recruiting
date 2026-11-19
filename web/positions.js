@@ -1067,7 +1067,7 @@
   // and for staff the tracking toggle and the Check now button. The result is a sample from web
   // search results, never a complete count.
   var marketPoll = null;
-  var MARKET_COLS = "id, position_id, ran_at, finished_at, trigger, requested_by, summary, pay_ranges, postings, sources, comparison, below_market, input_tokens, output_tokens, searches, model, error";
+  var MARKET_COLS = "id, position_id, ran_at, finished_at, trigger, requested_by, summary, pay_ranges, postings, sources, comparison, below_market, benefits, input_tokens, output_tokens, searches, model, error";
   var TRIGGER_LABEL = { manual: "Check now", schedule: "scheduled", opened: "opened with tracking on" };
   function stopMarketPoll() { if (marketPoll) { clearTimeout(marketPoll); marketPoll = null; } }
   async function loadMarket(positionId) {
@@ -1168,6 +1168,7 @@
     } else if (p.market_tracking) {
       box.appendChild(el("div", "hint", "Tracked " + (Number(p.market_interval_days) === 7 ? "weekly" : "monthly") + " while open."));
     }
+    box.appendChild(benefitsEditor(p));
     if (!latest) { box.appendChild(el("div", "hint", "No market check yet." + (st.staff ? " Use Check now to run one." : ""))); return; }
     box.appendChild(renderRun(latest, p, true));
     var earlier = checks.slice(1);
@@ -1183,6 +1184,72 @@
       box.appendChild(det);
     }
   }
+  // What Rexius offers for this role, for the benefits comparison in the next run. Staff tick
+  // categories and it saves at once; managers see the list read-only.
+  function benefitsEditor(p) {
+    var st = RR.state(), MR = RR.marketReport || {}, all = MR.BENEFITS || [];
+    var mine = p.benefits || [];
+    var det = el("details", "market-benefits");
+    var sum = el("summary", null, "Rexius offers for this role: " + (mine.length ? mine.map(MR.benefitLabel || String).join(", ") : "not filled in"));
+    det.appendChild(sum);
+    if (!st.staff) { if (p.benefits_note) det.appendChild(el("div", "hint", p.benefits_note)); return det; }
+    var grid = el("div", "benefit-grid");
+    var boxes = [];
+    all.forEach(function (b) {
+      var l = el("label", "check"); var cb = el("input"); cb.type = "checkbox"; cb.value = b[0]; cb.checked = mine.indexOf(b[0]) >= 0;
+      l.appendChild(cb); l.appendChild(document.createTextNode(" " + b[1])); grid.appendChild(l); boxes.push(cb);
+      cb.addEventListener("change", save);
+    });
+    det.appendChild(grid);
+    var note = el("input"); note.type = "text"; note.maxLength = 500; note.value = p.benefits_note || ""; note.placeholder = "Note, for example: health after 60 days; seasonal crew not eligible for PTO"; note.setAttribute("aria-label", "Benefits note");
+    note.addEventListener("change", save); det.appendChild(note);
+    var others = st.positions.filter(function (o) { return o.id !== p.id && (o.benefits || []).length; });
+    if (others.length) {
+      var copy = el("select"); copy.setAttribute("aria-label", "Copy benefits from another position");
+      var o0 = el("option", null, "Copy from another position…"); o0.value = ""; copy.appendChild(o0);
+      others.forEach(function (o) { var opt = el("option", null, o.title + " · " + o.location); opt.value = o.id; copy.appendChild(opt); });
+      copy.addEventListener("change", function () {
+        var src = RR.state().positionById[copy.value]; if (!src) return;
+        boxes.forEach(function (cb) { cb.checked = (src.benefits || []).indexOf(cb.value) >= 0; });
+        if (!note.value) note.value = src.benefits_note || "";
+        copy.value = ""; save();
+      });
+      det.appendChild(copy);
+    }
+    det.appendChild(el("div", "hint", "Tick what Rexius offers for this role. The next market check compares it with the benefits other employers' postings list; until something is ticked, runs only count what others list."));
+    async function save() {
+      var keys = boxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+      var r = await sb.from("positions").update({ benefits: keys, benefits_note: note.value.trim() || null }).eq("id", p.id);
+      if (r.error) { RR.notice("Could not save the benefits: " + RR.errText(r.error)); return; }
+      p.benefits = keys; p.benefits_note = note.value.trim() || null;
+      sum.textContent = "Rexius offers for this role: " + (keys.length ? keys.map(MR.benefitLabel || String).join(", ") : "not filled in");
+      await RR.reloadPositions();
+    }
+    return det;
+  }
+  // The benefits block of one run: what the postings list, by category, beside Rexius' own.
+  function renderBenefits(c) {
+    var m = RR.marketReport && RR.marketReport.benefitsModel ? RR.marketReport.benefitsModel(c) : null;
+    if (!m) return null;
+    var wrap = el("div", "market-benefits-run");
+    wrap.appendChild(el("div", "q", "Benefits others list (" + m.basis + ")"));
+    if (m.gaps.length) { var g = el("div", "notice-inline"); g.appendChild(el("span", "tag", "Benefits gap")); g.appendChild(document.createTextNode(m.line)); wrap.appendChild(g); }
+    else wrap.appendChild(el("div", "meta", m.line));
+    var tbl = el("table", "mini");
+    var thead = el("thead"); var trh = el("tr"); ["Benefit", "Postings", "Rexius"].forEach(function (h) { trh.appendChild(el("th", null, h)); }); thead.appendChild(trh); tbl.appendChild(thead);
+    var tbody = el("tbody");
+    m.rows.forEach(function (r) {
+      var tr = el("tr");
+      var td = el("td", null, r.label); if (r.common) td.style.fontWeight = "600"; tr.appendChild(td);
+      tr.appendChild(el("td", "num", r.count + " (" + r.share + "%)"));
+      tr.appendChild(el("td", "num", r.rexius === true ? "Offers" : r.rexius === false ? "Not listed" : "—"));
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody); wrap.appendChild(tbl);
+    if (m.rexius && m.also.length) wrap.appendChild(el("div", "meta", "Rexius also offers: " + m.also.map(RR.marketReport.benefitLabel).join(", ") + "."));
+    wrap.appendChild(el("div", "hint", m.caveat + " Bold: listed by at least half of them."));
+    return wrap;
+  }
   // noFlag: leave out "below market" (the fold's closed line shows it as a tag instead).
   function runOutcome(c, noFlag) {
     if (isRunning(c)) return "running";
@@ -1190,7 +1257,7 @@
     if (c.summary == null) return "did not finish";
     var n = (c.pay_ranges || []).length, m = (c.postings || []).length;
     var cmp = c.comparison;
-    return m + " posting" + (m === 1 ? "" : "s") + ", " + n + " with pay" + (cmp && cmp.market_low_median != null ? " · others " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : "") + (c.below_market && !noFlag ? " · below market" : "");
+    return m + " posting" + (m === 1 ? "" : "s") + ", " + n + " with pay" + (cmp && cmp.market_low_median != null ? " · others " + rangeText(cmp.market_low_median, cmp.market_high_median, cmp.unit) : "") + (c.below_market && !noFlag ? " · below market" : "") + (c.benefits && (c.benefits.gaps || []).length ? " · " + c.benefits.gaps.length + " benefit gap" + (c.benefits.gaps.length === 1 ? "" : "s") : "");
   }
   function renderRun(c, p, isLatest) {
     var st = RR.state();
@@ -1226,6 +1293,7 @@
       });
       tbl.appendChild(tbody); wrap.appendChild(tbl);
     }
+    var ben = renderBenefits(c); if (ben) wrap.appendChild(ben);
     var po = c.postings || [];
     if (po.length) {
       wrap.appendChild(el("div", "q", "Who else is hiring (" + po.length + " found)"));
@@ -1236,6 +1304,7 @@
         if (x.url) li.appendChild(extLink(x.url, label)); else li.appendChild(document.createTextNode(label));
         var bits = [x.pay_text, x.location, x.posted ? "posted " + RR.fmtDay(x.posted) : null].filter(Boolean);
         if (bits.length) li.appendChild(el("span", "meta", " · " + bits.join(" · ")));
+        if ((x.benefits || []).length) { var bl = el("div", "meta", "Benefits: " + x.benefits.map(RR.marketReport ? RR.marketReport.benefitLabel : String).join(", ")); if (x.benefits_text) bl.title = x.benefits_text; li.appendChild(bl); }
         ul.appendChild(li);
       });
       wrap.appendChild(ul);
