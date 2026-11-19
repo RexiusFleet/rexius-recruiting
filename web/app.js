@@ -1215,8 +1215,12 @@
       ul.appendChild(li);
     });
   }
+  // The log form stays folded behind "Log a contact" so the section reads as the log itself; it
+  // opens in place, and folds again after a save or Cancel (2026-11-19).
   function contactForm(a) {
-    var form = el("form", "review");
+    var wrap = el("div", "contact-add");
+    var open = el("button", "btn small", "+ Log a contact"); open.type = "button";
+    var form = el("form", "review"); form.hidden = true;
     var row = el("div", "row");
     var lk = el("label", null, "Kind"); var kind = el("select");
     Object.keys(KIND_LABEL).forEach(function (k) { var o = el("option", null, KIND_LABEL[k]); o.value = k; kind.appendChild(o); }); lk.appendChild(kind); row.appendChild(lk);
@@ -1224,7 +1228,13 @@
     [["outbound", "We reached out"], ["inbound", "They reached out"]].forEach(function (p) { var o = el("option", null, p[1]); o.value = p[0]; dir.appendChild(o); }); ld.appendChild(dir); row.appendChild(ld);
     form.appendChild(row);
     var ls = el("label", null, "What happened"); var sum = el("textarea"); sum.required = true; sum.placeholder = "Left a voicemail about interview times"; sum.style.minHeight = "56px"; ls.appendChild(sum); form.appendChild(ls);
-    var btn = el("button", "btn small", "Log contact"); btn.type = "submit"; form.appendChild(btn);
+    var acts = el("div", "contact-acts");
+    var cancel = el("button", "btn small", "Cancel"); cancel.type = "button";
+    var btn = el("button", "btn small primary", "Log contact"); btn.type = "submit";
+    acts.appendChild(cancel); acts.appendChild(btn); form.appendChild(acts);
+    function fold(show) { form.hidden = !show; open.hidden = show; if (show) sum.focus(); }
+    open.addEventListener("click", function () { fold(true); });
+    cancel.addEventListener("click", function () { sum.value = ""; fold(false); });
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       var summary = sum.value.trim(); if (!summary) return;
@@ -1232,12 +1242,13 @@
       var res = await sb.from("contacts").insert({ application_id: a.id, kind: kind.value, direction: dir.value, summary: summary, by_user_id: session.user.id, by_name: profile.name }).select("id, kind, direction, summary, by_name, at");
       btn.disabled = false;
       if (res.error) { notice("Could not log the contact: " + errText(res.error)); return; }
-      sum.value = "";
+      sum.value = ""; fold(false);
       if (selectedId !== a.id) return;
       var r2 = await sb.from("contacts").select("id, kind, direction, summary, by_name, at").eq("application_id", a.id).order("at", { ascending: false });
       renderContacts(r2.data || [], r2.error);
     });
-    return form;
+    wrap.appendChild(open); wrap.appendChild(form);
+    return wrap;
   }
   var VERDICT_LABEL = { interested: "Interested", pass: "Pass", undecided: "Undecided" };
   function renderFeedbackList(rows, error) {
