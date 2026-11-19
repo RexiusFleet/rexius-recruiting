@@ -32,7 +32,7 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/backfill/` | One-time import of existing Jotform submissions and their files (`npm run backfill`, `npm run backfill:test`); its own README explains options and rules | 4 |
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
-| `scripts/test-policies.sql` | Policy checks as every role against the local stack (261 checks after the Users page) | 3+ |
+| `scripts/test-policies.sql` | Policy checks as every role against the local stack (271 checks after the contact date) | 3+ |
 | `supabase/functions/recruiting-users/` | Edge Function behind the admin Users page: invite, change role or name, re-send, reset authenticators, remove ("What the Users page created") | users |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
@@ -1416,6 +1416,33 @@ Verified with a stamped copy served locally: no bar while the versions match; th
 `version.json` changed; Restart loaded the new version (`app.js?v=` the new value) and the bar was
 gone; phone width with no sideways scroll. Nothing to do by hand: the next deploy after the merge
 carries it, and installed apps opened before then pick it up on their next manual reload.
+
+## What the contact date created
+
+Each contact-log entry used to be dated the moment someone clicked **Log contact**, which is
+wrong whenever the log is written after the fact (a Friday call logged on Monday, an overnight
+voicemail). The log is the record of when a candidate was reached, so the date is now entered.
+
+- `supabase/migrations/20261118000100_contact_logged_at.sql`: `contacts.at` now means when the
+  contact happened; new column `logged_at` is when the row was written. A trigger
+  (`contacts_stamp`) sets `logged_at` on insert, keeps it on every update whatever the browser
+  sends, and refuses a contact dated in the future (five minutes of grace for a fast clock).
+  Existing rows get `logged_at = at`. Nothing else reads contacts, so no view or report changes.
+- `web/app.js`: the contact form (behind **+ Log a contact**) has a **When** field, filled in with
+  the current date and time each time it opens; change it for a contact made earlier. The log is
+  sorted by when the contact happened, and an entry logged more than a day after it happened
+  shows "logged <date>" after its details.
+- `scripts/test-policies.sql`: 6 more checks (271 PASS locally; the one FAIL, "report: the seeded
+  crew application counts towards the current opening", is older, depends on the local data and
+  does not involve contacts).
+
+Verified on the local stack: the field defaults to now; a contact dated three days back is saved
+with that time and shows "logged" with today's date; a date in the future, or a time later
+today, is refused with "A contact cannot be in the future".
+
+On the hosted project the migration goes first: `npm run db:migrate`, then merge. A page from
+before the migration would still work (it sends no `at`, so the contact is dated now), but the new
+page asks for `logged_at`, which does not exist until the migration has run.
 
 ---
 ## Manual steps in Supabase (do these in order)

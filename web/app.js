@@ -1053,7 +1053,7 @@
     var r = await Promise.all([
       sb.from("applications").select("answers").eq("id", id).single(),
       sb.from("status_history").select("id, from_stage_id, to_stage_id, changed_by, changed_at").eq("application_id", id).order("changed_at", { ascending: false }),
-      sb.from("contacts").select("id, kind, direction, summary, by_name, at").eq("application_id", id).order("at", { ascending: false }),
+      sb.from("contacts").select("id, kind, direction, summary, by_name, at, logged_at").eq("application_id", id).order("at", { ascending: false }),
       sb.from("manager_feedback").select("id, manager_user_id, verdict, note, at").eq("application_id", id).order("at", { ascending: false }),
       sb.from("offers").select(OFFER_COLS).eq("application_id", id).order("offered_at", { ascending: false }),
       sb.from("referrals").select("id, application_id, referrer_name, referrer_employee, hired, bonus_paid_at, notes").eq("application_id", id).maybeSingle()
@@ -1210,7 +1210,10 @@
     if (!rows.length) { ul.appendChild(el("li", "hint", "No contact logged yet.")); return; }
     rows.forEach(function (c) {
       var li = el("li");
-      li.appendChild(el("div", "when", fmtDateTime(new Date(c.at)) + " · " + (KIND_LABEL[c.kind] || c.kind) + ", " + c.direction + (c.by_name ? " · " + c.by_name : "")));
+      // A backdated entry (logged more than a day after it happened) says when it was written.
+      var at = new Date(c.at), logged = c.logged_at ? new Date(c.logged_at) : null;
+      var late = logged && logged - at > 24 * 3600 * 1000 ? " · logged " + fmtDate(logged) : "";
+      li.appendChild(el("div", "when", fmtDateTime(at) + " · " + (KIND_LABEL[c.kind] || c.kind) + ", " + c.direction + (c.by_name ? " · " + c.by_name : "") + late));
       li.appendChild(el("div", null, c.summary));
       ul.appendChild(li);
     });
@@ -1227,24 +1230,39 @@
     var ld = el("label", null, "Direction"); var dir = el("select");
     [["outbound", "We reached out"], ["inbound", "They reached out"]].forEach(function (p) { var o = el("option", null, p[1]); o.value = p[0]; dir.appendChild(o); }); ld.appendChild(dir); row.appendChild(ld);
     form.appendChild(row);
+    // When it happened: filled in with now each time the form opens; change it for a contact
+    // logged after the fact. The database refuses a future time (migration 20261118000100).
+    var lw = el("label", null, "When"); var when = el("input"); when.type = "datetime-local"; when.required = true; lw.appendChild(when); form.appendChild(lw);
+    var werr = el("div", "err"); form.appendChild(werr);
     var ls = el("label", null, "What happened"); var sum = el("textarea"); sum.required = true; sum.placeholder = "Left a voicemail about interview times"; sum.style.minHeight = "56px"; ls.appendChild(sum); form.appendChild(ls);
     var acts = el("div", "contact-acts");
     var cancel = el("button", "btn small", "Cancel"); cancel.type = "button";
     var btn = el("button", "btn small primary", "Log contact"); btn.type = "submit";
     acts.appendChild(cancel); acts.appendChild(btn); form.appendChild(acts);
-    function fold(show) { form.hidden = !show; open.hidden = show; if (show) sum.focus(); }
+    function localStamp(d) { var p = function (n) { return String(n).padStart(2, "0"); }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()); }
+    function fold(show) {
+      form.hidden = !show; open.hidden = show; werr.textContent = "";
+      // max is the end of today so a form left open a while is not refused by its own limit; the
+      // check on save (and the database) catch a later time today.
+      if (show) { var now = localStamp(new Date()); when.value = now; when.max = now.slice(0, 10) + "T23:59"; sum.focus(); }
+    }
     open.addEventListener("click", function () { fold(true); });
     cancel.addEventListener("click", function () { sum.value = ""; fold(false); });
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       var summary = sum.value.trim(); if (!summary) return;
+      // datetime-local has no zone: "YYYY-MM-DDTHH:MM" parses as this computer's local time.
+      var at = when.value ? new Date(when.value) : new Date();
+      werr.textContent = "";
+      if (isNaN(at)) { werr.textContent = "Enter the date and time of the contact."; return; }
+      if (at - Date.now() > 5 * 60 * 1000) { werr.textContent = "A contact cannot be in the future."; return; }
       btn.disabled = true;
-      var res = await sb.from("contacts").insert({ application_id: a.id, kind: kind.value, direction: dir.value, summary: summary, by_user_id: session.user.id, by_name: profile.name }).select("id, kind, direction, summary, by_name, at");
+      var res = await sb.from("contacts").insert({ application_id: a.id, kind: kind.value, direction: dir.value, summary: summary, at: at.toISOString(), by_user_id: session.user.id, by_name: profile.name }).select("id, kind, direction, summary, by_name, at, logged_at");
       btn.disabled = false;
       if (res.error) { notice("Could not log the contact: " + errText(res.error)); return; }
       sum.value = ""; fold(false);
       if (selectedId !== a.id) return;
-      var r2 = await sb.from("contacts").select("id, kind, direction, summary, by_name, at").eq("application_id", a.id).order("at", { ascending: false });
+      var r2 = await sb.from("contacts").select("id, kind, direction, summary, by_name, at, logged_at").eq("application_id", a.id).order("at", { ascending: false });
       renderContacts(r2.data || [], r2.error);
     });
     wrap.appendChild(open); wrap.appendChild(form);
