@@ -396,3 +396,6 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 /* Drawer contact log: the add form folds behind "+ Log a contact" */
 .contact-add{margin-top:8px}
 .contact-acts{display:flex;gap:8px;justify-content:flex-end}
+#inviteModal label.check{display:flex;gap:8px;align-items:flex-start;font-weight:normal;cursor:pointer}
+#inviteModal label.check input{width:auto;margin-top:3px}
+#usersTable td .hint{white-space:nowrap}

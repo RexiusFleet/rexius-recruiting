@@ -33,7 +33,7 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/db-migrate.mjs` | The migration runner behind `npm run db:migrate`, `npm run db:status` and `npm run db:print` | 2 |
 | `scripts/make-admin.mjs`, `scripts/make-admin.sql` | Give an auth user the admin role (`npm run db:make-admin`, or paste the SQL) | 3 |
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack (271 checks after the contact date) | 3+ |
-| `supabase/functions/recruiting-users/` | Edge Function behind the admin Users page: invite, change role or name, re-send, reset authenticators, remove ("What the Users page created") | users |
+| `supabase/functions/recruiting-users/` | Edge Function behind the admin Users page: invite, change role or name, re-send, reset authenticators, temporary passwords, two-factor per person, remove ("What the Users page created", "What the testing sign-in change created") | users |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
 | `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
@@ -1250,6 +1250,52 @@ comes back and what a summary must never say; HR agrees to it before the feature
 
 Cost at 2026-11 list prices: about five cents a summary and under a cent a message. Every
 summary row stores its own cost.
+
+## What the testing sign-in change created
+
+Testing window (2026-11-19). A few people are trying the tracker before it moves inside the
+Rexius company app, which will then supply the login and the role. Until then an admin can set
+someone up without any email and without an authenticator app.
+
+- Migration `20261119000100_testing_sign_in.sql`: three columns on `recruiting.profiles`
+  (`mfa_required`, default true; `must_change_password`; `temp_password_expires_at`) and a new
+  `recruiting.current_role()`, still the one place the rule lives. It returns a role when the
+  person has a profile, does not hold a temporary password, and either has passed the second
+  factor or has had it switched off by an admin. Nobody is switched off by the migration.
+- `recruiting-users` (Edge Function): `invite` takes `delivery: "password"` and `mfa_required`;
+  `temp_password` makes a new temporary password for someone already listed; `update` takes
+  `mfa_required`; `change_password` is the one action a non-admin may call, for themselves, while
+  their profile says `must_change_password`. A temporary password is 16 random characters,
+  returned once, never logged or stored. It signs in but opens nothing until it is replaced
+  (the new one must differ and have 10 characters or more), and after seven days it can no
+  longer be replaced.
+- `web/`: **Add user** offers a temporary password first, then a one-time link; a **Two-factor**
+  column on the Users page switches the authenticator requirement per person; **Temporary
+  password** on a row replaces a forgotten password. The sign-in page asks a person with a
+  temporary password to choose their own before anything else.
+- **No email.** The page hides everything that sends mail (emailed invites, Re-send invite,
+  "Forgot your password?") unless `config.js` has `emailSignIn: true`, which the Pages workflow
+  does not write. Supabase Auth can still send mail if someone calls it directly, so to stop it
+  at the source an organization Administrator can also clear the custom SMTP settings under
+  **Authentication → Emails**; nothing in the tracker needs them now.
+- Passkeys are not built. Supabase Auth's WebAuthn support was not checked for this change, and
+  the company-app sign-in will replace this one.
+
+**What switching two-factor off means.** For that person a password is the only thing between
+the public internet and the applicant data their role can read; section 2 of `CLAUDE.md` used to
+rule that out. Keep it off only for testers, give testers the Manager role unless they need more,
+and switch it back to Required (or remove them) when testing ends.
+
+**Deploying it**, in this order (the page tolerates the old database, the reverse does not hold
+for the function):
+
+1. `npm run db:migrate` (applies `20261119000100`).
+2. `npx supabase functions deploy recruiting-users --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`.
+3. Merge the pull request; Pages publishes `web/`.
+
+Checked on the local stack: 280 policy checks pass (8 new), and a 21-step run through the
+function (make a tester, sign in with the temporary password, see nothing, change it, see the
+manager view, switch two-factor back on, replace the password again).
 
 ## What the Users page created
 

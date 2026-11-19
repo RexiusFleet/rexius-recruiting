@@ -208,12 +208,30 @@
   }
   function skipInvite() { INVITE_TOKEN = ""; booted = true; sb.auth.getSession().then(function (r) { onSession(r.data ? r.data.session : null); }); }
   // After an invite or reset link: save the chosen password, then continue as a normal sign-in.
+  // tempPasswordMode: the password being replaced is a temporary one an admin handed over.
+  var tempPasswordMode = false;
   async function savePassword() {
     var p1 = $("setPassword1").value, p2 = $("setPassword2").value;
     $("setPasswordError").textContent = "";
     if (p1.length < 10) { $("setPasswordError").textContent = "Use at least 10 characters."; return; }
     if (p1 !== p2) { $("setPasswordError").textContent = "The two passwords differ."; return; }
     $("setPasswordBtn").disabled = true;
+    if (tempPasswordMode) {
+      // Replacing a temporary password goes through the Users function, which sets the new one
+      // and clears the mark on the profile; then sign in afresh with it.
+      var email = session && session.user.email;
+      var fr = await sb.functions.invoke("recruiting-users", { body: { action: "change_password", password: p1 } });
+      var msg = "";
+      if (fr.error) { msg = errText(fr.error); if (fr.error.context && typeof fr.error.context.json === "function") { try { var j = await fr.error.context.json(); if (j && j.error) msg = j.error; } catch (e) {} } }
+      if (msg) { $("setPasswordBtn").disabled = false; $("setPasswordError").textContent = msg; return; }
+      var again = await sb.auth.signInWithPassword({ email: email, password: p1 });
+      $("setPasswordBtn").disabled = false;
+      $("setPassword1").value = ""; $("setPassword2").value = "";
+      tempPasswordMode = false;
+      if (again.error) { await sb.auth.signOut({ scope: "local" }); show("loginView"); $("loginNote").textContent = "Password saved. Sign in with your new password."; return; }
+      onSession(again.data.session);
+      return;
+    }
     var res = await sb.auth.updateUser({ password: p1 });
     $("setPasswordBtn").disabled = false;
     if (res.error) { $("setPasswordError").textContent = res.error.message; return; }
@@ -317,29 +335,43 @@
       if (AUTH_LINK.error) { $("loginError").textContent = "That link did not work: " + AUTH_LINK.error + ". Ask an admin for a new invite, or use the password link below."; AUTH_LINK.error = ""; }
       return;
     }
-    // Two-factor sign-in (migration 20261102000100): the database returns nothing until the
-    // session is at aal2, so the order is password -> code (or enrolment) -> profile. A user
-    // arriving from an invite or reset link sets a password first when they have no factor yet;
-    // one who already has a factor enters the code first, since changing the password needs aal2.
+    // The person's own profile row is readable before the second factor (migration
+    // 20261102000100), and it says how they sign in (migration 20261119000100): whether an
+    // authenticator is required, and whether they still hold a temporary password from an admin.
+    var res = await sb.from("profiles").select("user_id, role, name, location, mfa_required, must_change_password, temp_password_expires_at").eq("user_id", s.user.id).maybeSingle();
+    // Page published before the migration was applied: carry on as before it (two-factor for all).
+    if (res.error && res.error.code === "42703") res = await sb.from("profiles").select("user_id, role, name, location").eq("user_id", s.user.id).maybeSingle();
+    if (res.error) { show("loginView"); $("loginError").textContent = "Could not read your profile: " + errText(res.error); return; }
+    var own = res.data, needMfa = !own || own.mfa_required !== false;
+    var viaLink = AUTH_LINK.type === "invite" || AUTH_LINK.type === "recovery";
+    // Order: password -> code, when an authenticator is required (or to change a password by
+    // link, which needs aal2 once a factor exists) -> new password after a link or a temporary
+    // password -> enrolment -> the tracker. The database returns nothing until current_role()
+    // is satisfied, whatever this page shows.
     var aal = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal.error) { show("loginView"); $("loginError").textContent = "Could not check two-factor status: " + aal.error.message; return; }
     var hasFactor = aal.data.nextLevel === "aal2", verified = aal.data.currentLevel === "aal2";
-    if (!verified && hasFactor) { await showChallenge(s); return; }
-    if (AUTH_LINK.type === "invite" || AUTH_LINK.type === "recovery") {
+    if (!verified && hasFactor && (needMfa || viaLink)) { await showChallenge(s); return; }
+    if (viaLink) {
+      tempPasswordMode = false;
       $("setPasswordEmail").textContent = s.user.email || s.user.id;
       show("setPasswordView");
       return;
     }
-    if (!verified) {
-      // Nothing to protect for an account without a role: say so before asking for an app.
-      var own = await sb.from("profiles").select("role").eq("user_id", s.user.id).maybeSingle();
-      if (!own.error && !own.data) { $("noAccessEmail").textContent = s.user.email || s.user.id; show("noAccessView"); return; }
-      await showEnroll();
+    if (!own) { $("noAccessEmail").textContent = s.user.email || s.user.id; show("noAccessView"); return; }
+    if (own.must_change_password) {
+      if (own.temp_password_expires_at && new Date(own.temp_password_expires_at).getTime() < Date.now()) {
+        await sb.auth.signOut({ scope: "local" });
+        session = null; show("loginView");
+        $("loginError").textContent = "That temporary password has expired. Ask an admin for a new one.";
+        return;
+      }
+      tempPasswordMode = true;
+      $("setPasswordEmail").textContent = s.user.email || s.user.id;
+      show("setPasswordView");
       return;
     }
-    var res = await sb.from("profiles").select("user_id, role, name, location").eq("user_id", s.user.id).maybeSingle();
-    if (res.error) { show("loginView"); $("loginError").textContent = "Could not read your profile: " + errText(res.error); return; }
-    if (!res.data) { $("noAccessEmail").textContent = s.user.email || s.user.id; show("noAccessView"); return; }
+    if (needMfa && !verified) { await showEnroll(); return; }
     profile = res.data; role = profile.role; staff = role === "admin" || role === "hr";
     $("who").textContent = profile.name + " · " + role;
     document.body.dataset.role = role;
@@ -1549,6 +1581,9 @@
   $("mPhone").addEventListener("input", function () { var k = normalizePhone(this.value); dupHint("mPhoneDup", k ? "p:" + k : null); });
   $("loginForm").addEventListener("submit", function (e) { e.preventDefault(); signIn($("loginEmail").value.trim(), $("loginPassword").value); });
   $("forgotBtn").addEventListener("click", forgotPassword);
+  // Testing window (2026-11-19): the tracker sends no email unless config.js says emailSignIn,
+  // so a forgotten password is replaced by an admin (Users -> Temporary password).
+  $("forgotBtn").parentNode.hidden = !CFG.emailSignIn; $("forgotOff").hidden = !!CFG.emailSignIn;
   $("setPasswordForm").addEventListener("submit", function (e) { e.preventDefault(); savePassword(); });
   $("acceptForm").addEventListener("submit", function (e) { e.preventDefault(); acceptInvite(); });
   $("acceptSkip").addEventListener("click", skipInvite);

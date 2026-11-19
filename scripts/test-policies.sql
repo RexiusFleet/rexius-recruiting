@@ -190,6 +190,29 @@ select pg_temp.check('aal1 admin: cannot change own role (update filtered out)',
   (select role from recruiting.profiles where user_id = '11111111-1111-1111-1111-111111111111') = 'admin');
 select pg_temp.check('aal1 admin: zero storage objects visible', (select count(*) from storage.objects where bucket_id = 'recruiting-files') = 0);
 rollback;
+-- ----- testing window (20261119000100): two-factor off per person, temporary passwords ------
+begin;
+update recruiting.profiles set mfa_required = false where user_id = '33333333-3333-3333-3333-333333333333';
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333', 'aal1');
+select pg_temp.check('2fa off, aal1 manager: role is manager', recruiting.current_role() = 'manager');
+select pg_temp.check('2fa off, aal1 manager: reads the curated view', (select count(*) from recruiting.applications_for_managers) > 0);
+update recruiting.profiles set mfa_required = true, role = 'admin' where user_id = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('2fa off, aal1 manager: cannot change own profile',
+  (select role = 'manager' and not mfa_required from recruiting.profiles where user_id = '33333333-3333-3333-3333-333333333333'));
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('2fa off for someone else: hr at aal1 still has no role', recruiting.current_role() is null);
+rollback;
+begin;
+update recruiting.profiles set must_change_password = true, mfa_required = false where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+select pg_temp.check('temporary password, aal1: role is null', recruiting.current_role() is null);
+select pg_temp.check('temporary password, aal1: zero applications', (select count(*) from recruiting.applications) = 0);
+update recruiting.profiles set must_change_password = false where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.check('temporary password: cannot clear the mark from the browser',
+  (select must_change_password from recruiting.profiles where user_id = '11111111-1111-1111-1111-111111111111'));
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal2');
+select pg_temp.check('temporary password, aal2: role is still null', recruiting.current_role() is null);
+rollback;
 -- A JWT with no aal claim at all counts as aal1.
 begin;
 select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
