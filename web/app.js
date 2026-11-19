@@ -867,7 +867,16 @@
     }
     sec.appendChild(rv);
 
-    // Files and links: right under the review, since the resume and the PDF are what gets sent on
+    // Contact log (staff): right under the review, since who was reached and when is what HR
+    // checks first (moved up from below Referral, 2026-11-19).
+    if (staff) {
+      sec = section(body, "Contact log"); sec.id = "contactSec";
+      var log = el("ul", "log"); log.id = "contactList"; log.appendChild(el("li", "hint", "Loading…")); sec.appendChild(log);
+      sec.appendChild(contactForm(a));
+      if (window.RR && RR.summary) RR.summary.translator(sec, a);
+    }
+
+    // Files and links: near the top, since the resume and the PDF are what gets sent on
     // (moved up from below Employment history, 2026-11-19).
     filesSection(body, a, manual);
 
@@ -924,17 +933,11 @@
       sec.appendChild(el("div", "hint", "Loading…"));
       sec = section(body, "Referral"); sec.id = "referralSec";
       sec.appendChild(el("div", "hint", "Loading…"));
-      // Contact log
-      sec = section(body, "Contact log"); sec.id = "contactSec";
-      var log = el("ul", "log"); log.id = "contactList"; log.appendChild(el("li", "hint", "Loading…")); sec.appendChild(log);
-      sec.appendChild(contactForm(a));
-      if (window.RR && RR.summary) RR.summary.translator(sec, a);
       // Manager feedback (read)
       sec = section(body, "Manager feedback"); sec.id = "feedbackSec";
       sec.appendChild(el("div", "hint", "Loading…"));
-      // Full application: every answer, folded away by default so the drawer reads short
-      // (2026-11-19); a click on the heading opens it.
-      sec = el("details", "sec fold"); sec.id = "answersSec";
+      // Full application: every answer, open by default; a click on the heading folds it away.
+      sec = el("details", "sec fold"); sec.id = "answersSec"; sec.open = true;
       var sum = el("summary"); sum.appendChild(el("h3", null, "Full application")); sum.appendChild(el("span", "fold-count", ""));
       sec.appendChild(sum); body.appendChild(sec);
       sec.appendChild(el("div", "hint", "Loading…"));
