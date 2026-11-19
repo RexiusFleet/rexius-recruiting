@@ -1183,3 +1183,24 @@ rollback to sp;
 select pg_temp.check('users: deleting the last admin''s login in the dashboard is refused too',
   (select count(*) from recruiting.profiles where role = 'admin') = 1);
 rollback;
+
+-- ----- Market check benefits -------------------------------------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.positions set benefits = array['health','pto'], benefits_note = 'test' where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield';
+select pg_temp.check('hr: can set a position''s benefits', (select count(*) from recruiting.positions where benefits = array['health','pto']) = 1);
+savepoint sp;
+do $$ begin
+  update recruiting.positions set benefits = array['health','free_lunch'] where benefits_note = 'test';
+  raise notice 'UNEXPECTED: unknown benefit accepted';
+exception when check_violation then
+  raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('benefits: only the known categories are accepted', (select count(*) from recruiting.positions where 'free_lunch' = any(benefits)) = 0);
+select pg_temp.check('hr: reads the benefits block of a run', (select count(*) from recruiting.market_checks where benefits -> 'gaps' ? 'retirement_match') = 1);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('manager: reads a position''s benefits', (select count(*) from recruiting.positions where cardinality(benefits) > 0) >= 1);
+update recruiting.positions set benefits = array['bonus'];
+select pg_temp.check('manager: cannot change benefits', (select count(*) from recruiting.positions where benefits = array['bonus']) = 0);
+rollback;

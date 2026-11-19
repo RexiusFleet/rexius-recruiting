@@ -225,3 +225,15 @@ insert into recruiting.message_translations
   (application_id, requested_by, created_at, direction, chars_in, chars_out, model, input_tokens, output_tokens, cost_usd)
 select a.id, '22222222-2222-2222-2222-222222222222', now() - interval '20 hours', 'en-es', 142, 158, 'claude-opus-5-5', 410, 96, 0.0036
 from recruiting.applications a where a.jotform_submission_id = '6000000000000000003';
+
+-- Benefits in the market check: what Rexius offers for the seeded position, and the benefits
+-- block on its finished run (invented).
+update recruiting.positions set benefits = array['health','dental','retirement','pto','holidays'], benefits_note = 'Health after 60 days.'
+where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
+
+update recruiting.market_checks set
+  postings = '[{"employer":"Example Lawn Co","title":"Landscape Crew Member","pay_text":"$18–$21/hr","location":"Eugene, OR","posted":"2026-10-20","url":"https://example.com/jobs/1","benefits":["health","retirement","retirement_match","pto"],"benefits_text":"Medical, 401(k) with 4% match, two weeks PTO"},
+    {"employer":"Sample Grounds","title":"Grounds Maintenance","pay_text":"$20–$23/hr","location":"Springfield, OR","posted":"2026-10-12","url":"https://example.com/jobs/2","benefits":["health","dental","retirement","retirement_match","year_round"],"benefits_text":"Health and dental, matching 401(k), year-round work"},
+    {"employer":"Demo Landscapes","title":"Maintenance Crew","pay_text":null,"location":"Eugene, OR","posted":null,"url":"https://example.com/jobs/3","benefits":[],"benefits_text":null}]',
+  benefits = '{"postings_with_benefits":2,"postings_total":3,"categories":[{"key":"health","count":2,"share":100},{"key":"retirement","count":2,"share":100},{"key":"retirement_match","count":2,"share":100},{"key":"dental","count":1,"share":50},{"key":"pto","count":1,"share":50},{"key":"year_round","count":1,"share":50}],"common":["health","retirement","retirement_match"],"rexius":["health","dental","retirement","pto","holidays"],"gaps":["retirement_match"],"also_offered":["dental","pto","holidays"]}'
+where summary is not null;

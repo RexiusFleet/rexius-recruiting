@@ -781,6 +781,39 @@ Cost: about fifty cents a run at 2026-10 list prices (six searches at a cent eac
 tokens; the first hosted run was $0.56), about $0.85 at Deeper and $1.30 at Deepest. The `recruiting` workspace in the Claude Console carries the monthly spend cap; when
 it is reached the run ends with "rate limit or spend cap reached" on the row.
 
+## What the benefits check created
+
+The market check also compares benefits (2026-11-18). Pay is one half of what a posting
+offers; the other half is health insurance, retirement, paid time off, year-round work and
+the like, and a role can match on pay and still lose applicants on those.
+
+- `supabase/migrations/20261117000100_market_benefits.sql`: `positions.benefits` (the
+  categories Rexius offers for the role, from a fixed list of twelve: health, dental, vision,
+  retirement, retirement_match, pto, holidays, bonus, year_round, training, gear,
+  life_disability), `positions.benefits_note` (free text, 500 characters) and
+  `market_checks.benefits` (what a run found and the comparison). No new table or policy.
+- `recruiting-market-check`: the prompt asks for the benefits each posting lists, by those
+  category keys, with the posting's own words; a category is recorded only when the posting or
+  the employer's page states it. The function keeps only known keys and does the counting:
+  shares are of the postings that listed any benefit, since search results often leave benefits
+  out and a posting that shows none is never counted as offering none. A benefit is **common**
+  when at least half of those postings (and at least two) list it; a **gap** is a common
+  benefit Rexius has not ticked for the position. Nothing is compared until staff tick
+  something. It is a count, not a score. No extra searches and no change to the schedule; the
+  national check is unchanged.
+- `web/positions.js`: in the Market check section, **Rexius offers for this role** (a
+  checklist that saves on change, a note, and "Copy from another position"; managers read it),
+  and on each run **Benefits others list**: a table of category, postings listing it and
+  whether Rexius offers it, a "Benefits gap" notice naming the gaps, and each posting's
+  benefits under "Who else is hiring". The run's one-line outcome adds "2 benefit gaps".
+- `web/market-report.js`: the PDF and the text report gain the same table and sentence.
+- 5 policy checks; the seed and `npm run pdf:samples` fixture carry a benefits block.
+
+**Deploy order matters**: the page reads the new columns, so apply the migration before the
+PR merges: `npm run db:migrate`, then
+`npx supabase functions deploy recruiting-market-check --no-verify-jwt`, then merge. Runs
+from before the change simply show no benefits block.
+
 ## What the national check created
 
 A second kind of market check for specialised roles, where the local one finds little

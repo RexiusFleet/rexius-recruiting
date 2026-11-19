@@ -273,6 +273,12 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .market-history { border-top: 1px solid var(--line); padding-top: 8px; }
 .market-run { margin: 6px 0 0 8px; }
 .market-run-body { display: grid; gap: 6px; padding: 4px 0 8px; }
+.market-benefits > summary { cursor: pointer; font-size: 13px; }
+.market-benefits[open] { display: grid; gap: 8px; }
+.benefit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; }
+.benefit-grid label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.market-benefits input[type=text], .market-benefits select { width: 100%; }
+.market-benefits-run { display: grid; gap: 6px; }
 .market-share { align-items: center; gap: 10px; margin-top: 2px; }
 .spend-add input { padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); width: auto; flex: 1; min-width: 70px; }
 .review .row .check { flex: 0 0 auto; margin-top: 18px; }
