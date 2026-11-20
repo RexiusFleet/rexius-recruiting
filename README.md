@@ -1513,15 +1513,37 @@ application it takes jsPDF's output. The bytes live in the tab only while the vi
 
 **Uploaded files are untrusted.** What is displayed is decided from the file's first bytes,
 never from its name or stored content type: only a real PDF, PNG, JPEG, GIF or WebP is shown,
-re-wrapped as exactly that type. Anything else (a Word resume, or an HTML file renamed `.pdf`)
+re-wrapped as exactly that type. Anything else (an old `.doc`, or an HTML file renamed `.pdf`)
 gets a "cannot be shown here" message and the Download button, and is never rendered in the page.
 
-Known limits: Word resumes cannot be previewed, only downloaded; and iPhone and iPad browsers
+**Word files (.docx) are previewed, not converted** (2026-11-19, branch `claude/word-preview`).
+About one resume in five is a `.docx` (23 of 125 files that day; 100 PDFs, one `.doc`, one
+image). A real conversion to PDF needs LibreOffice or Word, which cannot run in a Supabase Edge
+Function, so it would mean either sending resumes to an outside conversion service or running a
+converter of our own; both were turned down for this volume. Instead the viewer lays the document
+out as pages with docx-preview 0.4.1 (Apache-2.0) and JSZip 3.10.2 (MIT), pinned on jsDelivr
+with integrity hashes:
+
+- The preview runs in a frame with `sandbox="allow-scripts"` and no `allow-same-origin`, so it
+  has an opaque origin and cannot reach the tracker's session, storage or page. The frame's own
+  Content-Security-Policy allows those two scripts and nothing else: no network requests and no
+  inline handlers. Links in the document are dead and embedded HTML chunks are not rendered.
+- Nothing is stored and nothing leaves the browser. **Download** hands over the original Word
+  file; there is no **Open in new tab** for a preview.
+- It is a close preview, not a print-exact one: unusual fonts, text boxes and multi-column
+  templates can shift. If the preview fails for any reason (library blocked, a file that is not
+  really Word, no answer in 20 seconds) the viewer shows the download-only message.
+- To update either library, change the version and the `sha384` hash together in
+  `web/file-viewer.js` (`curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`).
+
+Known limits: old `.doc` files cannot be previewed, only downloaded; and iPhone and iPad browsers
 show an embedded PDF poorly (often the first page only), which is what **Open in new tab** is for.
 
 Verified in the local preview without a database: a generated application PDF, an image, a
-non-PDF named `.docx`, a failed load and Escape. The storage download path was not exercised
-against a live bucket.
+non-PDF named `.docx`, a failed load and Escape. The Word preview was checked the same way with
+a `.docx` holding Spanish accents and a link (renders, the page cannot read into the frame) and
+a zip renamed `.docx` (falls back to download). The storage download path was not exercised
+against a live bucket, and no real applicant's Word resume was opened.
 
 ## Manual steps in Supabase (do these in order)
 
