@@ -1,6 +1,6 @@
 /* Documents page (Phase 7): the library of job descriptions, interview guides and templates in
  * recruiting.documents. A document is either an uploaded file in bucket recruiting-files under
- * documents/<id>/<file name> (opened through a short-lived signed URL) or inline text (body).
+ * documents/<id>/<file name> (shown in the tracker's file viewer, file-viewer.js) or inline text (body).
  * RLS shows each user the documents their role allows (min_role); admin and hr add, edit,
  * replace and delete. The Storage policies for the documents/ prefix mirror that.
  */
@@ -67,7 +67,7 @@
       tr.appendChild(el("td", "num", String(d.version)));
       tr.appendChild(el("td", "col-upd date", RR.fmtDate(new Date(d.updated_at))));
       var tdT = el("td");
-      if (isFile(d)) { var b = el("button", "link", "📄 " + RR.fileName(d.storage_path)); b.type = "button"; b.addEventListener("click", function (e) { e.stopPropagation(); openFile(d); }); tdT.appendChild(b); }
+      if (isFile(d)) { var b = el("button", "link", "📄 " + RR.fileName(d.storage_path)); b.type = "button"; b.title = "View " + d.title; b.addEventListener("click", function (e) { e.stopPropagation(); viewFile(d); }); tdT.appendChild(b); }
       else tdT.appendChild(el("span", "meta", "Text"));
       tr.appendChild(tdT);
       tr.addEventListener("click", function () { openDocument(d.id); });
@@ -75,6 +75,19 @@
     });
   }
 
+  // Files open inside the tracker (file-viewer.js: PDFs, images and Word .docx are shown, anything
+  // else is offered as a download), fetched with a storage download as the signed-in user so the
+  // documents/ policies decide who can read them.
+  function viewFile(d) {
+    if (!RR.fileViewer) return openFile(d);
+    var name = RR.fileName(d.storage_path);
+    RR.fileViewer.open({ title: d.title, fileName: name, load: async function () {
+      var res = await sb.storage.from(RR.BUCKET).download(d.storage_path);
+      if (res.error || !res.data) throw (res.error || new Error("nothing came back"));
+      return res.data;
+    } });
+  }
+  // Fallback when the viewer script did not load: a download through a signed URL.
   async function openFile(d) {
     var w = window.open("about:blank", "_blank");
     var res = await sb.storage.from(RR.BUCKET).createSignedUrl(d.storage_path, RR.SIGNED_URL_SECONDS, { download: RR.fileName(d.storage_path) });
@@ -97,7 +110,7 @@
     RR.showDrawer(d.title, (KIND_LABEL[d.kind] || d.kind) + " · version " + d.version + " · updated " + RR.fmtDate(new Date(d.updated_at)), function (body) {
       var sec = RR.section(body, "Content");
       var links = el("div", "links");
-      if (isFile(d)) { var b = el("button", "link", "📄 Open " + RR.fileName(d.storage_path)); b.type = "button"; b.addEventListener("click", function () { openFile(d); }); links.appendChild(b); links.appendChild(el("div", "hint", "Opens through a link that expires in a few minutes.")); }
+      if (isFile(d)) { var b = el("button", "link", "📄 View " + RR.fileName(d.storage_path)); b.type = "button"; b.addEventListener("click", function () { viewFile(d); }); links.appendChild(b); links.appendChild(el("div", "hint", "Opens here in the tracker, with a Download button.")); }
       sec.appendChild(links);
       if (d.body) { var pre = el("div", "doc-body", d.body); sec.appendChild(pre); if (navigator.clipboard) { var cp = el("button", "btn small", "Copy text"); cp.type = "button"; cp.addEventListener("click", function () { navigator.clipboard.writeText(d.body).then(function () { cp.textContent = "Copied"; setTimeout(function () { cp.textContent = "Copy text"; }, 1500); }); }); sec.appendChild(cp); } }
       sec = RR.section(body, st.staff ? "Edit" : "About");

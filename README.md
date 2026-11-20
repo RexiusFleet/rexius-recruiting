@@ -1536,6 +1536,13 @@ with integrity hashes:
 - To update either library, change the version and the `sha384` hash together in
   `web/file-viewer.js` (`curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`).
 
+**Documents page** (2026-11-19, branch `claude/documents-viewer`). The file link on each row of
+the Documents page and the link in a document's drawer open in the same viewer instead of
+downloading through a signed URL, so a job description or interview guide can be read without
+leaving the tracker. The Storage policies for the `documents/` prefix decide who can read a
+file, as before. Not exercised while signed in (the local stack was not running); the viewer
+itself is the one verified below.
+
 Known limits: old `.doc` files cannot be previewed, only downloaded; and iPhone and iPad browsers
 show an embedded PDF poorly (often the first page only), which is what **Open in new tab** is for.
 
