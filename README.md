@@ -35,6 +35,7 @@ published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (s
 | `scripts/test-policies.sql` | Policy checks as every role against the local stack (271 checks after the contact date) | 3+ |
 | `supabase/functions/recruiting-users/` | Edge Function behind the admin Users page: invite, change role or name, re-send, reset authenticators, temporary passwords, two-factor per person, remove ("What the Users page created", "What the testing sign-in change created") | users |
 | `package.json` | The runner's `pg` dependency, `@supabase/supabase-js` for the backfill, and the npm scripts. The frontend has no build step | 2+ |
+| `web/file-viewer.js` | The in-app viewer for resumes, portfolios, scans and the application PDF (PDFs and images shown in the tracker, with Download). See "What the file viewer created" | later |
 | `web/pdf-kit.js`, `web/assets/fonts/` | The shared page frame, type and page-break rules for every PDF the tracker builds (application hand-off, market check, national check), and the four Public Sans weights it embeds (SIL Open Font License, `OFL.txt` beside them). See "What the PDF restyle created" | 9a+ |
 | `scripts/pdf-samples/` | `npm run pdf:samples` renders the three PDFs from invented data into the gitignored `out/` folder, so a layout change can be checked without signing in | 9a+ |
 | `web/` | The frontend: `index.html`, `styles.css`, `app.js` (sign-in, Applications, drawer, the Add application form for paper applications), `positions.js`, `documents.js`, `reports.js`, `summary.js` (applicant summaries and translation in the drawer), `users.js` (admin Users page), `config.js` (project URL and publishable key only). No build step | 6, 7, 9b |
@@ -1492,6 +1493,36 @@ before the migration would still work (it sends no `at`, so the contact is dated
 page asks for `logged_at`, which does not exist until the migration has run.
 
 ---
+## What the file viewer created
+
+Clicking a file in the tracker used to open it in a new browser tab, and the application PDF
+could only be downloaded from the drawer. Since 2026-11-19 (branch `claude/file-viewer`, `web/`
+only, no migration):
+
+- The **Files** column starts with a 📋 icon on every row: the application PDF, built on click
+  from the tracker's data exactly as the drawer's button builds it.
+- That PDF, and every resume, portfolio and scan (in the Files column and under *Files and
+  links* in the drawer), opens in a viewer inside the tracker. Its header has **Download**,
+  **Open in new tab** and **Close**; Escape or a click outside closes it.
+- The drawer keeps **Download application (PDF)**, which saves the file straight away.
+
+**How it works.** `web/file-viewer.js` takes a function that returns the file's bytes. For a
+stored file `web/app.js` uses a storage download as the signed-in user (the same storage
+policies as the signed URL it replaces; no link to the bucket reaches the page), and for the
+application it takes jsPDF's output. The bytes live in the tab only while the viewer is open.
+
+**Uploaded files are untrusted.** What is displayed is decided from the file's first bytes,
+never from its name or stored content type: only a real PDF, PNG, JPEG, GIF or WebP is shown,
+re-wrapped as exactly that type. Anything else (a Word resume, or an HTML file renamed `.pdf`)
+gets a "cannot be shown here" message and the Download button, and is never rendered in the page.
+
+Known limits: Word resumes cannot be previewed, only downloaded; and iPhone and iPad browsers
+show an embedded PDF poorly (often the first page only), which is what **Open in new tab** is for.
+
+Verified in the local preview without a database: a generated application PDF, an image, a
+non-PDF named `.docx`, a failed load and Escape. The storage download path was not exercised
+against a live bucket.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
