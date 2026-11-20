@@ -722,9 +722,37 @@
   function fileButton(f, label) {
     var b = el("button", "link", label);
     b.type = "button"; b.title = f.original_name || fileName(f.storage_path);
-    b.addEventListener("click", function (e) { e.stopPropagation(); openFile(f); });
+    b.addEventListener("click", function (e) { e.stopPropagation(); viewFile(f); });
     return b;
   }
+  // Files open inside the tracker (file-viewer.js), which has its own Download button. The bytes
+  // come through a storage download as the signed-in user, so the same policies apply as for a
+  // signed URL and no link to the bucket is handed to the page.
+  function viewFile(f) {
+    if (!window.RR || !RR.fileViewer) return openFile(f);
+    RR.fileViewer.open({ title: fileLabel(f), fileName: f.original_name || fileName(f.storage_path), load: async function () {
+      var res = await sb.storage.from(BUCKET).download(f.storage_path);
+      if (res.error || !res.data) throw (res.error || new Error("nothing came back"));
+      return res.data;
+    } });
+  }
+  // The application PDF in the Files column: built on click from the tracker's data, exactly as
+  // the drawer's Download button builds it, and shown in the viewer instead of saved.
+  function applicationButton(a) {
+    var b = el("button", "link", "📋");
+    b.type = "button"; b.title = "Application (PDF)"; b.setAttribute("aria-label", "Application PDF for " + a.name);
+    b.addEventListener("click", function (e) { e.stopPropagation(); viewApplication(a.id); });
+    return b;
+  }
+  function viewApplication(id) {
+    var a = appById[id]; if (!a) return;
+    if (!window.RR || !RR.applicationPdf || !RR.fileViewer) { notice("The PDF module did not load. Reload the page and try again."); return; }
+    RR.fileViewer.open({ title: a.name + " · application", fileName: RR.applicationPdf.fileName(a.name), load: async function () {
+      var pdf = await RR.applicationPdf.build(await applicationModel(id));
+      return pdf.output("blob");
+    } });
+  }
+  // Fallback when the viewer script did not load: the file in a new tab through a signed URL.
   async function openFile(f) {
     // Open the tab first so popup blockers see a user gesture, then point it at the signed URL.
     var w = window.open("about:blank", "_blank");
@@ -777,6 +805,7 @@
       tr.appendChild(el("td", "col-src", a.source || "—"));
       var tdS = el("td"); tdS.appendChild(statusControl(a)); tr.appendChild(tdS);
       var tdA = el("td", "att");
+      tdA.appendChild(applicationButton(a));
       a.files.forEach(function (f) { tdA.appendChild(fileButton(f, fileIcon(f))); });
       tr.appendChild(tdA);
       tr.addEventListener("click", function () { openDrawer(a.id); });
@@ -1636,7 +1665,7 @@
       return positions;
     },
     reloadApps: loadApps,
-    applicationModel: applicationModel, downloadApplication: downloadApplication
+    applicationModel: applicationModel, downloadApplication: downloadApplication, viewApplication: viewApplication
   };
 
   // ---------- Boot ----------
