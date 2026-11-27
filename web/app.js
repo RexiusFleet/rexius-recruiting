@@ -380,6 +380,14 @@
     await loadRefs();
     route();
     await loadApps();
+    if (staff) checkRetention();
+  }
+  // The six-month file purge runs from a daily job nobody watches. If applications are overdue
+  // for it, say so once per sign-in rather than let files sit past their date unnoticed.
+  async function checkRetention() {
+    var r = await sb.rpc("retention_backlog");
+    if (r.error || !(r.data > 0) || !$("notice").hidden) return;
+    notice(r.data + (r.data === 1 ? " application is" : " applications are") + " past the six-month file purge and still " + (r.data === 1 ? "has" : "have") + " files stored. The daily purge job is not getting through; tell an admin (README, \"What the review hardening created\").");
   }
 
   // ---------- Reference data ----------
@@ -388,7 +396,8 @@
       sb.from("stages").select("id, name, sort_order, is_terminal, is_hired, is_archive").order("sort_order"),
       sb.from("forms").select("id, jotform_form_id, label, language, default_location, questions, field_map, is_active, updated_at"),
       sb.from("positions").select(POSITION_COLUMNS).order("location").order("title"),
-      sb.from("profiles").select("user_id, name, role")
+      // Names and roles only; the profiles table itself (sign-in settings) is for admins.
+      sb.from("profile_names").select("user_id, name, role")
     ]);
     var failed = r.filter(function (x) { return x.error; });
     if (failed.length) notice("Could not load reference data: " + errText(failed[0].error));
@@ -457,7 +466,7 @@
       hasResume: !!row.has_resume || files.length > 0, language: row.language, formId: row.form_id, form: manual ? "Manual" : (f ? f.short : ""), formLabel: manual ? "Manual entry" : (f ? f.label : ""),
       origin: row.origin || "jotform", enteredBy: row.entered_by || null, enteredAt: row.entered_at ? new Date(row.entered_at) : null,
       jotformUrl: row.jotform_url || "", submissionId: row.jotform_submission_id,
-      stageId: st.stage_id, assignedTo: st.assigned_to || "", notes: st.notes || "", tags: st.tags || [], stageSince: st.stage_since ? new Date(st.stage_since) : null,
+      stageId: st.stage_id, assignedTo: st.assigned_to || "", notes: st.notes || "", notesSaved: st.notes || "", statusAt: st.updated_at || null, tags: st.tags || [], stageSince: st.stage_since ? new Date(st.stage_since) : null,
       lead: leadFrom(st),
       furthestSort: furthest,
       files: files
@@ -553,15 +562,24 @@
   function queue(id, work) {
     var chain = writeChain[id] || Promise.resolve();
     writeChain[id] = chain.then(function () { setSaving("Saving…"); return work(); })
-      .then(function (res) { if (res && res.error) throw res.error; setSaving("Saved"); })
+      .then(function (res) {
+        if (res && res.error) throw res.error;
+        if (res && res.conflict) { setSaving("Not saved"); notice(res.conflict, "Reload", loadApps); return; }
+        // An update that matched no row comes back without an error: the application was removed,
+        // or this session can no longer write it. That is not "Saved".
+        if (res && Array.isArray(res.data) && !res.data.length) throw { message: "nothing was saved. The application may have been removed, or your access has changed." };
+        if (res && Array.isArray(res.data) && res.data[0] && res.data[0].updated_at && appById[id]) appById[id].statusAt = res.data[0].updated_at;
+        setSaving("Saved");
+      })
       .catch(function (e) { setSaving(""); notice("Could not save: " + errText(e), "Reload", loadApps); });
     return writeChain[id];
   }
+  var STATUS_BACK = "application_id, updated_at";
   function setStage(id, stageId) {
     var a = appById[id]; if (!a || a.stageId === stageId) return;
     a.stageId = stageId; a.stageSince = new Date();
     render(); if (selectedId === id) renderDrawer();
-    queue(id, function () { return sb.from("application_status").update({ stage_id: stageId, updated_by: session.user.id }).eq("application_id", id); });
+    queue(id, function () { return sb.from("application_status").update({ stage_id: stageId, updated_by: session.user.id }).eq("application_id", id).select(STATUS_BACK); });
   }
   function saveStatusFields(id, patch) {
     var a = appById[id]; if (!a) return;
@@ -569,7 +587,36 @@
     if (patch.notes !== undefined) a.notes = patch.notes || "";
     if (patch.tags !== undefined) a.tags = patch.tags;
     patch.updated_by = session.user.id;
-    queue(id, function () { return sb.from("application_status").update(patch).eq("application_id", id); });
+    if (patch.notes !== undefined) { queue(id, function () { return saveNotes(a, patch); }); return; }
+    queue(id, function () { return sb.from("application_status").update(patch).eq("application_id", id).select(STATUS_BACK); });
+  }
+  // Notes are one text field that the whole of HR writes in, and the list is only as fresh as
+  // the last Refresh. A save goes through only if nobody has changed the row since this page
+  // read it. If someone has but the notes are still what this page started from (they moved the
+  // stage, say), it tries once more against the new row; if the notes themselves changed, it
+  // stops and says so instead of replacing the other person's text.
+  var NOTES_CONFLICT = "Someone else changed these notes while you were writing, so yours were not saved. Copy your text, press Reload to see theirs, then add yours.";
+  async function saveNotes(a, patch) {
+    // After a conflict nothing more is saved from this copy of the application: the next
+    // keystroke or leaving the box must not push the old text over the other person's. Reload
+    // builds a fresh copy.
+    if (a.notesConflict) return { conflict: NOTES_CONFLICT };
+    for (var attempt = 0; attempt < 2; attempt++) {
+      var q = sb.from("application_status").update(patch).eq("application_id", a.id);
+      if (a.statusAt) q = q.eq("updated_at", a.statusAt);
+      var res = await q.select(STATUS_BACK);
+      if (res.error) return res;
+      if (res.data && res.data.length) { a.notesSaved = patch.notes || ""; return res; }
+      var now = await sb.from("application_status").select("notes, updated_at").eq("application_id", a.id).maybeSingle();
+      if (now.error) return now;
+      if (!now.data) return res;   // gone: queue reports it
+      a.statusAt = now.data.updated_at;
+      if ((now.data.notes || "") !== a.notesSaved) {
+        a.notesConflict = true;   // the box keeps what was typed; none of it is saved
+        return { conflict: NOTES_CONFLICT };
+      }
+    }
+    return { conflict: "This application keeps changing, so your notes were not saved. Press Reload and try again." };
   }
 
   // Set, change or remove the good-lead flag. The database stamps who and when, defaults and

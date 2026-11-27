@@ -65,7 +65,7 @@ insert into recruiting.channel_spend (posting_id, period_start, period_end, spen
 select pg_temp.check('hr: can add spend', (select count(*) from recruiting.channel_spend) = 2);
 select pg_temp.check('hr: cannot add a profile', not exists (
   select 1 from (select 1 where false) x) and (
-  select count(*) from recruiting.profiles) = 3);
+  select count(*) from recruiting.profile_names) = 3);
 savepoint sp;
 do $$ begin
   insert into recruiting.profiles (user_id, role, name) values ('44444444-4444-4444-4444-444444444444', 'manager', 'x');
@@ -74,7 +74,9 @@ exception when insufficient_privilege or others then
   raise notice 'expected: %', sqlerrm;
 end $$;
 rollback to sp;
-select pg_temp.check('hr: profile insert was rejected', (select count(*) from recruiting.profiles) = 3);
+select pg_temp.check('hr: profile insert was rejected', (select count(*) from recruiting.profile_names) = 3);
+select pg_temp.check('hr: reads only their own profile row (sign-in settings are for admins)',
+  (select count(*) from recruiting.profiles) = 1 and (select user_id from recruiting.profiles) = '22222222-2222-2222-2222-222222222222');
 savepoint sp2;
 do $$ begin
   insert into recruiting.status_history (application_id, to_stage_id) select id, 2 from recruiting.applications limit 1;
@@ -112,7 +114,8 @@ select pg_temp.check('manager: reads stages', (select count(*) from recruiting.s
 select pg_temp.check('manager: reads positions (17 seeded open + 10 past roles from Phase 7)', (select count(*) from recruiting.positions) = 27);
 select pg_temp.check('manager: reads postings', (select count(*) from recruiting.postings) = 1);
 select pg_temp.check('manager: reads forms (three 2026 forms and the 2025 Spanish archive)', (select count(*) from recruiting.forms) = 4);
-select pg_temp.check('manager: reads profiles', (select count(*) from recruiting.profiles) = 3);
+select pg_temp.check('manager: reads names and roles', (select count(*) from recruiting.profile_names) = 3);
+select pg_temp.check('manager: reads only their own profile row', (select count(*) from recruiting.profiles) = 1);
 insert into recruiting.manager_feedback (application_id, manager_user_id, verdict, note)
   select a.id, '33333333-3333-3333-3333-333333333333', 'interested', 'Please schedule.' from recruiting.applications_for_managers a where a.name = 'Priya Natarajan';
 select pg_temp.check('manager: can leave own feedback', (select count(*) from recruiting.manager_feedback) = 1);
@@ -324,7 +327,7 @@ savepoint sp;
 do $$ begin
   insert into recruiting.applications (origin, submitted_at, name) values ('jotform', now(), 'Fake Jotform Row');
   raise notice 'UNEXPECTED: a jotform row without ids was accepted';
-exception when check_violation then
+exception when check_violation or insufficient_privilege then
   raise notice 'expected: %', sqlerrm;
 end $$;
 rollback to sp;
@@ -1057,6 +1060,9 @@ reset role;
 select pg_temp.check('leads: manager cannot change the flag', (select count(*) from recruiting.application_status where is_lead) = 1);
 
 -- Retention: two applications seven months old in a terminal stage; only the lead keeps its details.
+-- (Clear the request claims first: this is setup by the database owner, and a signed-in user
+-- cannot move a Jotform row's submitted_at since 20261121000100.)
+select set_config('request.jwt.claims', '', true);
 update recruiting.applications set submitted_at = now() - interval '7 months' where id in (pg_temp.app(1), pg_temp.app(5));
 update recruiting.application_status set stage_id = (select id from recruiting.stages where is_terminal and not is_hired and not is_archive order by sort_order limit 1)
   where application_id in (pg_temp.app(1), pg_temp.app(5));
@@ -1079,7 +1085,9 @@ update recruiting.application_status set is_lead = true, lead_reason = 'Strong i
 update recruiting.application_status set is_lead = false where application_id = pg_temp.app(2);
 select pg_temp.check('leads: removing the flag deletes the reason', (select not is_lead and lead_reason is null and lead_keep_until is null from recruiting.application_status where application_id = pg_temp.app(2)));
 reset role;
+select set_config('request.jwt.claims', '', true);
 update recruiting.applications set submitted_at = now() - interval '13 months' where id = pg_temp.app(3);
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
 savepoint sp;
 do $$ begin
   update recruiting.application_status set is_lead = true, lead_reason = 'Too late' where application_id = pg_temp.app(3);
@@ -1190,6 +1198,7 @@ select pg_temp.check('users: renaming is unaffected by the guard',
   (select name from recruiting.profiles where user_id = '33333333-3333-3333-3333-333333333333') = 'Renamed Manager');
 update recruiting.profiles set role = 'admin' where user_id = '22222222-2222-2222-2222-222222222222';
 update recruiting.profiles set role = 'hr' where user_id = '11111111-1111-1111-1111-111111111111';
+reset role;
 select pg_temp.check('users: an admin can step down once another admin exists',
   (select string_agg(role::text, ',' order by user_id) from recruiting.profiles where user_id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222')) = 'hr,admin');
 rollback;
@@ -1275,4 +1284,80 @@ select pg_temp.check('login_made_by_tracker: an admin session cannot switch it o
 insert into recruiting.profiles (user_id, role, name, login_made_by_tracker) values ('44444444-4444-4444-4444-444444444444', 'manager', 'Flag Insert', true);
 select pg_temp.check('login_made_by_tracker: a profile added from the browser starts false',
   (select not login_made_by_tracker from recruiting.profiles where user_id = '44444444-4444-4444-4444-444444444444'));
+rollback;
+-- ----- review hardening (20261121000100) ----------------------------------------------------
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+savepoint sp;
+do $$ begin
+  insert into recruiting.applications (origin, submitted_at, name, jotform_submission_id, form_id)
+    select 'jotform', now(), 'Forged Submission', '6999999999999999999', id from recruiting.forms limit 1;
+  raise notice 'UNEXPECTED: hr inserted a jotform-origin row';
+exception when insufficient_privilege then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+select pg_temp.check('hardening: hr cannot add a jotform-origin application',
+  (select count(*) from recruiting.applications where name = 'Forged Submission') = 0);
+update recruiting.applications
+  set files_purged_at = now(), contact_purged_at = now(), submitted_at = now() + interval '1 day', origin = 'manual', name = 'Guard Test'
+  where id = (select id from recruiting.applications where origin = 'jotform' order by submitted_at limit 1);
+select pg_temp.check('hardening: hr edits a jotform row, but not its origin, submitted time or purge stamps',
+  (select origin = 'jotform' and files_purged_at is null and contact_purged_at is null and submitted_at < now() and email is not null
+   from recruiting.applications where name = 'Guard Test'));
+select pg_temp.check('hardening: hr sees no retention backlog on the seed data', recruiting.retention_backlog() = 0);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('hardening: retention_backlog is null for a manager', recruiting.retention_backlog() is null);
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('hardening: no profile, no names', (select count(*) from recruiting.profile_names) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('hardening: aal1 hr reads no names', (select count(*) from recruiting.profile_names) = 0);
+rollback;
+
+-- The service role and the SQL Editor (no request claims) are not held back by the guard.
+begin;
+update recruiting.applications set files_purged_at = now()
+  where id = (select id from recruiting.applications where origin = 'jotform' order by submitted_at limit 1);
+select pg_temp.check('hardening: the purge job can still stamp files_purged_at',
+  (select count(*) from recruiting.applications where files_purged_at is not null) = 1);
+rollback;
+
+-- Oregon dates: 9 pm Pacific on 31 March is 04:00 UTC on 1 April.
+begin;
+insert into recruiting.applications (jotform_submission_id, form_id, submitted_at, name)
+  select '6999999999999999998', id, timestamptz '2026-03-31 21:00 America/Los_Angeles', 'Evening Applicant' from recruiting.forms limit 1;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('hardening: seasonality puts a late-evening application in its Oregon month',
+  (select coalesce(sum(applications), 0) from recruiting.report_seasonality where month = date '2026-03-01') = 1);
+select recruiting.archive_before(date '2026-04-01');
+select pg_temp.check('hardening: archive_before reaches the evening before the cutoff',
+  (select s.is_archive from recruiting.application_status st join recruiting.stages s on s.id = st.stage_id
+   join recruiting.applications a on a.id = st.application_id where a.name = 'Evening Applicant'));
+rollback;
+
+-- Hired counts only while the application is still hired.
+begin;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+create temp table t_before on commit drop as
+  select coalesce(sum(applications), 0) as hired from recruiting.report_position_funnel where stage_name = (select name from recruiting.stages where is_hired);
+update recruiting.application_status set stage_id = (select id from recruiting.stages where is_hired)
+  where application_id = (select st.application_id from recruiting.application_status st join recruiting.stages s on s.id = st.stage_id where not s.is_terminal order by st.application_id limit 1);
+select pg_temp.check('hardening: a hire shows in the funnel',
+  (select coalesce(sum(applications), 0) from recruiting.report_position_funnel where stage_name = (select name from recruiting.stages where is_hired)) = (select hired + 1 from t_before));
+update recruiting.application_status set stage_id = recruiting.first_stage_id()
+  where stage_id = (select id from recruiting.stages where is_hired)
+    and application_id in (select application_id from recruiting.status_history order by changed_at desc, id desc limit 1);
+select pg_temp.check('hardening: a Hired click that was corrected is not a hire in the funnel',
+  (select coalesce(sum(applications), 0) from recruiting.report_position_funnel where stage_name = (select name from recruiting.stages where is_hired)) = (select hired from t_before));
+rollback;
+
+-- A market check that never finished is not a good recent run.
+begin;
+update recruiting.positions set market_tracking = true, market_interval_days = 7
+  where id = (select id from recruiting.positions where status = 'open' order by title limit 1);
+insert into recruiting.market_checks (position_id, ran_at, trigger)
+  select id, now() - interval '3 days', 'schedule' from recruiting.positions where market_tracking;
+select recruiting.run_due_market_checks();
+select pg_temp.check('hardening: a run with no result after an hour is marked failed',
+  (select count(*) from recruiting.market_checks where error like 'The check did not finish%' and finished_at is not null) >= 1
+  and (select count(*) from recruiting.market_checks where summary is null and error is null and ran_at < now() - interval '1 hour') = 0);
 rollback;

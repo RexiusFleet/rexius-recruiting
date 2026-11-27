@@ -4,7 +4,7 @@ The frontend (Phases 6 and 7). Plain HTML, CSS and JavaScript; no build step. Pa
 
 | File | What it is |
 | --- | --- |
-| `index.html` | Sign-in, no-access and tracker views; loads `@supabase/supabase-js` 2.118.0 and jsPDF 3.0.3 from pinned jsDelivr URLs |
+| `index.html` | Sign-in, no-access and tracker views; loads `@supabase/supabase-js` 2.118.0 and jsPDF 4.2.1 from pinned jsDelivr URLs with integrity hashes; carries the page's Content-Security-Policy (`npm run csp:check`) |
 | `styles.css` | Tokens and layout from `reference/prototype-tracker.html`, light and dark |
 | `theme.js` | Light / dark toggle (System, Light, Dark; System is the default). Remembered per browser as `rr.theme` in localStorage; an inline script in `index.html`'s `<head>` applies it before first paint. Generated PDFs stay light |
 | `app.js` | Auth (sign-in, invite and password-reset links, forgot-password), role gate, hash routing between pages, data loading, pipeline, filters, table, drawer (with offers and referrals for staff), writes, CSV export, and the Add application form (admin and hr) for paper applications, which uploads scans to `manual/<application id>/` in the bucket; exposes `window.RR` for the page scripts |

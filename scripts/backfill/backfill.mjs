@@ -257,7 +257,15 @@ async function importForm(form, positions, existing, existingFiles, purged) {
     let applicationId = alreadyId;
     try {
       if (alreadyId) {
-        unwrap(await db.from("applications").update(row).eq("id", alreadyId), `update ${row.jotform_submission_id}`);
+        // --refresh rewrites what came from Jotform, not what the tracker decided since: a
+        // position link set by an alias or by staff stays (only an unlinked row takes the
+        // dropdown match), and a row whose files retention removed is not marked as having a
+        // resume again.
+        const now = unwrap(await db.from("applications").select("position_id, files_purged_at").eq("id", alreadyId).single(), `read ${row.jotform_submission_id}`);
+        const patch = { ...row };
+        if (now.position_id) delete patch.position_id;
+        if (now.files_purged_at) delete patch.has_resume;
+        unwrap(await db.from("applications").update(patch).eq("id", alreadyId), `update ${row.jotform_submission_id}`);
         c.updated++;
       } else {
         const inserted = unwrap(await db.from("applications").insert(row).select("id").single(), `insert ${row.jotform_submission_id}`);

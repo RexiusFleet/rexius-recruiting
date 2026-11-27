@@ -196,24 +196,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(200, { ok: true, dry_run: true, pages_listed: entries.length, changes: plan.changes, flags: plan.flags });
   }
 
-  // 6. Write. Each step is safe to repeat: a failure is reported and the next run finishes it.
+  // 6. Write: positions and postings first, the page table last and only when those went through.
+  //    The plan is worked out from careers_pages (a page that is newly gone closes its position;
+  //    a new "Pay:" line is copied once). Writing the pages first meant that if a position update
+  //    then failed, the next run saw the page already gone and the pay already applied, and the
+  //    position was never closed or its pay never copied. With the pages last, a failure leaves
+  //    them as they were, so the next run works out the same plan and finishes it; repeating a
+  //    position or posting write that did go through changes nothing.
   const errors: string[] = [];
-  if (plan.pages.length) {
-    const rows = plan.pages.map((p: Row) => {
-      const r: Row = {};
-      for (const c of PAGE_COLUMNS) r[c] = p[c] ?? null;
-      r.tags = p.tags ?? []; r.ignored = p.ignored === true; r.first_seen_at = p.first_seen_at ?? now.toISOString();
-      return r;
-    });
-    const up = await db.from("careers_pages").upsert(rows, { onConflict: "url" });
-    if (up.error) errors.push(`pages: ${up.error.message}`);
-  }
+  const since = new Date(now.getTime() - 60_000).toISOString();
   for (const u of plan.positionUpdates as Row[]) {
     const upd = await db.from("positions").update(u.set).eq("id", u.id);
     if (upd.error) { errors.push(`position ${u.id}: ${upd.error.message}`); continue; }
     if (u.pay_note) {
       // The pay-history row the positions trigger just wrote.
-      const h = await db.from("position_pay_history").select("id").eq("position_id", u.id).is("note", null).order("changed_at", { ascending: false }).limit(1);
+      // Only a row from this run: on a repeat nothing new is written, and an older row is not ours to label.
+      const h = await db.from("position_pay_history").select("id").eq("position_id", u.id).is("note", null).gte("changed_at", since).order("changed_at", { ascending: false }).limit(1);
       if (!h.error && h.data?.length) await db.from("position_pay_history").update({ note: u.pay_note }).eq("id", h.data[0].id);
     }
     if (u.opening_note) {
@@ -228,6 +226,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   for (const e of plan.postingEnds as Row[]) {
     const end = await db.from("postings").update({ ended_at: e.ended_at }).eq("id", e.id).is("ended_at", null);
     if (end.error) errors.push(`posting ${e.id}: ${end.error.message}`);
+  }
+  if (plan.pages.length && !errors.length) {
+    const rows = plan.pages.map((p: Row) => {
+      const r: Row = {};
+      for (const c of PAGE_COLUMNS) r[c] = p[c] ?? null;
+      r.tags = p.tags ?? []; r.ignored = p.ignored === true; r.first_seen_at = p.first_seen_at ?? now.toISOString();
+      return r;
+    });
+    const up = await db.from("careers_pages").upsert(rows, { onConflict: "url" });
+    if (up.error) errors.push(`pages: ${up.error.message}`);
   }
 
   const ok = errors.length === 0;

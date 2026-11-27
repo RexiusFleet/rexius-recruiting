@@ -456,7 +456,7 @@ Rows imported before the migration have no answer 35, so after applying it run t
 with `--refresh --skip-files` (step 10) to re-clean every row from Jotform; new rows get it as
 they arrive.
 
-**How it works.** `web/application-pdf.js` lays the document out with jsPDF 3.0.3, loaded from a
+**How it works.** `web/application-pdf.js` lays the document out with jsPDF (3.0.3 then; 4.2.1 since the review hardening), loaded from a
 pinned jsDelivr URL in `index.html` the same way as supabase-js, through the shared kit in
 `web/pdf-kit.js` (since 2026-10-30; see "What the PDF restyle created"). `applicationModel(id)` in
 `web/app.js` assembles the sections (for staff it reads the row's `answers` on click; managers
@@ -1661,6 +1661,68 @@ Nothing in this repository can close that; a domain of its own does.
 5. Everyone signs in again at the new address; installed home-screen copies are re-added from it.
 
 This step is unnecessary if sign-in moves into the Rexius company app on its own domain first.
+
+## What the review hardening created
+
+The second batch from the 2026-11-26 review (branch `claude/review-fixes-2`, migration
+`20261121000100_review_hardening.sql`).
+
+- **Page policy and library checks** (`web/index.html`, `web/theme-early.js`,
+  `scripts/csp/check.mjs`). The page now carries a Content-Security-Policy: scripts only from
+  this site and jsDelivr, connections only to this site and the Supabase project, no plugins, no
+  inline script. The two CDN script tags carry the SHA-384 of the published npm files, so a CDN
+  copy that differs does not run. The theme snippet moved from an inline `<script>` to
+  `theme-early.js`. The Word preview's frame answers to the page's policy too, so the policy
+  names that frame's script by hash; `npm run csp:check` verifies that hash and both library
+  hashes against `node_modules` and prints the right value when one is stale. Run it after
+  changing `FRAME_SCRIPT` in `web/file-viewer.js` or either library version.
+  **If the Supabase project address ever changes**, add the new one to `connect-src` in
+  `index.html`, or the page cannot reach it.
+- **jsPDF 4.2.1** (was 3.0.3, which had published advisories). Same API for what the tracker
+  uses; `npm run pdf:samples` renders the three PDFs as before.
+- **What staff can write to `applications`.** From the browser only a paper application can be
+  added (`origin = 'manual'`); a signed-in user can no longer change a row's `origin`,
+  `jotform_submission_id`, `form_id`, `contact_purged_at`, `files_purged_at`, or the
+  `submitted_at` of a Jotform row (the update goes through with those columns left as they
+  were). The webhook, the backfill, the purge jobs and the SQL Editor are not affected.
+- **Oregon dates.** `archive_before(date)` and the seasonality report read the date in
+  `America/Los_Angeles`; both used UTC, which moved late-evening applications to the next day or
+  month.
+- **Hired means hired now.** The funnel and time-to-fill reports counted any move to Hired in
+  the history, so a mis-click that was corrected stayed a hire. They now count it only while the
+  application is still in a hired stage, as the cost and seasonality reports already did. The
+  manager view's furthest stage is unchanged.
+- **Market checks that never finished.** A run stopped before it saved a result looked like a
+  good recent run and the schedule skipped the position for its week or month. The daily job now
+  marks a run with no result after an hour as failed, and only a run with a summary counts.
+- **Sign-in settings are for admins.** Every tracker user could read every `profiles` row,
+  including who signs in without a second factor. Now admins read the table, each user reads
+  their own row, and names and roles come from the view `profile_names`.
+- **Purge backlog notice.** `recruiting.retention_backlog()` counts applications whose contact
+  details were purged more than two days ago and that still have files. Above zero, admin and hr
+  see a notice at sign-in: the daily file purge is not getting through. Check **Edge Functions →
+  recruiting-retention → Logs** and the two vault secrets from step 15.
+- **Notes are not overwritten** (`web/app.js`). A notes save goes through only if nobody changed
+  the application since the page read it. If someone changed something else, it retries; if the
+  notes themselves changed, it stops with a notice and saves nothing more from that copy until
+  Reload. A save that matches no row is reported instead of showing "Saved".
+- **Careers sync write order** (`recruiting-careers-sync`). Positions and postings are written
+  first and the page table last, and only when those succeeded, so a failed position update is
+  retried by the next run instead of being lost.
+- **`backfill --refresh`** keeps a position link the row already has and does not mark a row
+  whose files retention removed as having a resume.
+
+Order on the hosted project: `npm run db:migrate`, deploy
+`npx supabase functions deploy recruiting-careers-sync --no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`,
+then merge so `web/` publishes. Between the migration and the merge, hr and managers see blank
+names for other users in history ("changed by"); nothing else changes.
+
+Checked on the local stack: 296 policy checks pass (12 of them new, for this change), the page was exercised under the
+new policy (sign-in, list, drawer, Word and PDF viewer, PDF building, every report, Positions,
+Documents, Security), the notes conflict and the report paging (API capped at three rows) were
+run for real. One older check ("the seeded crew application counts towards the current
+opening") fails when run in the evening Pacific time, because the seed dates use UTC; it is not
+related to this change.
 
 ## Manual steps in Supabase (do these in order)
 
