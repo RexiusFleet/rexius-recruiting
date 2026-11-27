@@ -815,6 +815,44 @@ PR merges: `npm run db:migrate`, then
 `npx supabase functions deploy recruiting-market-check --no-verify-jwt`, then merge. Runs
 from before the change simply show no benefits block.
 
+## What the market link check created
+
+Links in a market check open what they say they open (2026-11-26). Claude writes each
+posting's address into its answer as text, and a click often landed on a job board's search
+page where the posting named was nowhere to be seen, or on an address the model had put
+together itself. The function cannot open the pages to check (Indeed and LinkedIn refuse), but
+it does hold the exact addresses the web search returned, so it settles every link against
+those. No migration: `link` is one more key inside the `postings`, `pay_ranges` and
+`pay_samples` JSON.
+
+- `supabase/functions/_shared/market-links.mjs` (pure functions, `npm run market:test`): each
+  address gets `link` = **posting** (returned by the search and the page of one job),
+  **list** (returned by the search, but a search, list or careers page with several jobs) or
+  **unverified** (not among the search results, so the model wrote it). A matching address is
+  replaced by the search's own spelling. The big job boards have their own rules (an Indeed
+  address is a posting only with a `jk` job ID, LinkedIn only under `/jobs/view/`, and so on);
+  other sites are judged by the shape of the address, and the model's own "this is a list
+  page" is believed while its "this is the posting" is not.
+- `recruiting-market-check` and `recruiting-national-check`: the prompt asks for the page of
+  the single posting, copied character for character from a search result, and for one more
+  search by employer and title when a list page is all that turned up; an address is null
+  rather than guessed. Every search result is used for the check; the stored sources stay at
+  30 and 40. The log line counts the links by kind.
+- `web/positions.js`: an employer or posting name is a link only when it opens that posting.
+  Otherwise the name is plain text followed by **list page** or **unconfirmed link**, which
+  still opens the address and says on hover what it is.
+- `web/market-report.js`: the text report tags those links, and the PDF marks the employer
+  with * and explains it above the sources.
+
+It never opens a page, so a posting the employer has since taken down still shows as a
+posting; and a job seen only on a board's search page has no page of its own to link to,
+which is what "list page" now says. Runs from before the change have no `link` and look as
+they did.
+
+**Deploy**: `npx supabase functions deploy recruiting-market-check --no-verify-jwt` and
+`npx supabase functions deploy recruiting-national-check --no-verify-jwt`, in either order
+with the merge; the page and the functions each work with the other's old version.
+
 ## What the national check created
 
 A second kind of market check for specialised roles, where the local one finds little

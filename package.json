@@ -17,6 +17,7 @@
     "webhook:stub": "node scripts/webhook-test/stub-jotform.mjs",
     "summary:stub": "node scripts/summary-test/stub-anthropic.mjs",
     "careers:test": "node --test scripts/careers-sync/careers.test.mjs",
+    "market:test": "node --test scripts/market-check/links.test.mjs",
     "careers:stub": "node scripts/careers-sync/stub-site.mjs",
     "careers:dry-run": "node scripts/careers-sync/dry-run.mjs",
     "purge:unmatched": "node scripts/purge-unmatched.mjs",
