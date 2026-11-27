@@ -49,21 +49,24 @@ jobs:
       - name: Run the policy checks
         run: |
           db=$(docker ps --format '{{.Names}}' | grep '^supabase_db_')
-          docker exec -i "$db" psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql > policy-results.txt 2>&1 || true
-          echo "$(grep -c '^PASS' policy-results.txt) checks passed"
-          if grep -E '^FAIL|UNEXPECTED' policy-results.txt; then
-            echo "::error::Policy checks failed (lines above)."
-            exit 1
-          fi
-          # Every check must report. A statement that errors prints neither PASS nor FAIL, so
-          # compare the number of PASS lines with the number of checks in the script.
-          expected=$(grep -o 'select pg_temp.check(' scripts/test-policies.sql | wc -l)
-          passed=$(grep -c '^PASS' policy-results.txt)
+          # Results (PASS / FAIL lines) and messages (NOTICE, ERROR) go to separate files: mixed
+          # into one, a notice now and then lands on the same line as a PASS and hides it.
+          docker exec -i "$db" psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql > policy-results.txt 2> policy-messages.txt || true
+          # Every check must report. One that errors prints neither PASS nor FAIL, so the number
+          # of PASS lines has to equal the number of checks in the script (every use of
+          # pg_temp.check, less the line that defines it).
+          expected=$(( $(grep -o 'pg_temp\.check(' scripts/test-policies.sql | wc -l) - 1 ))
+          passed=$(grep -c '^PASS' policy-results.txt || true)
+          echo "$passed of $expected checks passed"
+          bad=0
+          if grep '^FAIL' policy-results.txt; then bad=1; fi
+          if grep 'UNEXPECTED' policy-messages.txt; then bad=1; fi
           if [ "$passed" -ne "$expected" ]; then
-            echo "::error::$passed of $expected checks reported. Errors and the checks that did not pass:"
-            grep -n 'ERROR' policy-results.txt | head -40 || true
-            grep -o "select pg_temp.check('[^']*'" scripts/test-policies.sql | sed "s/select pg_temp.check('//; s/'$//" | sort > expected-labels.txt
-            grep '^PASS ' policy-results.txt | sed 's/^PASS //' | sort > passed-labels.txt
-            comm -23 expected-labels.txt passed-labels.txt | head -40
+            bad=1
+            echo "Errors from the run:"
+            grep -n 'ERROR' policy-messages.txt | head -40 || true
+          fi
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::Policy checks failed (lines above)."
             exit 1
           fi
