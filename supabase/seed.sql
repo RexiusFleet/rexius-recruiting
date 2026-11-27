@@ -38,10 +38,12 @@ select u.id, u.id, u.id::text,
 from auth.users u
 where u.email like '%@local.test';
 
-insert into recruiting.profiles (user_id, role, name) values
-  ('11111111-1111-1111-1111-111111111111', 'admin',   'Local Admin'),
-  ('22222222-2222-2222-2222-222222222222', 'hr',      'Local HR'),
-  ('33333333-3333-3333-3333-333333333333', 'manager', 'Local Manager');
+-- login_made_by_tracker: the local logins are the tracker's own, so the Users page can give them
+-- temporary passwords (migration 20261120000100).
+insert into recruiting.profiles (user_id, role, name, login_made_by_tracker) values
+  ('11111111-1111-1111-1111-111111111111', 'admin',   'Local Admin',   true),
+  ('22222222-2222-2222-2222-222222222222', 'hr',      'Local HR',      true),
+  ('33333333-3333-3333-3333-333333333333', 'manager', 'Local Manager', true);
 
 -- ---------------------------------------------------------------------------------------------
 -- Sample applications. Names, contacts and employers are invented. The `answers` JSON uses the
