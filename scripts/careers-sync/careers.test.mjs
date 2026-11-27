@@ -203,6 +203,30 @@ test("a page confirmed gone closes its open position and ends the posting", () =
   assert.equal(r.pages[0].gone_at, NOW);
 });
 
+test("a renamed page keeps its position: the old address goes, the position stays open", () => {
+  const p = pos("p1", "Digital Marketer", "Eugene/Springfield", "open");
+  const old = fpage("digital-marketer", "Digital Marketer", "Eugene/Springfield", null);
+  const renamed = fpage("marketing-specialist", "Marketing Specialist", "Eugene/Springfield", null);
+  const r = plan({ feedPages: [renamed], dbPages: [dbpage(old, { position_id: "p1", link_source: "staff" })], positions: [p],
+    postings: [posting("po1", "p1", "digital-marketer")], gone: [old.url], moved: [{ from: old.url, to: renamed.url }] });
+  assert.deepEqual(r.positionUpdates, []);
+  assert.deepEqual(kinds(r.changes), ["page_gone", "page_moved", "page_new"]);
+  const now = r.pages.find((x) => x.url === renamed.url);
+  assert.deepEqual([now.position_id, now.link_source, now.gone_at], ["p1", "staff", null]);
+  assert.deepEqual(r.postingEnds, [{ id: "po1", ended_at: TODAY }]);
+  assert.deepEqual(r.postingInserts.map((x) => [x.position_id, x.url]), [["p1", renamed.url]]);
+  assert.deepEqual(kinds(r.flags), []);
+});
+
+test("without the redirect, the same rename closes the position and flags the new page", () => {
+  const p = pos("p1", "Digital Marketer", "Eugene/Springfield", "open");
+  const old = fpage("digital-marketer", "Digital Marketer", "Eugene/Springfield", null);
+  const renamed = fpage("marketing-specialist", "Marketing Specialist", "Eugene/Springfield", null);
+  const r = plan({ feedPages: [renamed], dbPages: [dbpage(old, { position_id: "p1" })], positions: [p], postings: [], gone: [old.url] });
+  assert.deepEqual(r.positionUpdates.map((u) => u.set), [{ status: "closed" }]);
+  assert.deepEqual(kinds(r.flags), ["unlinked"]);
+});
+
 test("a page missing from the feed but not confirmed gone changes nothing and is flagged", () => {
   const p = pos("p1", "Digital Marketer", "Eugene/Springfield", "open");
   const fp = fpage("digital-marketer", "Digital Marketer", "Eugene/Springfield", null);

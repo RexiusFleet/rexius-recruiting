@@ -83,13 +83,28 @@ async function getText(url: string): Promise<string> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return text;
 }
-/** Is one job page still there? "gone" only on a clear answer; anything else is "unknown". */
-async function pageState(url: string): Promise<"up" | "gone" | "unknown"> {
+/**
+ * Is one job page still there? "gone" only on a clear answer; anything else is "unknown".
+ * A permanent redirect to another job page is { movedTo }: the page was renamed on the site (a
+ * new address for the same job), which is not the same as taken down. A permanent redirect to
+ * anything else (the careers list, the home page) is how a removed page answers: "gone".
+ */
+async function pageState(url: string, canonical: string): Promise<"up" | "gone" | "unknown" | { movedTo: string }> {
   try {
     const res = await fetch(url, { method: "GET", redirect: "manual", headers: { "user-agent": USER_AGENT }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     await res.body?.cancel();
     if (res.status === 200) return "up";
-    if (res.status === 404 || res.status === 410 || res.status === 301 || res.status === 308) return "gone";
+    if (res.status === 404 || res.status === 410) return "gone";
+    if (res.status === 301 || res.status === 308) {
+      // Read only the path of a same-host redirect and rebuild it on the careers address, so a
+      // redirect cannot name any other host (and the local stub site works the same way).
+      let target = "";
+      try {
+        const loc = new URL(res.headers.get("location") ?? "", url);
+        if (loc.host === new URL(url).host) target = normalizeUrl(CAREERS_ORIGIN + loc.pathname) ?? "";
+      } catch { /* no usable Location */ }
+      return target && target !== canonical ? { movedTo: target } : "gone";
+    }
     return "unknown";
   } catch (err) {
     console.warn(`[${FUNCTION}] page check ${url}: ${errText(err)}`);
@@ -182,14 +197,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 4. Pages the tracker knew that the feed no longer lists: ask each one directly.
   const listed = new Set(feedPages.map((p) => p.url));
   const missing = dbPages.filter((p) => !p.gone_at && !listed.has(p.url) && normalizeUrl(p.url) === p.url).slice(0, MAX_PAGE_CHECKS);
-  const gone: string[] = [], stillUp: string[] = [];
+  const gone: string[] = [], stillUp: string[] = [], moved: { from: string; to: string }[] = [];
   await Promise.all(missing.map(async (p) => {
-    const s = await pageState(siteUrl(base, p.url));
-    if (s === "gone") gone.push(p.url); else if (s === "up") stillUp.push(p.url);
+    const s = await pageState(siteUrl(base, p.url), p.url);
+    if (s === "gone") gone.push(p.url);
+    else if (s === "up") stillUp.push(p.url);
+    // Renamed to a page the feed lists: the old address is gone and its position follows to the
+    // new one. Renamed to something the feed does not list: unclear, so nothing changes.
+    else if (typeof s === "object" && listed.has(s.movedTo)) { gone.push(p.url); moved.push({ from: p.url, to: s.movedTo }); }
   }));
 
   // 5. Decide.
-  const plan = planSync({ now: now.toISOString(), today: oregonDate(now), feedPages, gone, stillUp, dbPages, positions: positionsQ.data as Row[], postings: postingsQ.data as Row[] });
+  const plan = planSync({ now: now.toISOString(), today: oregonDate(now), feedPages, gone, stillUp, moved, dbPages, positions: positionsQ.data as Row[], postings: postingsQ.data as Row[] });
   if (!tagsOk) plan.flags.push({ kind: "tags_unavailable" });
   if (dryRun) {
     console.log(`[${FUNCTION}] dry run: ${plan.changes.length} change(s), ${plan.flags.length} flag(s)`);

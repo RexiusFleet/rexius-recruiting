@@ -229,6 +229,8 @@ export function payLabel(p) {
  * @param input.feedPages pages from the feed (pageFromEntry)
  * @param input.gone      URLs missing from the feed whose own address answered 404 or 410
  * @param input.stillUp   URLs missing from the feed whose own address still answered 200
+ * @param input.moved     [{from, to}]: a gone URL whose address redirects for good to a page the
+ *                        feed lists (the job page was renamed on the site, not taken down)
  * @param input.dbPages   rows of recruiting.careers_pages
  * @param input.positions rows of recruiting.positions (id, title, location, status, pay_*, jotform_option_label)
  * @param input.postings  rows of recruiting.postings with channel rexius_com
@@ -259,6 +261,8 @@ export function planSync(input) {
   };
 
   // 1. Pages the feed lists.
+  const movedFrom = new Map((input.moved || []).map((m) => [m.to, m.from]));
+  const dbByUrl = new Map(dbPages.map((pg) => [pg.url, pg]));
   const inFeed = new Set();
   for (const fp of feedPages) {
     inFeed.add(fp.url);
@@ -268,8 +272,13 @@ export function planSync(input) {
       : { ...fp, first_seen_at: now, last_seen_at: now, gone_at: null, position_id: null, link_source: null, ignored: false, pay_applied_text: null };
     if (pg.position_id && !posById.has(pg.position_id)) { pg.position_id = null; pg.link_source = null; }
     if (!pg.position_id && !pg.ignored) {
-      const link = autoLink(pg);
+      // A renamed page keeps the position of the address it replaced, so the position is not
+      // closed while its job is still up. Otherwise link by posting row or by title as usual.
+      const was = dbByUrl.get(movedFrom.get(fp.url));
+      const follows = was && !was.ignored && was.position_id && posById.has(was.position_id);
+      const link = follows ? { position_id: was.position_id, link_source: was.link_source || "posting" } : autoLink(pg);
       if (link) Object.assign(pg, link);
+      if (follows) changes.push({ kind: "page_moved", from: was.url, url: pg.url, title: pg.title, location: pg.location, position_id: pg.position_id });
     }
     if (!old) changes.push({ kind: "page_new", url: pg.url, title: pg.title, location: pg.location, position_id: pg.position_id });
     else if (old.gone_at) changes.push({ kind: "page_back", url: pg.url, title: pg.title, location: pg.location, position_id: pg.position_id });

@@ -70,7 +70,7 @@
       if (isFile(d)) { var b = el("button", "link", "📄 " + RR.fileName(d.storage_path)); b.type = "button"; b.title = "View " + d.title; b.addEventListener("click", function (e) { e.stopPropagation(); viewFile(d); }); tdT.appendChild(b); }
       else tdT.appendChild(el("span", "meta", "Text"));
       tr.appendChild(tdT);
-      tr.addEventListener("click", function () { openDocument(d.id); });
+      RR.rowOpens(tr, function () { openDocument(d.id); }, "Open " + d.title);
       tbody.appendChild(tr);
     });
   }

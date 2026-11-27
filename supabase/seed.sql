@@ -46,6 +46,8 @@ insert into recruiting.profiles (user_id, role, name, login_made_by_tracker) val
   ('33333333-3333-3333-3333-333333333333', 'manager', 'Local Manager', true);
 
 -- ---------------------------------------------------------------------------------------------
+-- Dates below are Oregon dates, as the tracker's reports use (not current_date, which is UTC
+-- on the local stack and a day ahead every evening).
 -- Sample applications. Names, contacts and employers are invented. The `answers` JSON uses the
 -- English form's question IDs (see forms.field_map) so the manager view can read education,
 -- skills and employment history from it.
@@ -62,7 +64,7 @@ values
    'jordan.rivera@example.com', 'jordan.rivera@example.com', '(541) 555-0101', '5415550101',
    'Eugene', 'OR', 'Eugene/Springfield', 'Landscape Maintenance Crew Member',
    (select id from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield'),
-   'Indeed.com', null, current_date + 7, true, 'en',
+   'Indeed.com', null, (now() at time zone 'America/Los_Angeles')::date + 7, true, 'en',
    '{"344":"High School Diploma","372":"Three seasons of mowing and pruning.","272":"No","274":"No",
      "72":"Green Valley Lawn Care","280":"Springfield, OR","76":"Crew member","348":"03/2023","377":"09/2026","352":"Seasonal layoff"}',
    'https://www.jotform.com/inbox/260115636145148/6000000000000000001'),
@@ -70,7 +72,7 @@ values
    'priya.n@example.com', 'priya.n@example.com', '541-555-0102', '5415550102',
    'Bend', 'OR', 'Central Oregon', 'Irrigation Service Technician',
    (select id from recruiting.positions where title = 'Irrigation Service Technician' and location = 'Central Oregon'),
-   'Rexius.com', null, current_date + 14, true, 'en',
+   'Rexius.com', null, (now() at time zone 'America/Los_Angeles')::date + 14, true, 'en',
    '{"344":"Certification(s)","372":"Backflow tester certification, 4 years irrigation repair.","272":"No","274":"Yes",
      "72":"High Desert Irrigation","280":"Bend, OR","76":"Service technician","348":"05/2022","377":"","352":"Still employed; seeking stability"}',
    'https://www.jotform.com/inbox/260115636145148/6000000000000000002'),
@@ -78,7 +80,7 @@ values
    'luis.h@example.com', 'luis.h@example.com', '(503) 555-0103', '5035550103',
    'Lake Oswego', 'OR', 'Lake Oswego', 'Blower Truck Crew Member',
    (select id from recruiting.positions where title = 'Blower Truck Crew Member' and location = 'Lake Oswego'),
-   'Referral', 'Marco Hernández', current_date + 3, false, 'es',
+   'Referral', 'Marco Hernández', (now() at time zone 'America/Los_Angeles')::date + 3, false, 'es',
    '{"344":"GED","372":"Blower truck crew two seasons; Class B permit in progress.","272":"Yes","274":"Yes",
      "72":"Bark Blowers NW","280":"Tualatin, OR","76":"Crew","348":"04/2024","375":"10/2025","352":"Season ended"}',
    'https://www.jotform.com/inbox/232824275836160/6000000000000000003'),
@@ -86,7 +88,7 @@ values
    'sam.okafor@example.com', 'sam.okafor@example.com', '541.555.0104', '5415550104',
    'Springfield', 'OR', 'Eugene/Springfield', 'Flatbed Truck Driver',
    (select id from recruiting.positions where title = 'Flatbed Truck Driver' and location = 'Eugene/Springfield'),
-   'Craigslist.com', null, current_date + 10, true, 'en',
+   'Craigslist.com', null, (now() at time zone 'America/Los_Angeles')::date + 10, true, 'en',
    '{"344":"High School Diploma","372":"CDL-A, flatbed and moffett experience.","272":"No","274":"No",
      "72":"Cascade Freight","280":"Eugene, OR","76":"Driver","348":"01/2020","377":"08/2026","352":"Company closed route"}',
    'https://www.jotform.com/inbox/260115636145148/6000000000000000004'),
@@ -94,7 +96,7 @@ values
    'Jordan.Rivera@example.com', 'jordan.rivera@example.com', '5415550101', '5415550101',
    'Eugene', 'OR', 'Eugene/Springfield', 'Commercial Landscape Crew Member',
    (select id from recruiting.positions where title = 'Commercial Landscape Crew Member' and location = 'Eugene/Springfield'),
-   'Indeed.com', null, current_date + 7, false, 'en',
+   'Indeed.com', null, (now() at time zone 'America/Los_Angeles')::date + 7, false, 'en',
    '{"344":"High School Diploma","372":"Also applied for maintenance crew.","272":"No","274":"Yes"}',
    'https://www.jotform.com/inbox/260115636145148/6000000000000000005');
 
@@ -116,11 +118,11 @@ select id, 'email', 'outbound', 'Sent interview availability request.', 'Local H
 from recruiting.applications where jotform_submission_id = '6000000000000000002';
 
 insert into recruiting.postings (position_id, channel, url, posted_at)
-select id, 'indeed', 'https://www.indeed.com/viewjob?jk=example', current_date - 30
+select id, 'indeed', 'https://www.indeed.com/viewjob?jk=example', (now() at time zone 'America/Los_Angeles')::date - 30
 from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
 
 insert into recruiting.channel_spend (posting_id, period_start, period_end, spend, views, applies)
-select id, date_trunc('month', current_date)::date - interval '1 month', date_trunc('month', current_date)::date - 1, 240.00, 1850, 31
+select id, date_trunc('month', (now() at time zone 'America/Los_Angeles')::date)::date - interval '1 month', date_trunc('month', (now() at time zone 'America/Los_Angeles')::date)::date - 1, 240.00, 1850, 31
 from recruiting.postings;
 
 -- Phase 9a: one finished market check so the position page has something to show locally.
@@ -168,10 +170,10 @@ from recruiting.positions where title = 'Landscape Maintenance Crew Member' and 
 -- is after the applications above, so start them 45 days back. The maintenance crew also gets a
 -- past spring season, and a range of $17–$20 that was then raised, so the position page shows
 -- the history.
-update recruiting.position_openings set opened_at = current_date - 45 where closed_at is null;
+update recruiting.position_openings set opened_at = (now() at time zone 'America/Los_Angeles')::date - 45 where closed_at is null;
 
 insert into recruiting.position_openings (position_id, opened_at, closed_at, note)
-select id, current_date - 230, current_date - 120, 'Spring crews'
+select id, (now() at time zone 'America/Los_Angeles')::date - 230, (now() at time zone 'America/Los_Angeles')::date - 120, 'Spring crews'
 from recruiting.positions where title = 'Landscape Maintenance Crew Member' and location = 'Eugene/Springfield';
 
 update recruiting.positions set pay_min = 17, pay_max = 20, pay_unit = 'hour'

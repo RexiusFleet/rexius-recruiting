@@ -1724,6 +1724,53 @@ run for real. One older check ("the seeded crew application counts towards the c
 opening") fails when run in the evening Pacific time, because the seed dates use UTC; it is not
 related to this change.
 
+## What the review follow-ups created
+
+The third batch from the 2026-11-26 review (branch `claude/review-fixes-3`, migration
+`20261122000100_review_followups.sql`).
+
+- **Links** (`web/app.js` `safeHref`, `web/positions.js`). The tracker makes a link only from an
+  `http` or `https` address (plus `mailto:` and `tel:` for an applicant's own contact details);
+  anything else is shown as text. `postings.url` has a matching check constraint, added
+  `NOT VALID` so existing rows are left alone until they are next edited.
+- **Sign out** clears the session on the device even when the server cannot be reached, then
+  reloads the page so nothing about an applicant stays in memory.
+- **Oregon dates in the browser.** The applied-on date, the "Applied between" filter, the CSV
+  and the per-opening counts use the Oregon calendar date whatever zone the device is set to.
+- **Keyboard.** Rows in the Applications, Positions and Documents tables can be reached with Tab
+  and opened with Enter or Space.
+- **Renamed job pages** (`recruiting-careers-sync`, `_shared/careers.mjs`). When a page that
+  left the careers feed answers with a permanent redirect to another job page the feed lists,
+  the page was renamed, not taken down: the new page takes over the old one's position and the
+  position stays open. A redirect to anything else still counts as gone, and one to a job page
+  the feed does not list changes nothing and is flagged.
+- **Webhook** (`recruiting-jotform-webhook`). Each call to Jotform gives up after 15 seconds,
+  and a 404 is retried (the webhook can arrive just before the submission is readable).
+- **Good-lead trigger.** A flagged application whose submitted time later moved earlier no
+  longer blocks every other edit (the keep-until date is brought back to the cap), and deleting
+  the user who set a flag clears `lead_flagged_by` instead of leaving a dangling reference.
+- **Tests run by themselves** (`.github/workflows/tests.yml`). Every pull request and every
+  push to `main` runs the unit tests, `npm run csp:check`, and the policy checks against a fresh
+  local stack. To make them required before merging, a repository owner turns on branch
+  protection for `main` and selects the two jobs (`unit`, `policies`). The policy checks gained
+  catalog-wide ones: the manager view's exact column list, no function or table open to `anon`,
+  row-level security on every table, a pinned `search_path` on every security definer function.
+- **Pages workflow.** Actions are pinned by commit, and the two repository variables are
+  checked for shape before they are written into `config.js`.
+- **Seed dates** use the Oregon date, so the policy checks no longer fail one check when run
+  in the evening.
+- **`CLAUDE.md`** is about a fifth shorter: the change-by-change history moved to
+  `docs/change-history.md`, with an index and the standing rules left behind.
+
+Order on the hosted project: `npm run db:migrate`, deploy `recruiting-careers-sync` and
+`recruiting-jotform-webhook` (both `--no-verify-jwt --project-ref hibjqcgitqtgmkurghlw`), then
+merge. Nothing in `web/` depends on this migration, so the order only matters for tidiness.
+
+Left alone on purpose: with no search results at all, a market check cannot label any link
+unverified (a decision recorded in `_shared/market-links.mjs`); the manager view's furthest
+stage; who may delete a position; README sections stay in this file because code comments cite
+them by name.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the

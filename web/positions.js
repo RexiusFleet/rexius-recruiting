@@ -436,7 +436,7 @@
       tr.appendChild(tdO);
       var tdN = el("td", "num", s ? s.count.toLocaleString() : "0"); if (s && s.last) tdN.title = "Latest " + RR.fmtDate(s.last); tr.appendChild(tdN);
       var tdF = el("td", "col-funnel"); tdF.appendChild(funnelCells(s)); tr.appendChild(tdF);
-      tr.addEventListener("click", function () { openPosition(p.id); });
+      RR.rowOpens(tr, function () { openPosition(p.id); }, "Open " + p.title + ", " + p.location);
       tbody.appendChild(tr);
     });
     renderBulk(rows);
@@ -842,7 +842,8 @@
     var d = el("div", "posting");
     var head = el("div", null, (CHANNEL_LABEL[po.channel] || po.channel) + " · posted " + RR.fmtDay(po.posted_at) + (po.ended_at ? ", ended " + RR.fmtDay(po.ended_at) : ", still up"));
     d.appendChild(head);
-    if (po.url) { var a = el("a", null, po.url); a.href = po.url; a.target = "_blank"; a.rel = "noopener"; d.appendChild(a); }
+    if (RR.safeHref(po.url)) { var a = el("a", null, po.url); a.href = RR.safeHref(po.url); a.target = "_blank"; a.rel = "noopener"; d.appendChild(a); }
+    else if (po.url) d.appendChild(el("span", null, po.url));
     if (po.utm_source || po.utm_campaign) d.appendChild(el("div", "meta", "UTM " + [po.utm_source, po.utm_campaign].filter(Boolean).join(" / ")));
     if (po.notes) d.appendChild(el("div", "meta", po.notes));
     return d;
@@ -1082,7 +1083,12 @@
     if (lo == null && hi == null) return "—";
     return (lo != null && hi != null && Number(lo) !== Number(hi) ? money(lo) + "–" + money(hi) : money(lo != null ? lo : hi)) + unitSuffix(unit);
   }
-  function extLink(url, text) { var a = el("a", null, text || url); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
+  // Only a web address becomes a link; anything else is shown as plain text.
+  function extLink(url, text) {
+    var href = RR.safeHref(url);
+    if (!href) return el("span", null, text || String(url || ""));
+    var a = el("a", null, text || url); a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer"; return a;
+  }
   // A market or national check row's link. The function settles each address against what the
   // search returned and stores x.link: "posting" opens that one job, so the label itself is the
   // link; "list" (a search or careers page listing several jobs) and "unverified" (not among
