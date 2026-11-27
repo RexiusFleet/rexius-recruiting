@@ -57,7 +57,7 @@ jobs:
           fi
           # Every check must report. A statement that errors prints neither PASS nor FAIL, so
           # compare the number of PASS lines with the number of checks in the script.
-          expected=$(grep -c 'select pg_temp.check(' scripts/test-policies.sql)
+          expected=$(grep -o 'select pg_temp.check(' scripts/test-policies.sql | wc -l)
           passed=$(grep -c '^PASS' policy-results.txt)
           if [ "$passed" -ne "$expected" ]; then
             echo "::error::$passed of $expected checks reported. Errors and the checks that did not pass:"
