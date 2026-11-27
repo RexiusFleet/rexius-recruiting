@@ -52,20 +52,18 @@ jobs:
           # Results (PASS / FAIL lines) and messages (NOTICE, ERROR) go to separate files: mixed
           # into one, a notice now and then lands on the same line as a PASS and hides it.
           docker exec -i "$db" psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql > policy-results.txt 2> policy-messages.txt || true
-          # Every check must report. One that errors prints neither PASS nor FAIL, so the number
-          # of PASS lines has to equal the number of checks in the script (every use of
-          # pg_temp.check, less the line that defines it).
-          expected=$(( $(grep -o 'pg_temp\.check(' scripts/test-policies.sql | wc -l) - 1 ))
+          # Every check must report. One that errors prints neither PASS nor FAIL, so any ERROR
+          # from the run fails the job (a clean run has none: refusals the script expects are
+          # caught and reported as notices), and there must be at least as many PASS lines as
+          # the script has checks (a check over several rows prints more than one).
+          checks=$(( $(grep -o 'pg_temp\.check(' scripts/test-policies.sql | wc -l) - 1 ))
           passed=$(grep -c '^PASS' policy-results.txt || true)
-          echo "$passed of $expected checks passed"
+          echo "$passed checks passed ($checks in the script)"
           bad=0
           if grep '^FAIL' policy-results.txt; then bad=1; fi
           if grep 'UNEXPECTED' policy-messages.txt; then bad=1; fi
-          if [ "$passed" -ne "$expected" ]; then
-            bad=1
-            echo "Errors from the run:"
-            grep -n 'ERROR' policy-messages.txt | head -40 || true
-          fi
+          if grep -n 'ERROR' policy-messages.txt | head -40 | grep .; then bad=1; fi
+          if [ "$passed" -lt "$checks" ]; then echo "Fewer checks reported than the script has."; bad=1; fi
           if [ "$bad" -ne 0 ]; then
             echo "::error::Policy checks failed (lines above)."
             exit 1
