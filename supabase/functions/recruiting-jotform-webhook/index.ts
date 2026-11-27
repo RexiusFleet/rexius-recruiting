@@ -25,7 +25,7 @@
 //   4. fetches the submission from Jotform with JOTFORM_API_KEY; checks it belongs to formID;
 //      skips submissions in Jotform's trash;
 //   5. builds the row with the SAME rules as the backfill (../_shared/clean.mjs: field map,
-//      never-import list for driver licence 30/31/35, signatures 238/333/369 and initials
+//      never-import list for driver licence 30/31 (the class, 35, is kept), signatures 238/333/369 and initials
 //      324-332, Spanish value cleanup, email/phone normalisation) and inserts it. The insert
 //      trigger creates application_status in the first stage and the first status_history row,
 //      and matches the position; this function never writes those tables;
@@ -105,17 +105,20 @@ async function readIds(req: Request): Promise<{ formId?: string; submissionId?: 
 // envelope { responseCode, message, content })
 // ---------------------------------------------------------------------------------------------
 
+// Each attempt gives up after 15 seconds, so a Jotform call that hangs cannot hold the webhook
+// open. 404 is retried as well: the webhook can arrive a moment before the submission is readable
+// through the API, and a missed submission is otherwise only picked up by the next backfill.
 async function fetchWithRetry(url: string | URL, init: RequestInit, tries = 3): Promise<Response> {
   let delay = 800;
   for (let attempt = 1; ; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url, init);
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
     } catch (err) {
       if (attempt >= tries) throw err;
       await new Promise((r) => setTimeout(r, delay)); delay *= 2; continue;
     }
-    if (res.ok || attempt >= tries || !(res.status === 429 || res.status >= 500)) return res;
+    if (res.ok || attempt >= tries || !(res.status === 404 || res.status === 429 || res.status >= 500)) return res;
     await res.body?.cancel();
     await new Promise((r) => setTimeout(r, delay)); delay *= 2;
   }

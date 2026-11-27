@@ -1,0 +1,70 @@
+# Runs the project's tests on every pull request and on main (added after the 2026-11-26 review;
+# until then nothing ran them, and a push to main publishes the site).
+#
+#   unit      the Node tests (import cleanup, careers sync rules, market link rules) and the
+#             hash check for web/index.html (npm run csp:check). Seconds.
+#   policies  starts the local Supabase stack, applies every migration and the seed, and runs
+#             scripts/test-policies.sql: one FAIL or UNEXPECTED line fails the job. A few minutes.
+#
+# Nothing here touches the hosted project and no secret is used. To make these required before
+# merging, a repository owner adds them under Settings -> Branches -> branch protection for main.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run backfill:test
+      - run: npm run careers:test
+      - run: npm run market:test
+      - run: npm run csp:check
+
+  policies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+        with:
+          version: 2.122.0
+      - name: Start the local stack (database, auth and storage are all the checks need)
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,mailpit,postgres-meta,supavisor
+      - name: Run the policy checks
+        run: |
+          db=$(docker ps --format '{{.Names}}' | grep '^supabase_db_')
+          # Results (PASS / FAIL lines) and messages (NOTICE, ERROR) go to separate files: mixed
+          # into one, a notice now and then lands on the same line as a PASS and hides it.
+          docker exec -i "$db" psql -U postgres -d postgres -v ON_ERROR_STOP=0 -f - < scripts/test-policies.sql > policy-results.txt 2> policy-messages.txt || true
+          # Every check must report. One that errors prints neither PASS nor FAIL, so any ERROR
+          # from the run fails the job (a clean run has none: refusals the script expects are
+          # caught and reported as notices), and there must be at least as many PASS lines as
+          # the script has checks (a check over several rows prints more than one).
+          checks=$(( $(grep -o 'pg_temp\.check(' scripts/test-policies.sql | wc -l) - 1 ))
+          passed=$(grep -c '^PASS' policy-results.txt || true)
+          echo "$passed checks passed ($checks in the script)"
+          bad=0
+          if grep '^FAIL' policy-results.txt; then bad=1; fi
+          if grep 'UNEXPECTED' policy-messages.txt; then bad=1; fi
+          if grep -n 'ERROR' policy-messages.txt | head -40 | grep .; then bad=1; fi
+          if [ "$passed" -lt "$checks" ]; then echo "Fewer checks reported than the script has."; bad=1; fi
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::Policy checks failed (lines above)."
+            exit 1
+          fi

@@ -151,7 +151,9 @@
   // o.allCols: fixed column list in order (columns with no data still show); otherwise the
   // columns seen, ordered by o.orderCols or alphabetically.
   function pivot(rows, rowKey, colKey, valKey, o) {
-    var cols = {}, colOrder = {}, data = {}, rowSort = {};
+    // Row and column keys are applicant-typed text (a source, a free-text position), so these are
+    // maps with no inherited names: "__proto__" or "constructor" is just another row.
+    var cols = Object.create(null), colOrder = Object.create(null), data = Object.create(null), rowSort = Object.create(null);
     rows.forEach(function (r) {
       var ck = r[colKey], rk = r[rowKey];
       cols[ck] = true; if (o.orderCols) colOrder[ck] = r[o.orderCols];

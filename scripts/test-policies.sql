@@ -1361,3 +1361,73 @@ select pg_temp.check('hardening: a run with no result after an hour is marked fa
   (select count(*) from recruiting.market_checks where error like 'The check did not finish%' and finished_at is not null) >= 1
   and (select count(*) from recruiting.market_checks where summary is null and error is null and ran_at < now() - interval '1 hour') = 0);
 rollback;
+
+-- ----- review follow-ups (20261122000100) and catalog-wide checks -----------------------------
+begin;
+-- The manager view's columns, pinned: a later migration that adds one (notes, tags, answers, a
+-- lead reason) fails here until someone decides managers should see it and updates this list.
+select pg_temp.check('catalog: the manager view has exactly the agreed columns',
+  (select string_agg(column_name, ',' order by ordinal_position) from information_schema.columns
+   where table_schema = 'recruiting' and table_name = 'applications_for_managers')
+  = 'id,submitted_at,name,email,phone,city,state,location,position_text,position_id,position_title,source,referred_by,available_start,has_resume,language,form_label,stage_id,stage_name,stage_is_terminal,stage_since,assigned_to,education,relevant_skills,worked_at_rexius_before,applied_before,employment_history,files,furthest_stage_id,origin,entered_by,entered_at,manual_notes,licence_class,contact_purged_at,files_purged_at,translation,is_lead');
+select pg_temp.check('catalog: every security definer function in recruiting pins its search_path',
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'recruiting' and p.prosecdef
+     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')) = 0);
+select pg_temp.check('catalog: anon can execute no function in recruiting',
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'recruiting' and has_function_privilege('anon', p.oid, 'execute')) = 0);
+select pg_temp.check('catalog: anon has no table or view privilege in recruiting',
+  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'recruiting' and c.relkind in ('r', 'v', 'm')
+     and (has_table_privilege('anon', c.oid, 'select') or has_table_privilege('anon', c.oid, 'insert')
+       or has_table_privilege('anon', c.oid, 'update') or has_table_privilege('anon', c.oid, 'delete'))) = 0);
+select pg_temp.check('catalog: every table in recruiting has row-level security on',
+  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'recruiting' and c.relkind = 'r' and not c.relrowsecurity) = 0);
+
+-- A flagged lead whose application time later moved earlier: other edits still go through.
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.application_status set is_lead = true, lead_reason = 'Strong candidate'
+  where application_id = (select id from recruiting.applications where origin = 'jotform' order by submitted_at desc limit 1);
+reset role;
+select set_config('request.jwt.claims', '', true);
+update recruiting.applications set submitted_at = submitted_at - interval '30 days'
+  where id = (select application_id from recruiting.application_status where is_lead);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update recruiting.application_status set notes = 'Edited after the time moved.' where is_lead;
+select pg_temp.check('leads: an edit goes through after the application time moved earlier, and keep-until follows the cap',
+  (select st.notes = 'Edited after the time moved.'
+      and st.lead_keep_until = ((a.submitted_at at time zone 'America/Los_Angeles')::date + interval '12 months')::date
+   from recruiting.application_status st join recruiting.applications a on a.id = st.application_id where st.is_lead));
+savepoint sp;
+do $$ begin
+  update recruiting.application_status set lead_keep_until = lead_keep_until + 20 where is_lead;
+  raise notice 'UNEXPECTED: keep-until was set past the cap';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp;
+-- The user who set the flag is deleted: the reference clears instead of dangling.
+reset role;
+select set_config('request.jwt.claims', '', true);
+update recruiting.profiles set role = 'manager' where user_id = '22222222-2222-2222-2222-222222222222';
+delete from auth.users where id = '22222222-2222-2222-2222-222222222222';
+select pg_temp.check('leads: deleting the user who flagged a lead clears lead_flagged_by',
+  (select is_lead and lead_flagged_by is null from recruiting.application_status where is_lead));
+
+-- postings.url: a web address or nothing.
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+savepoint sp2;
+do $$ begin
+  insert into recruiting.postings (position_id, channel, url, posted_at)
+    select id, 'other', 'javascript:alert(1)', (now() at time zone 'America/Los_Angeles')::date from recruiting.positions limit 1;
+  raise notice 'UNEXPECTED: a javascript: posting address was accepted';
+exception when check_violation then raise notice 'expected: %', sqlerrm;
+end $$;
+rollback to sp2;
+insert into recruiting.postings (position_id, channel, url, posted_at)
+  select id, 'other', 'https://example.com/jobs/1', (now() at time zone 'America/Los_Angeles')::date from recruiting.positions limit 1;
+select pg_temp.check('postings: a web address is accepted, anything else refused',
+  (select count(*) from recruiting.postings where url = 'https://example.com/jobs/1') = 1
+  and (select count(*) from recruiting.postings where url like 'javascript:%') = 0);
+rollback;

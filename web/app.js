@@ -102,6 +102,32 @@
     return index > 0 ? index + "_" + base : base;
   }
   function ymd(d) { if (!d) return ""; return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  // The Oregon calendar date of an instant, whatever zone this device is set to. Applied-on dates,
+  // the date filter and the opening an application counts towards are Oregon business dates (the
+  // database works them out in America/Los_Angeles), so a laptop on Eastern time must agree.
+  var OREGON_DAY = (function () { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }); } catch (e) { return null; } })();
+  function oregonYmd(d) {
+    if (!d) return "";
+    if (!OREGON_DAY) return ymd(d);
+    var p = {}; OREGON_DAY.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return p.year + "-" + p.month + "-" + p.day;
+  }
+  // A link the tracker will put in an href: web addresses only (plus mailto: and tel: where asked
+  // for). Anything else, a javascript: address above all, comes back empty and is shown as text.
+  function safeHref(url, alsoContact) {
+    var u = String(url || "").trim();
+    if (alsoContact && /^(mailto|tel):/i.test(u)) return u;
+    try { var x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; }
+  }
+  // Rows that open a drawer on click also open from the keyboard: Tab to the row, Enter or Space.
+  function rowOpens(tr, open, label) {
+    tr.tabIndex = 0; if (label) tr.setAttribute("aria-label", label);
+    tr.addEventListener("click", open);
+    tr.addEventListener("keydown", function (e) {
+      if (e.target !== tr || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault(); open();
+    });
+  }
   function fmtDate(d) { if (!d) return "—"; return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }); }
   function fmtDateTime(d) { if (!d) return "—"; return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
   function fmtDay(s) { if (!s) return ""; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (!m) return s; return fmtDate(new Date(+m[1], +m[2] - 1, +m[3])); }
@@ -172,10 +198,19 @@
     if (res.error) { $("loginError").textContent = res.error.message === "Invalid login credentials" ? "Wrong email or password." : res.error.message; return; }
     $("loginPassword").value = "";
   }
+  // Sign out everywhere; if the server cannot be reached, at least forget the session on this
+  // device (a failed sign-out used to leave it in the browser while the sign-in screen showed).
+  // Then reload, so nothing about any applicant is left in the page or its memory.
   async function signOut() {
-    await sb.auth.signOut();
+    var r = null;
+    try { r = await sb.auth.signOut(); } catch (e) { r = { error: e }; }
+    if (r && r.error) { try { await sb.auth.signOut({ scope: "local" }); } catch (e) { /* cleared below */ } }
+    try {
+      Object.keys(localStorage).forEach(function (k) { if (/^sb-.*-auth-token/.test(k)) localStorage.removeItem(k); });
+    } catch (e) { /* storage unavailable */ }
     resetData();
-    show("loginView");
+    location.hash = "";
+    location.reload();
   }
   // "Forgot your password?": Supabase emails a link back to this page with type=recovery.
   async function forgotPassword() {
@@ -459,7 +494,7 @@
     (row.status_history || []).forEach(function (h) { var s = stageById[h.to_stage_id]; if (s && (!s.is_terminal || s.is_hired) && s.sort_order > furthest) furthest = s.sort_order; });
     var manual = row.origin === "manual";
     return finish({
-      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
+      id: row.id, when: when, dateKey: oregonYmd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
       emailNorm: row.email_norm || "", phoneNorm: row.phone_norm || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: pos ? pos.title : "",
       source: row.source || "", sourceDetail: row.source_detail || "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
@@ -478,7 +513,7 @@
     var files = (row.files || []).slice();
     var manual = row.origin === "manual";
     return finish({
-      id: row.id, when: when, dateKey: ymd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
+      id: row.id, when: when, dateKey: oregonYmd(when), name: row.name || "(no name)", email: row.email || "", phone: row.phone || "", contactPurged: !!row.contact_purged_at, filesPurged: !!row.files_purged_at,
       emailNorm: normalizeEmail(row.email) || "", phoneNorm: normalizePhone(row.phone) || "", city: row.city, state: row.state,
       location: row.location || "", positionText: row.position_text || "", positionId: row.position_id, positionTitle: row.position_title || "",
       source: row.source || "", sourceDetail: "", referredBy: row.referred_by || "", availableStart: row.available_start || "",
@@ -637,7 +672,7 @@
 
   // ---------- Filters ----------
   function uniqCounts(key) {
-    var m = {};
+    var m = Object.create(null);   // keys are applicant-typed text: "constructor" must be just a name
     apps.forEach(function (a) { var v = a[key] || "(blank)"; m[v] = (m[v] || 0) + 1; });
     return Object.keys(m).sort(function (a, b) { return m[b] - m[a] || a.localeCompare(b); }).map(function (k) { return { v: k, n: m[k] }; });
   }
@@ -855,7 +890,7 @@
       tdA.appendChild(applicationButton(a));
       a.files.forEach(function (f) { tdA.appendChild(fileButton(f, fileIcon(f))); });
       tr.appendChild(tdA);
-      tr.addEventListener("click", function () { openDrawer(a.id); });
+      rowOpens(tr, function () { openDrawer(a.id); }, "Open " + a.name);
       frag.appendChild(tr);
     });
     tbody.appendChild(frag);
@@ -898,6 +933,7 @@
     if (!v) return;
     dl.appendChild(el("dt", null, k));
     var dd = el("dd");
+    link = link ? safeHref(link, true) : "";
     if (link) { var a = el("a", null, v); a.href = link; if (/^https?:/.test(link)) { a.target = "_blank"; a.rel = "noopener"; } dd.appendChild(a); } else dd.textContent = v;
     dl.appendChild(dd);
   }
@@ -1064,7 +1100,7 @@
     a.files.forEach(function (f) { links.appendChild(fileButton(f, fileIcon(f) + " " + fileLabel(f))); });
     if (!a.files.length) links.appendChild(el("div", "meta", a.filesPurged ? "Files were removed after six months (retention). The original submission in Jotform still has them." : manual ? "No scan or resume attached." : "No resume uploaded."));
     var pl = el("span"); pl.id = "portfolioLink"; links.appendChild(pl);
-    if (a.jotformUrl) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
+    if (safeHref(a.jotformUrl)) { var jl = el("a", null, "Open in Jotform inbox"); jl.href = a.jotformUrl; jl.target = "_blank"; jl.rel = "noopener"; links.appendChild(jl); }
     sec.appendChild(links);
     var dlWrap = el("div", "links");
     var dl2 = el("button", "btn small", "Download application (PDF)"); dl2.type = "button";
@@ -1685,7 +1721,7 @@
   $("moreBtn").addEventListener("click", function () { shown += SHOW_STEP; render(); });
   $("toggleFilters").addEventListener("click", function () { $("filters").classList.toggle("open"); });
   $("dClose").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("linkModal").hidden) $("linkModal").hidden = true; else if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
+  document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("linkModal").hidden) { $("linkModal").hidden = true; if ($("linkText")) $("linkText").value = ""; } else if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
   $("refreshBtn").addEventListener("click", loadApps);
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);
@@ -1698,7 +1734,7 @@
   // ---------- Shared API for the page scripts (positions.js, documents.js, reports.js) ----------
   window.RR = {
     sb: sb, $: $, el: el, BUCKET: BUCKET, SIGNED_URL_SECONDS: SIGNED_URL_SECONDS,
-    fmtDate: fmtDate, fmtDay: fmtDay, fmtDateTime: fmtDateTime, ymd: ymd, relTime: relTime, errText: errText, fileName: fileName,
+    fmtDate: fmtDate, fmtDay: fmtDay, fmtDateTime: fmtDateTime, ymd: ymd, oregonYmd: oregonYmd, safeHref: safeHref, rowOpens: rowOpens, relTime: relTime, errText: errText, fileName: fileName,
     notice: notice, clearNotice: clearNotice, downloadCsv: downloadCsv, csvCell: csvCell,
     registerPage: registerPage, go: go, setHeader: setHeader, showDrawer: showDrawer, closeDrawer: closeDrawer, openApplicant: openApplicant,
     section: section, kv: kv, stageColor: stageColor, stageName: stageName, positionSelect: positionSelect,
