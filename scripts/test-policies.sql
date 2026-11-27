@@ -1262,3 +1262,17 @@ insert into recruiting.contacts (application_id, kind, summary) select id, 'emai
 select pg_temp.check('contacts: without a time, a contact is dated now as before',
   (select abs(extract(epoch from at - logged_at)) < 1 from recruiting.contacts where summary = 'Now email.'));
 rollback;
+-- ----- logins the tracker made (20261120000100) --------------------------------------------
+begin;
+update recruiting.profiles set login_made_by_tracker = false where user_id = '33333333-3333-3333-3333-333333333333';
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+update recruiting.profiles set login_made_by_tracker = true, name = 'Flag Test' where user_id = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check('login_made_by_tracker: an admin session cannot switch it on',
+  (select name = 'Flag Test' and not login_made_by_tracker from recruiting.profiles where user_id = '33333333-3333-3333-3333-333333333333'));
+update recruiting.profiles set login_made_by_tracker = false where user_id = '22222222-2222-2222-2222-222222222222';
+select pg_temp.check('login_made_by_tracker: an admin session cannot switch it off',
+  (select login_made_by_tracker from recruiting.profiles where user_id = '22222222-2222-2222-2222-222222222222'));
+insert into recruiting.profiles (user_id, role, name, login_made_by_tracker) values ('44444444-4444-4444-4444-444444444444', 'manager', 'Flag Insert', true);
+select pg_temp.check('login_made_by_tracker: a profile added from the browser starts false',
+  (select not login_made_by_tracker from recruiting.profiles where user_id = '44444444-4444-4444-4444-444444444444'));
+rollback;

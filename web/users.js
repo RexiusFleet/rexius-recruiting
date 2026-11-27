@@ -107,8 +107,9 @@
       tr.appendChild(tdMfa);
 
       var tdAct = el("td"), acts = el("div", "actions"); tdAct.appendChild(acts);
-      if (!u.is_self) addBtn(acts, "Temporary password", function () { tempPassword(u); });
-      if (!u.accepted) addBtn(acts, "Copy sign-in link", function () { copyLinkFor(u); });
+      // A login the person had for another Rexius app first is not the tracker's to change.
+      if (!u.is_self && u.login_made_by_tracker) addBtn(acts, "Temporary password", function () { tempPassword(u); });
+      if (!u.accepted && u.login_made_by_tracker) addBtn(acts, "Copy sign-in link", function () { copyLinkFor(u); });
       if (!u.accepted && EMAIL) addBtn(acts, "Re-send invite", function () { resend(u); });
       if (!u.is_self && u.authenticators > 0) addBtn(acts, "Reset authenticator", function () { resetMfa(u); });
       if (!u.is_self && !(u.role === "admin" && lastAdmin)) addBtn(acts, "Remove", function () { remove(u); });
@@ -234,7 +235,7 @@
     if (r.data.link) { RR.clearNotice(); showLink(r.data.user, r.data.link); return; }
     RR.notice(r.data.emailed
       ? "Invite sent to " + email + ". The link opens this site; they choose a password."
-      : email + " already had a login for another Rexius app, so they can sign in now with that password. Use Temporary password on their row if they do not know it.");
+      : email + " already had a login for another Rexius app, so they can sign in now with that password. The tracker does not change that login's password; if they have forgotten it, they reset it in the other app.");
   }
 
   // ---------- Sign-in link (no email) ----------

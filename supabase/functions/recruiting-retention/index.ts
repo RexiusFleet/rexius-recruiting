@@ -7,6 +7,13 @@
 // -> pg_net -> this function) does the deletion here with the service role, then clears the
 // application_files rows and stamps applications.files_purged_at.
 //
+// What is removed (2026-11-26): everything in the application's own folder in the bucket
+// (applications/<form id>/<submission id>/ for a Jotform application, manual/<application id>/
+// for a paper one), plus any path its application_files rows name. Working from the rows alone
+// left behind a file whose row was never written (an upload that succeeded before the row insert
+// failed) or whose row was deleted or repointed later. An application is stamped only once its
+// folder lists empty.
+//
 // Request:  POST, JSON body {} (or {"limit": n}), header x-market-check-secret with the value of
 //           MARKET_CHECK_SECRET (the same shared secret the market-check jobs use, so no new
 //           secret is needed). There is no browser route: nothing in the tracker calls this.
@@ -60,8 +67,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const db = client.schema("recruiting");
 
   // Applications whose contact details are gone but whose files are not yet.
+  const forms = await db.from("forms").select("id, jotform_form_id");
+  if (forms.error) { console.error(`[${FUNCTION}] select forms: ${forms.error.message}`); return json(500, { error: "could not list forms" }); }
+  const formIds = new Map((forms.data ?? []).map((f) => [f.id, String(f.jotform_form_id ?? "")]));
+
   const due = await db.from("applications")
-    .select("id")
+    .select("id, origin, form_id, jotform_submission_id")
     .not("contact_purged_at", "is", null)
     .is("files_purged_at", null)
     .order("contact_purged_at")
@@ -73,15 +84,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
   for (const app of due.data ?? []) {
     const files = await db.from("application_files").select("id, storage_path").eq("application_id", app.id);
     if (files.error) { failed.push(`${app.id}: list files: ${files.error.message}`); continue; }
-    const paths = (files.data ?? []).map((f) => f.storage_path).filter((p) => typeof p === "string" && p.length > 0);
+    const rowPaths = (files.data ?? []).map((f) => f.storage_path).filter((p) => typeof p === "string" && p.length > 0);
+
+    const folder = folderOf(app, formIds);
+    if (!folder) { failed.push(`${app.id}: cannot tell which folder holds its files`); continue; }
+    // The folder as Storage lists it, so a file no row knows about goes too.
+    const listed = await filesIn(client.storage, folder);
+    if (listed.error) { failed.push(`${app.id}: list ${folder}: ${listed.error}`); continue; }
+    const paths = [...new Set([...rowPaths, ...listed.paths])];
 
     if (paths.length) {
       const rm = await client.storage.from(BUCKET).remove(paths);
       if (rm.error) { failed.push(`${app.id}: storage: ${rm.error.message}`); continue; }
-      // Anything still listed under the application's folders is a file the rows did not know
-      // about (an upload whose row insert failed); confirm the folders are empty before moving on.
-      const left = await stillThere(client, paths);
-      if (left.length) { failed.push(`${app.id}: ${left.length} object(s) still present after remove`); continue; }
+      // A remove on a missing path is silent, so look again before stamping the application.
+      const left = await filesIn(client.storage, folder);
+      if (left.error) { failed.push(`${app.id}: list ${folder}: ${left.error}`); continue; }
+      if (left.paths.length) { failed.push(`${app.id}: ${left.paths.length} object(s) still present after remove`); continue; }
       filesRemoved += paths.length;
     }
 
@@ -97,14 +115,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
   return json(200, { applications, files_removed: filesRemoved, failed });
 });
 
-/** Paths from the list that Storage still reports after a remove (a remove on a missing path is silent). */
-async function stillThere(client: ReturnType<typeof createClient>, paths: string[]): Promise<string[]> {
-  const folders = new Set(paths.map((p) => p.slice(0, p.lastIndexOf("/"))));
-  const left: string[] = [];
-  for (const folder of folders) {
-    const ls = await client.storage.from(BUCKET).list(folder, { limit: 100 });
-    if (ls.error) { left.push(`${folder}: ${ls.error.message}`); continue; }
-    for (const o of ls.data ?? []) if (paths.includes(`${folder}/${o.name}`)) left.push(`${folder}/${o.name}`);
+/**
+ * The one folder that holds an application's files, or null when its ids are not the plain form
+ * expected. The check matters: an empty or odd id would name a parent folder, and everything
+ * listed in the folder is deleted.
+ */
+function folderOf(app: { id: string; origin: string; form_id: string | null; jotform_submission_id: string | null }, formIds: Map<string, string>): string | null {
+  if (app.origin === "manual") {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(app.id) ? `manual/${app.id}` : null;
   }
-  return left;
+  const form = app.form_id ? formIds.get(app.form_id) ?? "" : "";
+  const submission = app.jotform_submission_id ?? "";
+  return /^\d{6,}$/.test(form) && /^\d{6,}$/.test(submission) ? `applications/${form}/${submission}` : null;
+}
+
+/** Every file directly in a folder (sub-folders, which Storage lists without an id, are left alone). */
+async function filesIn(storage: ReturnType<typeof createClient>["storage"], folder: string): Promise<{ paths: string[]; error?: string }> {
+  const paths: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const ls = await storage.from(BUCKET).list(folder, { limit: 100, offset, sortBy: { column: "name", order: "asc" } });
+    if (ls.error) return { paths, error: ls.error.message };
+    for (const o of ls.data ?? []) if (o.id) paths.push(`${folder}/${o.name}`);
+    if ((ls.data ?? []).length < 100) return { paths };
+  }
 }

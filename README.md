@@ -1590,6 +1590,78 @@ a `.docx` holding Spanish accents and a link (renders, the page cannot read into
 a zip renamed `.docx` (falls back to download). The storage download path was not exercised
 against a live bucket, and no real applicant's Word resume was opened.
 
+## What the review fixes created
+
+A review of the whole project on 2026-11-26 found four things to fix first. Three are code, in
+this change; the fourth needs DNS and a repository owner and is written up as steps.
+
+- **Logins the tracker did not make** (migration `20261120000100_login_made_by_tracker.sql`,
+  `supabase/functions/recruiting-users/`, `web/users.js`). `auth.users` is shared with the other
+  app. **Add user** for an address that already had a login gave it a tracker role, and
+  **Temporary password** then replaced that login's password and showed it to the admin: a
+  working password for an account the tracker never owned, and a changed password in the other
+  app for the person. `profiles.login_made_by_tracker` now records which logins the function
+  created. Only for those does it set a temporary password, make a sign-in link, or delete a login
+  nobody used; the buttons are hidden for everyone else, and the function refuses whatever the
+  page sends. An address whose only login is another app's unaccepted invite is refused until
+  that invite is accepted. A before-trigger keeps the flag from being changed by a signed-in
+  user, admins included; the function (service role) and the SQL Editor can set it.
+  Existing profiles: the migration marks a login as the tracker's when it was created in the ten
+  minutes before its profile. Anyone invited from the dashboard and given a profile by script
+  later stays unmarked, which is the safe side. To mark one by hand, in the SQL Editor:
+  `update recruiting.profiles set login_made_by_tracker = true where user_id = '<id>';`
+  **Reset authenticator** still works for every tracker user: removing a second factor opens
+  nothing without the password.
+- **Reports past 1,000 rows** (`web/reports.js`). The Data API returns at most 1,000 rows per
+  request whatever limit is asked for, and the funnel view has a row per position, source and
+  stage. A report now asks for its exact row count and, when there is more than one request's
+  worth, reads it in pages ordered by every column. A report that still comes up short shows an
+  error instead of a table with rows missing.
+- **File purge by folder** (`supabase/functions/recruiting-retention/`). The six-month purge
+  deleted only the paths in `application_files`, so a file whose row was never written, or was
+  deleted or repointed later, stayed in the bucket. It now removes everything in the
+  application's own folder (`applications/<form id>/<submission id>/` or
+  `manual/<application id>/`) as well, and stamps the application only once the folder lists
+  empty. Applications already stamped are not revisited; see the check below.
+
+Order on the hosted project: `npm run db:migrate`, then deploy both functions
+(`npx supabase functions deploy recruiting-users --no-verify-jwt` and the same for
+`recruiting-retention`), then merge so `web/` publishes. The function reads the new column, so
+the migration goes first.
+
+One-off check for files left behind by earlier purges (SQL Editor; it only reads):
+
+```sql
+select o.name
+from storage.objects o
+where o.bucket_id = 'recruiting-files'
+  and (o.name like 'applications/%' or o.name like 'manual/%')
+  and not exists (select 1 from recruiting.application_files f where f.storage_path = o.name);
+```
+
+Any name it lists is a file no row points at. Delete those in the dashboard under **Storage →
+recruiting-files** (not with SQL, which leaves the bytes behind).
+
+### A web address of its own (not done; needs DNS and a repository owner)
+
+The tracker is served from `https://rexiusfleet.github.io/rexius-recruiting/`. Every GitHub Pages
+site in the organization shares the origin `rexiusfleet.github.io`, and a browser keeps the
+tracker's sign-in session where any page on that origin can read it. A script fault in any of
+those sites, or anyone who can publish to one, could therefore read a signed-in user's session.
+Nothing in this repository can close that; a domain of its own does.
+
+1. Whoever manages DNS for rexius.com adds a CNAME record: `recruiter` → `rexiusfleet.github.io`.
+2. A repository owner sets **Settings → Pages → Custom domain** to `recruiter.rexius.com`, waits
+   for the DNS check, and ticks **Enforce HTTPS**. An organization owner should also verify the
+   domain (**Organization settings → Pages → Add a domain**) so no other account can claim it.
+3. In Supabase, **Authentication → URL Configuration**: add `https://recruiter.rexius.com/` to
+   the redirect URLs and make it the Site URL if the tracker's old address was.
+4. Set the Edge Function secret `RECRUITING_SITE_URLS` to `https://recruiter.rexius.com/` (or
+   change `DEFAULT_SITES` in `recruiting-users`), so sign-in links return to the new address.
+5. Everyone signs in again at the new address; installed home-screen copies are re-added from it.
+
+This step is unnecessary if sign-in moves into the Rexius company app on its own domain first.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the

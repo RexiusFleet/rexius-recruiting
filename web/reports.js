@@ -97,6 +97,33 @@
     open(key);
   }
   // Always re-reads the view: the numbers change with every stage change, offer or spend row.
+  // The Data API returns at most max_rows (1,000) rows per request whatever limit is asked for,
+  // and the funnel view has a row per position, source and stage, so a busy season passes that.
+  // The first request asks for the exact count; when there are more rows than came back, the
+  // whole report is read again in pages, ordered by every column so the pages cannot overlap or
+  // skip (a view has no key of its own). A report that still comes up short is an error, never a
+  // table with rows missing.
+  async function fetchReport(rep) {
+    var q = sb.from(rep.view).select("*", { count: "exact" });
+    if (rep.order) q = q.order(rep.order);
+    var first = await q;
+    if (first.error) return first;
+    var rows = first.data || [], total = first.count;
+    if (total == null || rows.length >= total) return { data: rows };
+    if (!rows.length) return { error: { message: "the report came back empty although it has " + total + " rows" } };
+    var cols = Object.keys(rows[0]), size = rows.length, out = [];
+    while (out.length < total) {
+      var pq = sb.from(rep.view).select("*");
+      cols.forEach(function (c) { pq = pq.order(c); });
+      var page = await pq.range(out.length, out.length + size - 1);
+      if (page.error) return page;
+      if (!page.data || !page.data.length) break;
+      out = out.concat(page.data);
+    }
+    if (out.length < total) return { error: { message: "only " + out.length + " of " + total + " rows could be read" } };
+    return { data: out };
+  }
+
   async function open(key) {
     current = key;
     var rep = REPORTS.filter(function (r) { return r.key === key; })[0];
@@ -104,9 +131,7 @@
     $("reportTitle").textContent = rep.title; $("reportDesc").textContent = rep.desc;
     $("reportCsv").disabled = true; $("reportNote").textContent = "";
     var box = $("reportTable"); box.innerHTML = ""; box.appendChild(el("div", "skel", "Loading…"));
-    var q = sb.from(rep.view).select("*");
-    if (rep.order) q = q.order(rep.order);
-    var r = await q.limit(10000);
+    var r = await fetchReport(rep);
     if (current !== key) return;
     if (r.error) { box.innerHTML = ""; box.appendChild(el("div", "empty", "Could not load the report: " + RR.errText(r.error))); return; }
     var rows = r.data || [];

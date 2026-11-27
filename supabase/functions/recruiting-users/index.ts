@@ -24,10 +24,16 @@
 // switches two-factor sign-in on or off for one person.
 //
 // Scope: only people with a recruiting.profiles row are listed or touched. auth.users is shared
-// with the inventory app on the same project, so this function never lists other logins and
-// never deletes a login: "remove" deletes the tracker profile, which ends access at once
-// (recruiting.current_role() reads the profile on every request), and leaves the login for the
-// other app. The last admin can never be removed or demoted (trigger from migration
+// with the inventory app on the same project, so this function never lists other logins, and
+// "remove" deletes the tracker profile, which ends access at once (recruiting.current_role()
+// reads the profile on every request), and leaves a used login for the other app.
+//
+// Logins the tracker did not make (2026-11-26, migration 20261120000100): giving a role to an
+// address that already has a login must not hand that login to the admin. The profile records
+// whether this function created the login (login_made_by_tracker). Only then does it set a
+// temporary password, make a sign-in link, or delete a login nobody used. An existing login keeps
+// its password, and an address whose only login is another app's unaccepted invite is refused
+// until that invite is accepted. The last admin can never be removed or demoted (trigger from migration
 // 20261115000100, which also covers the SQL Editor and the dashboard).
 //
 // Request:  POST /functions/v1/recruiting-users   JSON body {action, ...}
@@ -128,8 +134,10 @@ function fail(where: string, err: { message?: string } | null | undefined): neve
 interface Profile {
   user_id: string; role: Role; name: string; location: string | null; created_at: string;
   mfa_required: boolean; must_change_password: boolean; temp_password_expires_at: string | null;
+  login_made_by_tracker: boolean;
 }
-const PROFILE_COLS = "user_id, role, name, location, created_at, mfa_required, must_change_password, temp_password_expires_at";
+const PROFILE_COLS = "user_id, role, name, location, created_at, mfa_required, must_change_password, temp_password_expires_at, login_made_by_tracker";
+const NOT_OUR_LOGIN = "This login was not made by the tracker (they had it for another Rexius app first), so the tracker will not change how it signs in. They use the password they already have and reset it where they got it.";
 const TEMP_PASSWORD_DAYS = 7;
 
 /**
@@ -191,6 +199,7 @@ async function describe(admin: SupabaseClient, p: Profile, selfId: string): Prom
     mfa_required: p.mfa_required,
     must_change_password: p.must_change_password,
     temp_password_expires_at: p.temp_password_expires_at,
+    login_made_by_tracker: p.login_made_by_tracker,
     is_self: p.user_id === selfId,
   };
 }
@@ -230,20 +239,23 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
     // They sign in with the password they have; the tracker asks them to set up an
     // authenticator on the first sign-in.
     userId = existing.id;
+  } else if (existing) {
+    // A login nobody has confirmed and that has no tracker profile is another app's pending
+    // invite (the tracker deletes its own unused logins on Remove). Setting a password on it, or
+    // making a sign-in link for it, would hand that account to the admin.
+    throw new Refused(409, `${email} has an invite from another Rexius app that they have not accepted yet. Ask them to accept it first, then add them here.`);
   } else if (byPassword) {
-    // New, or invited before and never accepted: a login with a temporary password, no email.
+    // New: a login with a temporary password, no email.
     password = tempPassword();
-    const r = existing
-      ? await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true })
-      : await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    const r = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     if (r.error || !r.data?.user) fail("make the login", r.error);
     userId = r.data.user.id;
   } else if (byLink) {
-    // New, or invited before and never accepted: a link for the admin to pass on, no email.
+    // New: a link for the admin to pass on, no email.
     const made = await inviteLink(admin, email, redirectTo);
     userId = made.userId; link = made.link;
   } else {
-    // New, or invited before and never accepted: Supabase (re)sends the invite email.
+    // New: Supabase sends the invite email.
     const r = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
     if (r.error || !r.data?.user) fail("send the invite", r.error);
     userId = r.data.user.id;
@@ -253,6 +265,7 @@ async function invite(admin: SupabaseClient, body: Json, selfId: string): Promis
   const ins = await admin.schema("recruiting").from("profiles").insert({
     user_id: userId, role, name, mfa_required: mfaRequired,
     must_change_password: !!password, temp_password_expires_at: password ? tempExpiry() : null,
+    login_made_by_tracker: !existing,
   });
   if (ins.error) {
     // Do not leave a fresh login behind without a profile; an existing one is not ours to delete.
@@ -313,6 +326,7 @@ async function inviteLinkFor(admin: SupabaseClient, body: Json, selfId: string):
   if (u.data.user.email_confirmed_at) {
     throw new Refused(409, "They have already accepted the invite. If they forgot their password, they can use \"Forgot your password?\" on the sign-in screen.");
   }
+  if (!p.login_made_by_tracker) throw new Refused(409, NOT_OUR_LOGIN);
   const made = await inviteLink(admin, u.data.user.email, siteFor(body.redirect_to));
   console.log(`[${FUNCTION}] invite_link by ${selfId}`);
   return { user: await describe(admin, p, selfId), link: made.link };
@@ -323,6 +337,7 @@ async function setTempPassword(admin: SupabaseClient, body: Json, selfId: string
   if (!isUuid(body.user_id)) throw new Refused(400, "Missing user_id.");
   if (body.user_id === selfId) throw new Refused(409, "You cannot give yourself a temporary password. Ask another admin.");
   const p = await profileOf(admin, body.user_id);
+  if (!p.login_made_by_tracker) throw new Refused(409, NOT_OUR_LOGIN);
   const password = tempPassword();
   const r = await admin.auth.admin.updateUserById(p.user_id, { password, email_confirm: true });
   if (r.error) fail("set the temporary password", r.error);
@@ -385,10 +400,10 @@ async function remove(admin: SupabaseClient, body: Json, selfId: string): Promis
   if (r.error) fail("remove the user", r.error);
   // An invite nobody accepted leaves a login that was only ever for the tracker: delete it too, so
   // the old link stops working and the address can be invited again cleanly. A login that has
-  // been used may belong to the other app on this project as well, so it stays.
+  // been used, or that the tracker did not make, may belong to the other app as well, so it stays.
   const u = await admin.auth.admin.getUserById(p.user_id);
   let loginDeleted = false;
-  if (!u.error && u.data?.user && !u.data.user.email_confirmed_at && !u.data.user.last_sign_in_at) {
+  if (p.login_made_by_tracker && !u.error && u.data?.user && !u.data.user.email_confirmed_at && !u.data.user.last_sign_in_at) {
     const d = await admin.auth.admin.deleteUser(p.user_id);
     loginDeleted = !d.error;
     if (d.error) console.error(`[${FUNCTION}] remove: could not delete the unused login: ${d.error.message}`);
