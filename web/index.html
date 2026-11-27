@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- What this page may load and talk to (GitHub Pages cannot send the header, so it is here).
+     Scripts: this site's own files and the pinned libraries on jsDelivr; no inline script except
+     the Word-preview frame's, named by hash (web/file-viewer.js; `npm run csp:check`).
+     Connections: this site, the hosted Supabase project, and the local stack for development.
+     A different Supabase project needs its address added to connect-src. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net 'sha256-9paBlrHPDcak3PKNMQwwKF3+OrOt2EigGUU9qjnDAjs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: blob: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://hibjqcgitqtgmkurghlw.supabase.co http://127.0.0.1:54321 http://localhost:54321; frame-src blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
 <title>Rexius Recruiter</title>
 <meta name="app-version" content="dev"><!-- set at deploy by scripts/pages/stamp-version.sh; web/update-check.js -->
 <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
@@ -11,11 +17,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <meta name="color-scheme" content="light dark">
-<script>
-  // Theme before first paint (theme.js wires the toggle). "light" or "dark" pins it; anything else follows the system.
-  (function () { var t = null; try { t = localStorage.getItem("rr.theme"); } catch (e) {}
-    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); })();
-</script>
+<script src="theme-early.js"></script><!-- theme before first paint; a file because the policy above allows no inline script -->
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -450,8 +452,9 @@
 <button class="btn theme-btn theme-corner" type="button" data-theme-toggle aria-label="Theme" title="Theme"></button>
 
 <script src="theme.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@3.0.3/dist/jspdf.umd.min.js"></script>
+<!-- Exact versions with their SHA-384, so a CDN copy that differs from the published package does not run. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 <script src="summary.js"></script>

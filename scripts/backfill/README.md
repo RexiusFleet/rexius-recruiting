@@ -47,7 +47,7 @@ npm run backfill -- --refresh                       # re-clean rows already impo
 | `--dry-run` | No writes to the database or Storage, no downloads |
 | `--form <id>` | Only this Jotform form ID (repeat for several). Default: every active row in `recruiting.forms` |
 | `--limit <n>` | At most n submissions per form, newest first (the order Jotform lists them) |
-| `--refresh` | Update rows that already exist and re-upload their files. Status, notes and history are untouched |
+| `--refresh` | Update rows that already exist and re-upload their files. Status, notes and history are untouched, a position link the row already has is kept, and a row whose files retention removed is not marked as having a resume again |
 | `--skip-files` | Rows only; no file downloads or uploads |
 | `--sample` | Print one cleaned row per form and stop (implies `--dry-run`); useful for checking a form's mapping |
 | `--since <YYYY-MM-DD>` | Import only submissions made on or after this date, by the calendar date in Oregon (America/Los_Angeles), whatever `JOTFORM_TIMEZONE` says. Default `2026-10-01`; older submissions are counted under "old" in the report and never written, with or without `--refresh` |

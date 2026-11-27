@@ -60,15 +60,19 @@
       '.docx-wrapper{background:#e9ebe7!important;padding:16px!important}.docx-wrapper>section.docx{box-shadow:0 1px 4px rgba(0,0,0,.2)!important;margin-bottom:16px!important}a{pointer-events:none}</style>' +
       '</head><body><div id="wait">Preparing the preview…</div><div id="doc"></div>' +
       scriptTag(JSZIP, n) + scriptTag(DOCX, n) +
-      '<script nonce="' + n + '">' +
+      '<script nonce="' + n + '">' + FRAME_SCRIPT + '<\/script></body></html>';
+  }
+  // The frame's own script. A srcdoc frame also answers to this page's Content-Security-Policy
+  // (index.html), which names this exact text by its SHA-256. Change a character here and that
+  // hash must change with it (npm run csp:check prints the right one), or the Word preview
+  // falls back to download-only.
+  var FRAME_SCRIPT =
       'addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("a"))e.preventDefault();},true);' +
       'function say(kind,message){parent.postMessage({rrDocx:kind,message:message||""},"*");}' +
       'addEventListener("message",function(e){if(e.source!==parent||!e.data||!e.data.rrDocxBytes)return;' +
       'docx.renderAsync(e.data.rrDocxBytes,document.getElementById("doc"),null,{useBase64URL:true,renderAltChunks:false,experimental:false})' +
       '.then(function(){document.getElementById("wait").remove();say("done");},function(err){say("error",String((err&&err.message)||err));});});' +
-      'say(window.docx&&window.JSZip?"ready":"error","the preview library did not load");' +
-      '<\/script></body></html>';
-  }
+      'say(window.docx&&window.JSZip?"ready":"error","the preview library did not load");';
   // Shows a .docx in the sandboxed frame; any failure (library blocked, not really a Word file,
   // a document the library cannot read, no answer in time) ends in the download-only message.
   function showDocx(blob, mine) {

@@ -21,11 +21,12 @@
     "careers:stub": "node scripts/careers-sync/stub-site.mjs",
     "careers:dry-run": "node scripts/careers-sync/dry-run.mjs",
     "purge:unmatched": "node scripts/purge-unmatched.mjs",
+    "csp:check": "node scripts/csp/check.mjs",
     "pdf:samples": "node scripts/pdf-samples/render.mjs",
     "jotform:spanish-form": "node scripts/jotform/clone-spanish-form.mjs"
   },
   "devDependencies": {
-    "jspdf": "3.0.3",
+    "jspdf": "4.2.1",
     "pg": "8.23.1"
   },
   "dependencies": {
