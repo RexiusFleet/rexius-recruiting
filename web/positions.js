@@ -1083,6 +1083,21 @@
     return (lo != null && hi != null && Number(lo) !== Number(hi) ? money(lo) + "–" + money(hi) : money(lo != null ? lo : hi)) + unitSuffix(unit);
   }
   function extLink(url, text) { var a = el("a", null, text || url); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
+  // A market or national check row's link. The function settles each address against what the
+  // search returned and stores x.link: "posting" opens that one job, so the label itself is the
+  // link; "list" (a search or careers page listing several jobs) and "unverified" (not among
+  // the search results) keep the label as plain text and say what the link is instead, so a
+  // click never promises a posting it cannot open. Runs from before 2026-11-26 have no x.link.
+  var LINK_NOTES = {
+    list: ["list page", "A search or careers page that lists several jobs, not this posting's own page. The search returned no page for the single posting."],
+    unverified: ["unconfirmed link", "This address was not among the pages the search returned, so it may not open the posting."]
+  };
+  function postLink(parent, x, label, url) {
+    url = url === undefined ? x.url : url;
+    var note = url ? LINK_NOTES[x.link] : null;
+    if (!url || note) parent.appendChild(document.createTextNode(label)); else parent.appendChild(extLink(url, label));
+    if (note) { var m = el("span", "meta", " · "); var a = extLink(url, note[0]); a.title = note[1]; m.appendChild(a); parent.appendChild(m); }
+  }
 
   async function renderMarket(sec, p) {
     var st = RR.state();
@@ -1286,7 +1301,7 @@
       var tbody = el("tbody");
       pr.forEach(function (r) {
         var tr = el("tr");
-        var td = el("td"); if (r.url) td.appendChild(extLink(r.url, r.employer || "—")); else td.textContent = r.employer || "—"; tr.appendChild(td);
+        var td = el("td"); postLink(td, r, r.employer || "—"); tr.appendChild(td);
         tr.appendChild(el("td", null, r.title || "—"));
         tr.appendChild(el("td", "num", rangeText(r.min, r.max, r.unit)));
         tbody.appendChild(tr);
@@ -1301,7 +1316,7 @@
       po.forEach(function (x) {
         var li = el("li");
         var label = (x.employer || "Unknown") + (x.title ? " · " + x.title : "");
-        if (x.url) li.appendChild(extLink(x.url, label)); else li.appendChild(document.createTextNode(label));
+        postLink(li, x, label);
         var bits = [x.pay_text, x.location, x.posted ? "posted " + RR.fmtDay(x.posted) : null].filter(Boolean);
         if (bits.length) li.appendChild(el("span", "meta", " · " + bits.join(" · ")));
         if ((x.benefits || []).length) { var bl = el("div", "meta", "Benefits: " + x.benefits.map(RR.marketReport ? RR.marketReport.benefitLabel : String).join(", ")); if (x.benefits_text) bl.title = x.benefits_text; li.appendChild(bl); }
@@ -1467,7 +1482,7 @@
       adj.forEach(function (r) {
         var src = (c.pay_samples || []).filter(function (s) { return s.employer === r.employer && s.metro === r.metro; })[0];
         var tr = el("tr");
-        var td = el("td"); if (src && src.url) td.appendChild(extLink(src.url, r.employer || "—")); else td.textContent = r.employer || "—"; if (r.title) td.appendChild(el("small", null, r.title)); tr.appendChild(td);
+        var td = el("td"); postLink(td, src || {}, r.employer || "—"); if (r.title) td.appendChild(el("small", null, r.title)); tr.appendChild(td);
         tr.appendChild(el("td", null, r.metro || "—"));
         tr.appendChild(el("td", "num", r.index == null ? "—" : String(r.index)));
         tr.appendChild(el("td", "num", rangeText(r.min, r.max, r.unit)));
@@ -1477,7 +1492,7 @@
       tbl.appendChild(tbody); wrap.appendChild(tbl);
     } else if ((c.pay_samples || []).length) {
       var ul = el("ul", "log");
-      c.pay_samples.forEach(function (s) { var li = el("li"); var label = (s.employer || "Unknown") + (s.title ? " · " + s.title : ""); if (s.url) li.appendChild(extLink(s.url, label)); else li.appendChild(document.createTextNode(label)); li.appendChild(el("span", "meta", " · " + rangeText(s.min, s.max, s.unit) + (s.metro ? " · " + s.metro : ""))); ul.appendChild(li); });
+      c.pay_samples.forEach(function (s) { var li = el("li"); var label = (s.employer || "Unknown") + (s.title ? " · " + s.title : ""); postLink(li, s, label); li.appendChild(el("span", "meta", " · " + rangeText(s.min, s.max, s.unit) + (s.metro ? " · " + s.metro : ""))); ul.appendChild(li); });
       wrap.appendChild(ul);
     }
     var col = c.cost_of_living;

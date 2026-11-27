@@ -39,6 +39,7 @@
 
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
+import { settleLinks } from "../_shared/market-links.mjs";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -46,6 +47,7 @@ const FUNCTION = "recruiting-national-check";
 const DEFAULT_MODEL = "claude-opus-5-5";
 const DEFAULT_MAX_SEARCHES = 15;
 const MAX_CONTINUATIONS = 4;
+const MAX_SOURCES = 40; // stored per run; every search result is still used to check links
 const RUNNING_WINDOW_MS = 15 * 60 * 1000;
 const HOURS_PER_YEAR = 2080;
 
@@ -81,7 +83,7 @@ interface Position {
   pay_min: number | string | null; pay_max: number | string | null; pay_unit: Unit | null;
   status: string; description_doc_id: string | null; national_max_searches: number | null;
 }
-interface Sample { employer: string; title: string; metro: string; state: string | null; min: number | null; max: number | null; unit: Unit; url: string | null }
+interface Sample { employer: string; title: string; metro: string; state: string | null; min: number | null; max: number | null; unit: Unit; url: string | null; url_kind?: string | null; link?: "posting" | "list" | "unverified" | null }
 interface Bls { occupation: string; soc_code: string | null; unit: Unit; national_median: number | null; p25: number | null; p75: number | null; area_name: string | null; area_median: number | null; year: string | null; source_url: string | null }
 interface Col { source_name: string; source_url: string | null; year: string | null; rexius_metro: string; rexius_index: number | null; metros: { metro: string; index: number | null }[]; notes: string | null }
 interface Source { url: string; title: string | null; age: string | null }
@@ -176,7 +178,7 @@ async function runCheck(db: Db, apiKey: string, model: string, checkId: string, 
 
   async function save(patch: Json, done: boolean): Promise<void> {
     const up = await db.from("national_checks").update({
-      ...patch, sources: [...sources.values()],
+      ...patch, sources: [...sources.values()].slice(0, MAX_SOURCES),
       input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, searches: usage.searches, model,
       ...(done ? { finished_at: new Date().toISOString() } : {}),
     }).eq("id", checkId);
@@ -204,7 +206,9 @@ async function runCheck(db: Db, apiKey: string, model: string, checkId: string, 
     const text = await ask(client, model, SYSTEM_PASS1, pass1Prompt(position, area.label, description), pass1Searches, usage, sources, area.city);
     const parsed = parsePass1(text);
     if (!parsed) { await save({ error: "Claude's first-pass answer was not the expected JSON; nothing stored." }, true); return; }
-    samples = parsed.samples; bls = parsed.bls; summary1 = parsed.summary;
+    // Each sample's address is settled against what the search returned (../_shared/market-links.mjs):
+    // `link` says whether it opens that posting, a list page, or was not among the results.
+    samples = settleLinks(parsed.samples, [...sources.keys()]) as Sample[]; bls = parsed.bls; summary1 = parsed.summary;
     await save({ pass: 1, summary: summary1, pay_samples: samples, bls }, false);
     console.log(`[${FUNCTION}] ${tag}: pass 1 done, ${samples.length} sample(s), BLS ${bls ? "found" : "not found"}, ${usage.searches} search(es)`);
   } catch (err) {
@@ -271,7 +275,7 @@ function collect(r: Anthropic.Message, usage: Usage, sources: Map<string, Source
   for (const block of r.content) {
     if (block.type !== "web_search_tool_result" || !Array.isArray(block.content)) continue;
     for (const hit of block.content) {
-      if (hit.type !== "web_search_result" || !hit.url || sources.has(hit.url) || sources.size >= 40) continue;
+      if (hit.type !== "web_search_result" || !hit.url || sources.has(hit.url)) continue;
       sources.set(hit.url, { url: hit.url, title: hit.title ?? null, age: hit.page_age ?? null });
     }
   }
@@ -290,10 +294,10 @@ This pass looks at the whole United States. Use the web_search tool to find (a) 
 JSON shape:
 {
   "summary": "3 to 5 plain sentences: how many postings, in which parts of the country, the pay range across them, what BLS shows. End with: a sample from search results, not a complete count.",
-  "samples": [{"employer": "name", "title": "title as posted", "metro": "the metropolitan area as City, ST (for example Denver, CO; a suburb goes under its metro's main city)", "state": "ST", "min": 20, "max": 26, "unit": "hour", "url": "https://..."}],
+  "samples": [{"employer": "name", "title": "title as posted", "metro": "the metropolitan area as City, ST (for example Denver, CO; a suburb goes under its metro's main city)", "state": "ST", "min": 20, "max": 26, "unit": "hour", "url": "https://... or null", "url_kind": "posting"}],
   "bls": {"occupation": "BLS occupation title", "soc_code": "37-3011", "unit": "hour", "national_median": 18.5, "p25": 15.9, "p75": 22.1, "area_name": "Eugene-Springfield, OR", "area_median": 19.2, "year": "2025", "source_url": "https://www.bls.gov/oes/..."}
 }
-"unit" is "hour" or "year", as the source used; convert nothing. Up to 12 samples, each from a different employer where possible, only those with a pay figure. "bls" is null if you did not find the page; inside it any figure you did not find is null.`;
+"unit" is "hour" or "year", as the source used; convert nothing. Someone will click each sample's "url" expecting to land on that one job: copy the address character for character from a search result, never build, shorten or guess one, and prefer the page of the single posting (the employer's own page for the job, or a job board's page for that one job). If all you have is a search or list page that shows several jobs, give its address and set "url_kind" to "list"; with no address from a search result, "url" is null. Up to 12 samples, each from a different employer where possible, only those with a pay figure. "bls" is null if you did not find the page; inside it any figure you did not find is null.`;
 
 const SYSTEM_PASS2 = `${COMMON}
 
@@ -365,7 +369,7 @@ function parsePass1(text: string): { summary: string; samples: Sample[]; bls: Bl
   if (!summary) return null;
   const samples: Sample[] = (Array.isArray(o.samples) ? o.samples : []).slice(0, 12).map((r: Json): Sample => ({
     employer: str(r?.employer) ?? "Unknown", title: str(r?.title) ?? "", metro: str(r?.metro, 80) ?? "", state: str(r?.state, 2),
-    min: num(r?.min), max: num(r?.max), unit: unitOf(r?.unit), url: url(r?.url),
+    min: num(r?.min), max: num(r?.max), unit: unitOf(r?.unit), url: url(r?.url), url_kind: r?.url_kind === "list" ? "list" : null,
   })).filter((s) => s.metro && (s.min != null || s.max != null));
   let bls: Bls | null = null;
   const b = o.bls as Json | null;

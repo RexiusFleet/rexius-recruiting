@@ -68,7 +68,7 @@ export const marketCheck = {
     { employer: "Northwest Mulch Co.", title: "Mulch Blower Operator / Delivery Driver", min: 24, max: 29, unit: "hour", url: "https://www.ziprecruiter.com/c/nwmulch/job/3" },
     { employer: "Evergreen Grounds Management", title: "Bark Dust Blower Truck Driver", min: 29, max: 34, unit: "hour", url: "https://evergreengm.example.com/careers/4" },
     { employer: "Columbia Soil Products", title: "Blower Truck Operator - Seasonal", min: 27, max: 31, unit: "hour", url: "https://www.indeed.com/viewjob?jk=5" },
-    { employer: "Not named in search result", title: "Bark Blower Driver (Portland, OR)", min: 32, max: 40, unit: "hour", url: "https://www.ziprecruiter.com/Jobs/Bark-Blower/-in-Portland,OR" }
+    { employer: "Not named in search result", title: "Bark Blower Driver (Portland, OR)", min: 32, max: 40, unit: "hour", url: "https://www.ziprecruiter.com/Jobs/Bark-Blower/-in-Portland,OR", link: "list" }
   ],
   postings: [
     { employer: "Pacific Bark & Soil", title: "Bark Blower Truck Driver (CDL B)", pay_text: "$30–$36/hr + $1,000 signing bonus", location: "Tualatin, OR", posted: "2026-10-21", url: "https://www.indeed.com/viewjob?jk=1" },
@@ -78,8 +78,8 @@ export const marketCheck = {
     { employer: "Columbia Soil Products", title: "Blower Truck Operator - Seasonal", pay_text: "$27–$31/hr", location: "Wilsonville, OR", posted: null, url: "https://www.indeed.com/viewjob?jk=5" },
     { employer: "Portland Parks & Recreation", title: "Utility Worker II - Grounds (Blower Truck)", pay_text: null, location: "Portland, OR", posted: "2026-10-09", url: "https://www.governmentjobs.com/careers/portlandor/jobs/6" },
     { employer: "Rose City Landscaping", title: "Blower Truck Driver", pay_text: null, location: "Gresham, OR", posted: "2026-10-25", url: "https://www.indeed.com/viewjob?jk=7" },
-    { employer: "Not named in search result", title: "Bark Blower Driver", pay_text: "$32–$40/hr", location: "Portland, OR", posted: null, url: "https://www.ziprecruiter.com/Jobs/Bark-Blower/-in-Portland,OR" },
-    { employer: "Salem Bark & Gravel", title: "Blower Truck Operator & Yard Hand", pay_text: null, location: "Salem, OR", posted: "2026-10-12", url: "https://www.craigslist.org/pdx/lab/8" }
+    { employer: "Not named in search result", title: "Bark Blower Driver", pay_text: "$32–$40/hr", location: "Portland, OR", posted: null, url: "https://www.ziprecruiter.com/Jobs/Bark-Blower/-in-Portland,OR", link: "list" },
+    { employer: "Salem Bark & Gravel", title: "Blower Truck Operator & Yard Hand", pay_text: null, location: "Salem, OR", posted: "2026-10-12", url: "https://www.craigslist.org/pdx/lab/8", link: "unverified" }
   ],
   sources: [
     src("Blower Truck Operator Jobs, Employment in Portland, OR | Indeed", "https://www.indeed.com/q-blower-truck-operator-l-portland,-or-jobs.html"),

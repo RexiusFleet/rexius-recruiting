@@ -100,7 +100,7 @@
     out.push("", m.summary, "");
     if (m.ranges.length) {
       out.push("Pay others advertise");
-      m.ranges.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + ": " + rangeText(r.min, r.max, r.unit) + (r.url ? " (" + r.url + ")" : "")); });
+      m.ranges.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + ": " + rangeText(r.min, r.max, r.unit) + (r.url ? " (" + r.url + ")" + linkTag(r) : "")); });
       out.push("");
     }
     if (m.benefits) {
@@ -113,7 +113,7 @@
       out.push("Who else is hiring");
       m.postings.forEach(function (p) {
         var bits = [p.pay_text, p.location, p.posted ? "posted " + fmtDay(p.posted) : null].filter(Boolean);
-        out.push("- " + (p.employer || "Unknown") + (p.title ? ", " + clean(p.title) : "") + (bits.length ? " (" + bits.join(", ") + ")" : "") + (p.url ? " " + p.url : ""));
+        out.push("- " + (p.employer || "Unknown") + (p.title ? ", " + clean(p.title) : "") + (bits.length ? " (" + bits.join(", ") + ")" : "") + (p.url ? " " + p.url + linkTag(p) : ""));
       });
       out.push("");
     }
@@ -124,6 +124,14 @@
 
   // ---------- PDF ----------
   function linkCell(textValue, url, style) { return { text: textValue, link: url || null, style: style }; }
+  // x.link (set by the function): "posting" opens that one job; "list" is a page listing several
+  // jobs and "unverified" was not among the search results. Those two are marked, never passed
+  // off as the posting. Runs from before 2026-11-26 have no x.link and are left as they were.
+  function linkTag(x) { return !x || !x.url ? "" : x.link === "list" ? " [list page, not the single posting]" : x.link === "unverified" ? " [link not confirmed by the search]" : ""; }
+  function marked(x) { return !!(x && x.url && (x.link === "list" || x.link === "unverified")); }
+  function postCell(x, url) { var y = { url: url === undefined ? (x && x.url) : url, link: x && x.link }; return linkCell(((x && x.employer) || "Unknown") + (marked(y) ? " *" : ""), y.url, "semibold"); }
+  var LINKS_LINE = "Employer names in the tables above link to the posting.";
+  var MARKED_LINE = " A name marked * links to a page that lists several jobs, or to an address the search could not confirm, not to the single posting.";
 
   async function build(position, check, preparedBy) {
     var kit = K();
@@ -141,7 +149,7 @@
     if (m.ranges.length) {
       w.heading("Pay others advertise", 50);
       w.table([{ label: "Employer", width: 30 }, { label: "Title as posted", width: 52 }, { label: "Pay", width: 18, align: "right" }],
-        m.ranges.map(function (r) { return [linkCell(r.employer || "Unknown", r.url, "semibold"), clean(r.title), rangeText(r.min, r.max, r.unit)]; }));
+        m.ranges.map(function (r) { return [postCell(r), clean(r.title), rangeText(r.min, r.max, r.unit)]; }));
     }
     if (m.benefits) {
       w.heading("Benefits others list", 50);
@@ -154,11 +162,11 @@
     if (m.postings.length) {
       w.heading("Who else is hiring", 50);
       w.table([{ label: "Employer", width: 25 }, { label: "Title as posted", width: 32 }, { label: "Location", width: 16 }, { label: "Pay shown", width: 17 }, { label: "Posted", width: 15, align: "right" }],
-        m.postings.map(function (p) { return [linkCell(p.employer || "Unknown", p.url, "semibold"), clean(p.title), p.location || "", p.pay_text || "—", p.posted ? fmtDay(p.posted) : "—"]; }), { size: 9 });
+        m.postings.map(function (p) { return [postCell(p), clean(p.title), p.location || "", p.pay_text || "—", p.posted ? fmtDay(p.posted) : "—"]; }), { size: 9 });
     }
     if (m.sources.length) {
       w.heading("Sources", 40);
-      w.paragraph("Pages the web search returned, in the order found. Employer names in the tables above link to the posting.", { size: 8.5, color: kit.C.mute, after: 8 });
+      w.paragraph("Pages the web search returned, in the order found. " + LINKS_LINE + (m.ranges.concat(m.postings).some(marked) ? MARKED_LINE : ""), { size: 8.5, color: kit.C.mute, after: 8 });
       w.sources(m.sources);
     }
     w.note(m.caveat);
@@ -226,7 +234,8 @@
       byline: (preparedBy ? "Prepared by " + preparedBy + " · " : "") + "Rexius Recruiter · " + today()
     };
   }
-  function urlFor(m, r) { var s = m.samples.filter(function (x) { return x.employer === r.employer && x.metro === r.metro; })[0]; return s && s.url ? s.url : null; }
+  function sampleFor(m, r) { return m.samples.filter(function (x) { return x.employer === r.employer && x.metro === r.metro; })[0] || null; }
+  function urlFor(m, r) { var s = sampleFor(m, r); return s && s.url ? s.url : null; }
   function nationalText(position, check, preparedBy) {
     var m = nationalModel(position, check, preparedBy);
     var out = [m.title, "National market check · " + m.subtitle, ""];
@@ -235,11 +244,11 @@
     out.push("", m.summary, "");
     if (m.rows.length) {
       out.push("Postings across the country, scaled to " + position.location);
-      m.rows.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + " (" + r.metro + (r.index != null ? ", index " + r.index : "") + "): " + rangeText(r.min, r.max, r.unit) + " as posted" + (r.adjusted_min != null ? ", " + rangeText(r.adjusted_min, r.adjusted_max, r.unit) + " adjusted" : "") + (urlFor(m, r) ? " " + urlFor(m, r) : "")); });
+      m.rows.forEach(function (r) { out.push("- " + (r.employer || "Unknown") + (r.title ? ", " + clean(r.title) : "") + " (" + r.metro + (r.index != null ? ", index " + r.index : "") + "): " + rangeText(r.min, r.max, r.unit) + " as posted" + (r.adjusted_min != null ? ", " + rangeText(r.adjusted_min, r.adjusted_max, r.unit) + " adjusted" : "") + (urlFor(m, r) ? " " + urlFor(m, r) + linkTag(sampleFor(m, r)) : "")); });
       out.push("");
     } else if (m.samples.length) {
       out.push("Postings across the country");
-      m.samples.forEach(function (s) { out.push("- " + (s.employer || "Unknown") + (s.title ? ", " + clean(s.title) : "") + " (" + s.metro + "): " + rangeText(s.min, s.max, s.unit) + (s.url ? " " + s.url : "")); });
+      m.samples.forEach(function (s) { out.push("- " + (s.employer || "Unknown") + (s.title ? ", " + clean(s.title) : "") + " (" + s.metro + "): " + rangeText(s.min, s.max, s.unit) + (s.url ? " " + s.url + linkTag(s) : "")); });
       out.push("");
     }
     if (m.sources.length) { out.push("Sources"); m.sources.forEach(function (s) { out.push("- " + (clean(s.title) ? clean(s.title) + " " : "") + s.url); }); out.push(""); }
@@ -260,11 +269,11 @@
     if (m.rows.length) {
       w.heading("Postings across the country, scaled to " + position.location, 50);
       w.table([{ label: "Employer", width: 28 }, { label: "Metro", width: 22 }, { label: "Index", width: 9, align: "right" }, { label: "As posted", width: 20, align: "right" }, { label: "Adjusted", width: 21, align: "right" }],
-        m.rows.map(function (r) { return [linkCell(r.employer || "Unknown", urlFor(m, r), "semibold"), r.metro || "", r.index == null ? "—" : String(r.index), rangeText(r.min, r.max, r.unit), r.adjusted_min == null ? "—" : { text: rangeText(r.adjusted_min, r.adjusted_max, r.unit), style: "semibold" }]; }));
+        m.rows.map(function (r) { return [postCell({ employer: r.employer, link: (sampleFor(m, r) || {}).link }, urlFor(m, r)), r.metro || "", r.index == null ? "—" : String(r.index), rangeText(r.min, r.max, r.unit), r.adjusted_min == null ? "—" : { text: rangeText(r.adjusted_min, r.adjusted_max, r.unit), style: "semibold" }]; }));
     } else if (m.samples.length) {
       w.heading("Postings across the country", 50);
       w.table([{ label: "Employer", width: 30 }, { label: "Title as posted", width: 34 }, { label: "Metro", width: 20 }, { label: "Pay", width: 16, align: "right" }],
-        m.samples.map(function (s) { return [linkCell(s.employer || "Unknown", s.url, "semibold"), clean(s.title), s.metro || "", rangeText(s.min, s.max, s.unit)]; }));
+        m.samples.map(function (s) { return [postCell(s), clean(s.title), s.metro || "", rangeText(s.min, s.max, s.unit)]; }));
     }
     if (m.method.length) {
       w.heading("Method", 40);
@@ -272,7 +281,7 @@
     }
     if (m.sources.length) {
       w.heading("Sources", 40);
-      w.paragraph("Pages the web search returned, in the order found. Employer names in the table above link to the posting.", { size: 8.5, color: kit.C.mute, after: 8 });
+      w.paragraph("Pages the web search returned, in the order found. Employer names in the table above link to the posting." + (m.samples.some(marked) ? MARKED_LINE : ""), { size: 8.5, color: kit.C.mute, after: 8 });
       w.sources(m.sources);
     }
     w.note(m.caveat);
