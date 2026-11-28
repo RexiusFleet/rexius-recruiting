@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -79,5 +79,24 @@ jobs:
         with:
           path: web
 
+      # The publish step asks GitHub for the package the step above just uploaded. Now and then
+      # GitHub has not listed it yet and answers "No artifacts named github-pages were found",
+      # which failed the run (2026-11-19, and twice on 2026-11-27) although nothing was wrong
+      # with the site. So: a short wait first, and if the publish still fails, a longer wait and
+      # one more try. The run fails, and sends its email, only when the second try fails too.
+      - name: Give GitHub a moment to list the uploaded site
+        run: sleep 15
+
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+
+      - name: Wait before the second try
+        if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::warning::The first publish attempt failed; trying once more in 60 seconds."
+          sleep 60
+
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
