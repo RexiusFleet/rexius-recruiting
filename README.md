@@ -5,10 +5,9 @@ job application from three Jotform forms, tracks each one through the pipeline, 
 postings, and channel spend in one place, and reports on recruiting. `CLAUDE.md` is the full
 brief; this file is the operator's guide.
 
-Backend: one Supabase project shared with the inventory app, called `am-projects` throughout
-these docs. In the dashboard it is currently named **Apparel** (ref `hibjqcgitqtgmkurghlw`);
-the rename to am-projects waits on an organization Administrator and changes nothing that
-runs, since every tool here connects by ref, not by name. This app owns the
+Backend: one Supabase project shared with the inventory app, named **AM Projects** in the
+dashboard (ref `hibjqcgitqtgmkurghlw`; it was named Apparel until November 2026). The name is
+only a label: every tool here connects by ref, not by name. This app owns the
 Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally during development and
 published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (step 13).
 
@@ -264,7 +263,7 @@ Hosting and invites. Nothing changes in the database.
 - `.github/workflows/pages.yml`: on every push to `main` that touches `web/`, uploads `web/` to
   GitHub Pages as-is (no build), except that it overwrites `web/config.js` with the hosted
   project's URL and publishable key, read from the repository variables `SUPABASE_URL` (optional,
-  defaults to the am-projects URL) and `SUPABASE_PUBLISHABLE_KEY`. The committed `config.js` keeps
+  defaults to the AM Projects URL) and `SUPABASE_PUBLISHABLE_KEY`. The committed `config.js` keeps
   the local Docker stack's values, so `npx serve web` still works unchanged. The workflow refuses
   a key that looks like a secret key. Both deployed values are public by design: the key only
   identifies the project, and `anon` has no access to schema `recruiting` (step 5's curl check).
@@ -1832,7 +1831,7 @@ until they are summarized again.
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
-migration runner needs one `npm install`), and access to the `am-projects` project (currently named Apparel) in the Supabase dashboard; steps 1, 5 and 6
+migration runner needs one `npm install`), and access to the `AM Projects` project in the Supabase dashboard; steps 1, 5 and 6
 need the Administrator or Owner role in the Supabase organization, as does setting the Edge Function secrets in step 14; the rest work as a Developer. Run every command from
 the root of this repo.
 
@@ -2389,7 +2388,7 @@ translation shown, no summary, no translator).
 ## Two repos, one project
 
 The inventory app is its own project in its own repository and environment; the only thing it
-shares with this one is the `am-projects` Supabase project. Nothing in the inventory repo needs
+shares with this one is the `AM Projects` Supabase project. Nothing in the inventory repo needs
 to know this repo exists. Three things make that hold.
 
 **Schemas.** This app creates objects only in schema `recruiting`, plus its own Storage bucket

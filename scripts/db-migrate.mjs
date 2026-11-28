@@ -4,7 +4,7 @@
 //
 // Why not `supabase db push`: the Supabase CLI keeps one migration history per project
 // (supabase_migrations.schema_migrations) and refuses to push while that table lists a version
-// it cannot find locally. The inventory app shares the am-projects project from its own,
+// it cannot find locally. The inventory app shares the AM Projects project from its own,
 // unrelated repository. If both repos used `db push`, each would break the other's. This runner
 // never touches the CLI's history table, so the inventory app can use the CLI however it likes
 // and never needs to know this repo exists.

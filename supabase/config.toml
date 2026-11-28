@@ -1,6 +1,6 @@
 # Supabase CLI config for the Rexius Recruiter app.
 #
-# The hosted project is `am-projects`, which this app shares with an unrelated inventory app.
+# The hosted project is `AM Projects` (ref hibjqcgitqtgmkurghlw), which this app shares with an unrelated inventory app.
 # Everything this app owns lives in the Postgres schema `recruiting`; see README.md and
 # docs/database-conventions.md. The hosted project is attached with `npx supabase link`, not by
 # anything in this file. Most settings below only affect the local Docker stack started by
