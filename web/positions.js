@@ -620,6 +620,11 @@
       // National market check with cost-of-living adjustment, folded the same way
       sec = foldSection(body, "National market check", "national", p.id);
       renderNational(sec, p);
+      // Applications whose summary lists this position among the others they relate to (staff)
+      if (st.staff) {
+        sec = foldSection(body, "Other applications that relate to this role", "suggested", p.id);
+        renderSuggested(sec, p);
+      }
       // Applicants
       sec = RR.section(body, "Applicants");
       renderApplicants(sec, p);
@@ -1535,6 +1540,38 @@
       wrap.appendChild(share);
     }
     return wrap;
+  }
+
+  // People who applied for something else and whose newest summary lists this position among
+  // the other positions the application relates to (view position_suggestions, admin and hr).
+  // The list to read when a seasonal role opens again. Newest application first: no ranking.
+  function renderSuggested(sec, p) {
+    var st = RR.state();
+    sb.from("position_suggestions").select("application_id, suggested_at, matches").eq("position_id", p.id).limit(500).then(function (r) {
+      if (!sec.isConnected || openId !== p.id) return;
+      sec.querySelectorAll(".log, .hint").forEach(function (n) { n.remove(); });
+      if (r.error) { setFoldLine(sec, "Could not load"); sec.appendChild(el("div", "hint", "Could not load: " + RR.errText(r.error))); return; }
+      var rows = (r.data || []).map(function (x) { return { s: x, a: st.appById[x.application_id] }; }).filter(function (x) { return x.a; })
+        .sort(function (x, y) { return y.a.when - x.a.when; });
+      setFoldLine(sec, rows.length ? rows.length + " application" + (rows.length === 1 ? "" : "s") : "None");
+      if (!rows.length) {
+        sec.appendChild(el("div", "hint", "None yet. When a summary of an application for another position finds stated facts that meet this role's requirements, the application is listed here."));
+        return;
+      }
+      sec.appendChild(el("div", "hint", "They applied for another position; Claude's summary found stated facts that meet a requirement of this one. Newest application first, which is not a ranking. Read the application before you call anyone."));
+      var ul = el("ul", "log");
+      rows.slice(0, 40).forEach(function (x) {
+        var a = x.a, li = el("li");
+        var link = el("a", null, a.name); link.href = "#/applications"; link.addEventListener("click", function (e) { e.preventDefault(); RR.openApplicant(a.id); });
+        li.appendChild(link);
+        if (a.lead) { var star = el("span", "lead", "★"); star.title = "Good lead"; li.appendChild(star); }
+        li.appendChild(el("span", "meta", " · applied " + RR.fmtDate(a.when) + (a.positionTitle || a.positionText ? " for " + (a.positionTitle || a.positionText) : "") + " · " + RR.stageName(a.stageId) + (a.contactPurged ? " · contact details removed" : "")));
+        (Array.isArray(x.s.matches) ? x.s.matches : []).slice(0, 4).forEach(function (m) { li.appendChild(el("div", "meta", String(m))); });
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+      if (rows.length > 40) sec.appendChild(el("div", "hint", "Showing the newest 40 of " + rows.length + "."));
+    });
   }
 
   function renderApplicants(sec, p) {

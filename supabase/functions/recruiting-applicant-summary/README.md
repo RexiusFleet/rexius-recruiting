@@ -3,7 +3,10 @@
 Edge Function for Phase 9b: applicant summaries and the reply translator, both started from an
 application's drawer by HR or an admin. `summarize` has Claude read one application against its
 position and stores the result as a `recruiting.applicant_summaries` row (facts only: no score,
-rank or recommendation; an English translation of every written answer not in English).
+rank or recommendation; an English translation of every written answer not in English). The
+same run compares the application with the other open and closed positions at its location and
+stores up to three it relates to in `other_positions`, each with the stated facts behind it; the
+function, not Claude, sets their order (open first, then title).
 `translate` turns a message into Spanish or English for HR to copy, and logs only its usage in
 `recruiting.message_translations`.
 

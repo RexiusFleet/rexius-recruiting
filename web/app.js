@@ -410,7 +410,7 @@
     profile = res.data; role = profile.role; staff = role === "admin" || role === "hr";
     $("who").textContent = profile.name + " · " + role;
     document.body.dataset.role = role;
-    $("addBtn").hidden = !staff;
+    $("addBtn").hidden = !staff; $("summarizeBtn").hidden = !staff;
     show("appView");
     await loadRefs();
     route();
@@ -1723,6 +1723,10 @@
   $("dClose").addEventListener("click", closeDrawer);
   document.addEventListener("keydown", function (e) { if (e.key !== "Escape") return; if (!$("linkModal").hidden) { $("linkModal").hidden = true; if ($("linkText")) $("linkText").value = ""; } else if (!$("inviteModal").hidden) $("inviteModal").hidden = true; else if (!$("addModal").hidden) closeAddModal(); else if (!$("drawer").hidden) closeDrawer(); });
   $("refreshBtn").addEventListener("click", loadApps);
+  // Summarize shown (summary.js): the filtered applications without a summary yet, 25 a click.
+  $("summarizeBtn").addEventListener("click", function () {
+    if (staff && window.RR && RR.summary) RR.summary.bulk(sortRows(applyFilters()), $("summarizeBtn"));
+  });
   $("exportBtn").addEventListener("click", exportCsv);
   setInterval(updateMeta, 60000);
   window.addEventListener("hashchange", route);

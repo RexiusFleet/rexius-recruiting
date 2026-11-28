@@ -22,7 +22,16 @@ and nobody should decide anything from a summary without opening the application
 About the position:
 
 - title, location and department;
-- the text of the job description linked to the position, when one is on file.
+- the text of the job description linked to the position, when one is on file as typed text.
+  A description uploaded as a Word or PDF file cannot be read; in that case, or when no
+  description is linked, Claude gets the text of the position's job page on rexius.com as the
+  daily careers sync last saw it.
+
+About other positions (see **Other positions** below):
+
+- the title, location, department and description text of the other open and closed positions
+  at the location the applicant applied to. Draft positions are left out. Whether a position is
+  open or closed is not sent.
 
 From the application, and nothing else:
 
@@ -60,6 +69,8 @@ From the application, and nothing else:
   application does not mention, each written as "Does not say whether …". These come from the
   job description, or, without one, only from what the job title clearly needs (a CDL for a
   truck driver).
+- **Other positions this application relates to**: up to three, each with the stated facts
+  behind it (next section but one).
 - **Check in the application**: things HR should read in the original, such as a personal
   reason Claude left out (next section), text addressed to the reviewer, or answers that
   conflict.
@@ -85,6 +96,40 @@ From the application, and nothing else:
 
 If a summary breaks any of these rules, do not use it. Tell an admin, with the date of the run,
 so the prompt can be fixed. Every run is kept, so it can be found again.
+
+## Other positions
+
+The same run compares the application with the other positions at the location the applicant
+applied to, open and closed, because many closed roles open again with the season. A CAS or
+paper application with no location is compared with every location.
+
+- A position is listed only when **something the applicant wrote meets a requirement or main
+  duty stated in that position's description**: a licence it asks for, a named machine or
+  vehicle, past work with the same duties. For a position with no description text, only what
+  its title clearly requires counts.
+- "Hard worker", "willing to do anything", education alone, and where the applicant lives are
+  not grounds. Pay is not considered.
+- Each position shows the facts that meet a requirement, and what the application does not say
+  about that role ("Does not say whether …").
+- **No score, no "good fit", no recommendation.** A listed position is a pointer for HR to
+  read, not a suggestion to move, interview or hire anyone. Every rule under "What a summary
+  never contains" applies to these lines too.
+- **The order is not a ranking.** Claude names positions by a code; the tracker puts open
+  positions first and then sorts by title. The tracker also throws away anything Claude names
+  that it was not shown, the position the applicant applied for, and any entry with no fact.
+- At most three positions. **None is the normal answer** for most applications, and the drawer
+  says how many positions were compared.
+- Nothing happens on its own. An application's position and stage change only when HR changes
+  them.
+
+On a position's page, **Other applications that relate to this role** lists the applications
+whose newest summary named that position, newest application first. It is the list to read
+when a seasonal role opens again; read the application before calling anyone. Hiring managers
+see none of this.
+
+**Summarize shown**, in the tracker's header, runs Summarize for the applications currently
+shown that have no summary with this comparison yet: at most 25 a click, after a confirmation
+that says how many and roughly what it costs.
 
 ## Translations
 
@@ -117,7 +162,9 @@ The summary itself is stored in the tracker with the application and is deleted 
 
 ## Cost
 
-About five cents a summary and under a cent a message at 2026-11 list prices. Each summary
+Five to ten cents a summary (more where the positions have long descriptions, less when
+several run within five minutes of each other) and under a cent a message at 2026-11 list
+prices. Each summary
 shows its own cost; the Claude Console's Usage page shows the total for the `recruiting`
 workspace.
 

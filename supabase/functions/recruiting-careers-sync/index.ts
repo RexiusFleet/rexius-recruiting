@@ -39,7 +39,7 @@ const FUNCTION = "recruiting-careers-sync";
 const FETCH_TIMEOUT_MS = 20_000;
 const MAX_PAGE_CHECKS = 40;
 const USER_AGENT = "RexiusRecruiter-careers-sync/1.0 (+https://rexius.com/blogs/careers)";
-const PAGE_COLUMNS = ["url", "title", "tags", "location", "job_type", "pay_text", "pay_min", "pay_max", "pay_unit", "pay_problem", "pay_applied_text",
+const PAGE_COLUMNS = ["url", "title", "tags", "location", "job_type", "pay_text", "pay_min", "pay_max", "pay_unit", "pay_problem", "pay_applied_text", "body_text",
   "published_at", "site_updated_at", "first_seen_at", "last_seen_at", "gone_at", "position_id", "link_source", "ignored"] as const;
 
 const CORS = {

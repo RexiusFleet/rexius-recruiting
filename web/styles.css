@@ -299,6 +299,10 @@ table.mini th:first-child, table.mini td:first-child { padding-left: 0; }
 .sum-run { margin: 6px 0 0 8px; }
 .sum-run .sum-body { padding: 4px 0 8px; }
 .sum-translation { margin-top: 6px; }
+.sum-other { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+.sum-pos { display: grid; gap: 3px; border-left: 3px solid var(--line-strong); padding-left: 8px; }
+.sum-pos-head a { font-weight: 600; }
+.sum-pos .tag.open { color: var(--accent); border-color: var(--accent); }
 .sum-translation .orig { color: var(--faint); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sum .notice-inline { margin: 0; }
 .translator { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }

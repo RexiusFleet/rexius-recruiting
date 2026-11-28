@@ -1771,6 +1771,64 @@ unverified (a decision recorded in `_shared/market-links.mjs`); the manager view
 stage; who may delete a position; README sections stay in this file because code comments cite
 them by name.
 
+## What position suggestions created
+
+Summarize now also answers "what else could this person be considered for?" (2026-11-27, branch
+`claude/recruiter-position-matching-296c5a`, migration `20261123000100_position_suggestions.sql`).
+It stays inside the rule that a summary never scores, ranks or recommends:
+`docs/applicant-summary-rules.md` has a new **Other positions** section that HR agrees to before
+using it.
+
+- **What a run does.** Besides the summary, Claude is shown the other open and closed positions
+  at the location the applicant applied to (title, department, description text; drafts never;
+  every location when the application has none, as on the CAS form) and returns up to three the
+  application relates to. A position qualifies only when something the applicant wrote meets a
+  requirement or main duty stated in its description. Each entry carries those facts and what
+  the application does not say about the role. Resumes are still not read.
+- **Not a ranking.** Claude names positions by a key (`P1`, `P2`, ...). The function keeps only
+  keys it sent, drops the position applied for and any entry without a fact, takes title,
+  location and status from the database, and orders the result itself: open first, then by
+  title. Whether a position is open is not sent to Claude at all.
+- **Descriptions.** `loadDescriptions()` in the function uses the linked document's typed text
+  and, when the description is an uploaded file or missing, the text of the position's job page
+  on rexius.com. The careers sync keeps that text in the new column `careers_pages.body_text`
+  (plain text, at most 12,000 characters), so it is there for a closed position whose page has
+  been taken down. The applied-for position gets the same fallback, which gives many summaries
+  a job description they did not have before. A position with neither is compared on its title
+  alone and the drawer says so.
+- **Migration.** `careers_pages.body_text`; `applicant_summaries.other_positions`
+  (`[{position_id, title, location, status, had_description, matches[], not_stated[]}]`) and
+  `catalog_size` (how many other positions were compared; null on runs from before this
+  change); the view `position_suggestions` (admin and hr only): one row per position and
+  application from the application's newest finished summary, leaving out an application
+  already linked to that position.
+- **Tracker.** The drawer's summary has **Other positions this application relates to**, with
+  each position's current status (a closed one says when it was last open) and a link to it. A
+  position's page has a folded section **Other applications that relate to this role** for
+  staff: the list to read when a seasonal role opens again, newest application first.
+  **Summarize shown** in the header runs Summarize for up to 25 of the applications currently
+  shown that have no run with the comparison yet, two at a time, after a confirmation with the
+  count and an estimated cost. Managers see none of this.
+- **Cost.** The positions are a second cached block of the prompt, the same for every applicant
+  at a location, so runs within five minutes of each other read it from cache. Expect five to
+  ten cents a run instead of about three; each row still stores its own cost.
+- **Tests.** `npm run careers:test` covers the kept text; `scripts/test-policies.sql` has ten
+  more checks (314 in all); the stub Claude API answers with two positions plus three entries
+  the function must drop.
+
+To turn it on, in this order (a migration the site depends on goes first):
+
+```sh
+npm run db:migrate
+npx supabase functions deploy recruiting-careers-sync --no-verify-jwt
+npx supabase functions deploy recruiting-applicant-summary --no-verify-jwt
+```
+
+Then merge the pull request (that publishes `web/`), and on the Positions page press **Check
+now** under the rexius.com sync once so every job page's text is stored before the first run.
+Existing summaries show "from before the tracker compared applications with other positions"
+until they are summarized again.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the

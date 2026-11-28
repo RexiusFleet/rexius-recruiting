@@ -175,9 +175,11 @@ export function parsePay(payText) {
   return { pay_min: min, pay_max: max, pay_unit: unit, assumed_unit: assumed };
 }
 
+const MAX_BODY_CHARS = 12000;
 /** A parsed feed entry plus its location tags -> the fields kept in recruiting.careers_pages. */
 export function pageFromEntry(entry, tags) {
-  const job = parseJob(htmlToText(entry.html));
+  const text = htmlToText(entry.html);
+  const job = parseJob(text);
   const known = (tags || []).filter((t) => TAG_LOCATIONS[t]);
   const pay = job.pay_text ? parsePay(job.pay_text) : {};
   return {
@@ -191,6 +193,9 @@ export function pageFromEntry(entry, tags) {
     pay_max: pay.pay_max ?? null,
     pay_unit: pay.pay_unit ?? null,
     pay_problem: pay.problem ?? null,
+    // The posting's own text: the applicant summary reads it as the position's description when
+    // no typed job description is linked (migration 20261123000100).
+    body_text: text ? text.slice(0, MAX_BODY_CHARS) : null,
     published_at: entry.published_at,
     site_updated_at: entry.site_updated_at,
   };

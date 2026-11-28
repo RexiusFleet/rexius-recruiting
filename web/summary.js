@@ -6,6 +6,11 @@
  * runs), and this section polls it until it is done. A summary lists what the application says
  * that relates to the position, what it does not say, and an English translation of answers
  * written in Spanish. It never scores, ranks or recommends (docs/applicant-summary-rules.md).
+ * The same run compares the application with the other open and closed positions at its
+ * location and lists up to three it relates to, each with the stated facts behind it; the
+ * function sets their order (open first, then title), so the order is not a ranking.
+ * Summarize shown (the tracker's header) runs it for up to 25 of the filtered applications that
+ * have no such run yet.
  *
  * Under the contact log, Translate a message turns a reply into Spanish (or an applicant's
  * Spanish message into English) for HR to copy. Nothing is sent to the applicant and the text is
@@ -14,14 +19,14 @@
  * Managers never see a summary. When one has translated answers they can already read, their
  * drawer shows that English translation (the `translation` column of applications_for_managers).
  *
- * app.js calls RR.summary.render / translator / managerTranslation / latestTranslations.
+ * app.js calls RR.summary.render / translator / managerTranslation / latestTranslations / bulk.
  */
 (function () {
   "use strict";
   var RR = window.RR; if (!RR) return;
   var sb = RR.sb, el = RR.el;
   var FN = "recruiting-applicant-summary";
-  var COLS = "id, application_id, position_id, requested_by, created_at, finished_at, answer_language, summary, translations, had_description, model, input_tokens, output_tokens, cost_usd, error";
+  var COLS = "id, application_id, position_id, requested_by, created_at, finished_at, answer_language, summary, translations, other_positions, catalog_size, had_description, model, input_tokens, output_tokens, cost_usd, error";
   var RUNNING_MS = 5 * 60 * 1000;
   var poll = null;
 
@@ -75,7 +80,7 @@
 
     var row = el("div", "row sum-controls");
     var btn = el("button", "btn small", running ? "Summarizing…" : shown ? "Summarize again" : "Summarize"); btn.type = "button"; btn.disabled = !!running;
-    btn.title = "Claude reads this application against its position. About five cents a run; the facts come from the application only.";
+    btn.title = "Claude reads this application against its position and the other positions at its location. Five to ten cents a run; the facts come from the application only.";
     btn.addEventListener("click", async function () {
       btn.disabled = true; btn.textContent = "Starting…";
       var r = await invoke({ action: "summarize", application_id: a.id });
@@ -100,7 +105,7 @@
       box.appendChild(bad);
     }
     if (!shown) {
-      if (!running) box.appendChild(el("div", "hint", "No summary yet. Claude reads this application against its position and lists what relates to it, what it does not say, and an English translation of anything written in Spanish. It does not score, rank or recommend; the decision stays with you."));
+      if (!running) box.appendChild(el("div", "hint", "No summary yet. Claude reads this application against its position and lists what relates to it, what it does not say, other positions the application relates to, and an English translation of anything written in Spanish. It does not score, rank or recommend; the decision stays with you."));
       return;
     }
     box.appendChild(summaryBody(shown, a, true));
@@ -141,6 +146,7 @@
     RR.kv(dl, "Availability", m.availability); RR.kv(dl, "Location", m.location);
     if (dl.children.length) wrap.appendChild(dl);
     block("Not stated in the application", m.not_stated);
+    wrap.appendChild(otherPositions(s));
     if (m.check_in_application && m.check_in_application.length) {
       var chk = el("div", "notice-inline sum-check");
       chk.appendChild(el("div", "q", "Check in the application"));
@@ -156,6 +162,52 @@
     if (s.finished_at) usage.push(Math.max(1, Math.round((new Date(s.finished_at) - new Date(s.created_at)) / 1000)) + " s");
     wrap.appendChild(el("div", "hint", usage.filter(Boolean).join(" · ") + ". Facts from the application only: no scores, rankings or recommendations."));
     return wrap;
+  }
+
+  // Other positions the application relates to. The status shown is the position's status now
+  // (the run stored it as it was then); a closed role says when it was last open, since a
+  // seasonal role is the reason closed positions are compared at all.
+  function positionStatus(p, o) {
+    if (!p) return "No longer on file";
+    if (p.status === "open") return "Open now";
+    if (p.status === "draft") return "Draft";
+    var last = (p.openings || []).slice().sort(function (a, b) { return String(b.opened_at).localeCompare(String(a.opened_at)); })[0];
+    if (!last) return "Closed";
+    return "Closed · last open " + RR.fmtDay(last.opened_at) + (last.closed_at ? " to " + RR.fmtDay(last.closed_at) : "");
+  }
+  function otherPositions(s) {
+    var st = RR.state(), items = s.other_positions || [];
+    var box = el("div", "sum-other");
+    box.appendChild(el("div", "q", "Other positions this application relates to"));
+    if (s.catalog_size == null) {
+      box.appendChild(el("div", "hint", "This run is from before the tracker compared applications with other positions. Summarize again to add that."));
+      return box;
+    }
+    if (!items.length) {
+      box.appendChild(el("div", "hint", s.catalog_size
+        ? "None. Claude compared the application with " + s.catalog_size + " other position" + (s.catalog_size === 1 ? "" : "s") + " (open and closed) and found no stated fact that meets a stated requirement of one."
+        : "None. There were no other open or closed positions to compare with."));
+      return box;
+    }
+    items.forEach(function (o) {
+      var p = st.positionById[o.position_id];
+      var d = el("div", "sum-pos");
+      var head = el("div", "sum-pos-head");
+      if (p) {
+        var link = el("a", null, p.title); link.href = "#/positions/" + p.id;
+        link.addEventListener("click", function (e) { e.preventDefault(); RR.go("#/positions/" + p.id); });
+        head.appendChild(link);
+      } else head.appendChild(el("span", null, o.title || "A position"));
+      head.appendChild(el("span", "meta", " · " + ((p && p.location) || o.location || "")));
+      head.appendChild(el("span", "tag" + (p && p.status === "open" ? " open" : ""), positionStatus(p, o)));
+      d.appendChild(head);
+      d.appendChild(list(o.matches || []));
+      if (o.not_stated && o.not_stated.length) { d.appendChild(el("div", "q", "Not stated for this position")); d.appendChild(list(o.not_stated)); }
+      if (!o.had_description) d.appendChild(el("div", "hint", "No description text on file for this position, so it was compared on its title alone."));
+      box.appendChild(d);
+    });
+    box.appendChild(el("div", "hint", "Compared with " + s.catalog_size + " other position" + (s.catalog_size === 1 ? "" : "s") + ". Open positions are listed first, then by title: the order is not a ranking, and this is a pointer to read, not a recommendation."));
+    return box;
   }
 
   function translationList(items) {
@@ -220,5 +272,76 @@
     return r.data[0].translations || [];
   }
 
-  RR.summary = { render: render, translator: translator, managerTranslation: managerTranslation, latestTranslations: latestTranslations, stop: stopPoll };
+  // ---------- Summarize shown (admin and hr) ----------
+  // Runs Summarize for the filtered applications that have no finished run with the position
+  // comparison yet: at most 25 a click, two at a time, after a confirmation that says how many
+  // and roughly what it costs. Each run is the same one the drawer starts.
+  var BULK_MAX = 25, BULK_PARALLEL = 2, BULK_WAIT_MS = 4 * 60 * 1000, BULK_COST = 0.08;
+  var bulkBusy = false;
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function alreadySummarized(ids) {
+    var have = {};
+    for (var i = 0; i < ids.length; i += 100) {
+      var r = await sb.from("applicant_summaries").select("application_id").in("application_id", ids.slice(i, i + 100))
+        .not("finished_at", "is", null).is("error", null).not("catalog_size", "is", null).limit(1000);
+      if (r.error) throw r.error;
+      (r.data || []).forEach(function (row) { have[row.application_id] = true; });
+    }
+    return have;
+  }
+  async function runOne(appId) {
+    var r = await invoke({ action: "summarize", application_id: appId });
+    var id = r.payload && r.payload.summary_id;
+    if (!id) return false;
+    var until = Date.now() + BULK_WAIT_MS;
+    while (Date.now() < until) {
+      await wait(3000);
+      var q = await sb.from("applicant_summaries").select("finished_at, error").eq("id", id).maybeSingle();
+      if (q.error || !q.data) continue;
+      if (q.data.error) return false;
+      if (q.data.finished_at) return true;
+    }
+    return false;
+  }
+  async function bulk(rows, btn) {
+    if (bulkBusy) return;
+    if (!rows.length) { RR.notice("No applications are shown."); return; }
+    bulkBusy = true;
+    var label = btn.textContent; btn.disabled = true; btn.textContent = "Checking…";
+    try {
+      var have = await alreadySummarized(rows.map(function (a) { return a.id; }));
+      var todo = rows.filter(function (a) { return !have[a.id]; });
+      if (!todo.length) { RR.notice("All " + rows.length.toLocaleString() + " applications shown already have a summary with the position comparison."); return; }
+      var batch = todo.slice(0, BULK_MAX);
+      if (!window.confirm("Summarize " + batch.length + " application" + (batch.length === 1 ? "" : "s") + "?\n\n" +
+        (todo.length > batch.length ? todo.length.toLocaleString() + " of the applications shown have no summary yet; this runs the first " + batch.length + " in the order shown.\n\n" : "") +
+        "Claude reads each one against its position and the other positions at its location. About $" + (batch.length * BULK_COST).toFixed(2) +
+        " in all, and a few minutes. Keep this tab open until it finishes.")) return;
+      var done = 0, ok = 0, next = 0;
+      var show = function () { btn.textContent = "Summarizing " + Math.min(done + 1, batch.length) + " of " + batch.length + "…"; };
+      show();
+      var worker = async function () {
+        while (next < batch.length) {
+          var a = batch[next++];
+          var good = false;
+          try { good = await runOne(a.id); } catch (e) { good = false; }
+          done++; if (good) ok++;
+          show();
+        }
+      };
+      var workers = [];
+      for (var w = 0; w < BULK_PARALLEL; w++) workers.push(worker());
+      await Promise.all(workers);
+      var left = todo.length - batch.length;
+      RR.notice("Summarized " + ok + " of " + batch.length + " application" + (batch.length === 1 ? "" : "s") + "." +
+        (ok < batch.length ? " " + (batch.length - ok) + " did not finish; open one to see why." : "") +
+        (left > 0 ? " " + left.toLocaleString() + " more shown have no summary yet." : ""));
+    } catch (e) {
+      RR.notice("Could not summarize the applications shown: " + RR.errText(e));
+    } finally {
+      bulkBusy = false; btn.disabled = false; btn.textContent = label;
+    }
+  }
+
+  RR.summary = { render: render, translator: translator, managerTranslation: managerTranslation, latestTranslations: latestTranslations, bulk: bulk, stop: stopPoll };
 })();

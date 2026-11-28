@@ -89,7 +89,9 @@ checksum and warns).
   `security_barrier`. Never add a restricted column (notes, `answers`, offers, wages) to one.
   `applications_for_managers.translation` is not one: it holds English translations of answers
   the view already shows, filtered on the `manager` flag the summary function sets per answer
-  (Phase 9b); summaries themselves never reach a manager.
+  (Phase 9b); summaries themselves never reach a manager. `position_suggestions` is built the
+  same way but its `where` clause is `recruiting.is_staff()`: it lists which applications'
+  summaries named a position, for admin and hr only.
 - Tables with `updated_at` get a `before update` trigger calling `set_updated_at()`.
 
 ## Seed data

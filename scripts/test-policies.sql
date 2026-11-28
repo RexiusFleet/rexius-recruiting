@@ -1002,6 +1002,54 @@ select pg_temp.check('forms: every form has the four keys the summary reads',
   (select count(*) from recruiting.forms where field_map ?& array['certifications', 'worked_before_details', 'applied_before_details', 'other_qualifications']) = (select count(*) from recruiting.forms));
 rollback;
 
+-- ----- Position suggestions: the other positions a summary lists ----------------------------
+begin;
+-- As postgres (what the function's service role does): the Lake Oswego applicant's summary lists
+-- another position at that location and, wrongly, the applicant's own position.
+update recruiting.applicant_summaries sm
+set catalog_size = 2, other_positions = jsonb_build_array(
+  jsonb_build_object('position_id', (select p.id from recruiting.positions p where p.location = a.location and p.id <> a.position_id order by p.title, p.id limit 1),
+    'title', 'x', 'location', a.location, 'status', 'open', 'had_description', false,
+    'matches', jsonb_build_array('States two seasons on a blower truck crew.'), 'not_stated', '[]'::jsonb),
+  jsonb_build_object('position_id', a.position_id, 'title', 'own', 'location', a.location, 'status', 'open', 'had_description', false,
+    'matches', jsonb_build_array('own'), 'not_stated', '[]'::jsonb))
+from recruiting.applications a
+where a.id = sm.application_id and a.jotform_submission_id = '6000000000000000003';
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('suggestions: hr reads the other position a summary lists, never the applicant''s own',
+  (select count(*) from recruiting.position_suggestions) = 1
+  and (select s.position_id <> a.position_id and jsonb_array_length(s.matches) = 1
+       from recruiting.position_suggestions s join recruiting.applications a on a.id = s.application_id));
+select pg_temp.check('suggestions: hr reads other_positions and catalog_size on the summary',
+  (select count(*) from recruiting.applicant_summaries where catalog_size = 2 and jsonb_array_length(other_positions) = 2) = 1);
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
+select pg_temp.check('suggestions: admin reads them', (select count(*) from recruiting.position_suggestions) = 1);
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333');
+select pg_temp.check('suggestions: manager sees none', (select count(*) from recruiting.position_suggestions) = 0);
+select pg_temp.check('suggestions: nothing about other positions is in the manager view',
+  not exists (select 1 from information_schema.columns where table_schema = 'recruiting' and table_name = 'applications_for_managers' and column_name in ('other_positions', 'catalog_size')));
+select pg_temp.as_user('44444444-4444-4444-4444-444444444444');
+select pg_temp.check('suggestions: no profile sees none', (select count(*) from recruiting.position_suggestions) = 0);
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+select pg_temp.check('suggestions: hr at aal1 sees none', (select count(*) from recruiting.position_suggestions) = 0);
+select pg_temp.check('suggestions: the view is read-only and closed to anon; the posting text is not editable',
+  not has_table_privilege('anon', 'recruiting.position_suggestions', 'select')
+  and not has_table_privilege('authenticated', 'recruiting.position_suggestions', 'insert')
+  and not has_table_privilege('authenticated', 'recruiting.position_suggestions', 'update')
+  and not has_table_privilege('authenticated', 'recruiting.position_suggestions', 'delete')
+  and not has_column_privilege('authenticated', 'recruiting.careers_pages', 'body_text', 'update'));
+reset role;
+insert into recruiting.applicant_summaries (application_id, created_at, finished_at, error, catalog_size)
+  select id, now() + interval '1 second', now() + interval '1 second', 'test failure', 2 from recruiting.applications where jotform_submission_id = '6000000000000000003';
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('suggestions: a failed newer run does not remove them', (select count(*) from recruiting.position_suggestions) = 1);
+reset role;
+insert into recruiting.applicant_summaries (application_id, created_at, finished_at, catalog_size)
+  select id, now() + interval '2 seconds', now() + interval '2 seconds', 2 from recruiting.applications where jotform_submission_id = '6000000000000000003';
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+select pg_temp.check('suggestions: the newest finished run replaces them', (select count(*) from recruiting.position_suggestions) = 0);
+rollback;
+
 -- ----- Good leads (20261113000100) ------------------------------------------------------------
 -- The flag needs a reason, stamps who and when, is capped at twelve months after the
 -- application, holds off the six-month purge until it expires, and shows managers the flag only.
