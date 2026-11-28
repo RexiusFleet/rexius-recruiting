@@ -5,10 +5,9 @@ job application from three Jotform forms, tracks each one through the pipeline, 
 postings, and channel spend in one place, and reports on recruiting. `CLAUDE.md` is the full
 brief; this file is the operator's guide.
 
-Backend: one Supabase project shared with the inventory app, called `am-projects` throughout
-these docs. In the dashboard it is currently named **Apparel** (ref `hibjqcgitqtgmkurghlw`);
-the rename to am-projects waits on an organization Administrator and changes nothing that
-runs, since every tool here connects by ref, not by name. This app owns the
+Backend: one Supabase project shared with the inventory app, named **AM Projects** in the
+dashboard (ref `hibjqcgitqtgmkurghlw`; it was named Apparel until November 2026). The name is
+only a label: every tool here connects by ref, not by name. This app owns the
 Postgres schema `recruiting`). Frontend: static HTML/JS in `web/`, run locally during development and
 published to GitHub Pages at https://rexiusfleet.github.io/rexius-recruiting/ (step 13).
 
@@ -264,7 +263,7 @@ Hosting and invites. Nothing changes in the database.
 - `.github/workflows/pages.yml`: on every push to `main` that touches `web/`, uploads `web/` to
   GitHub Pages as-is (no build), except that it overwrites `web/config.js` with the hosted
   project's URL and publishable key, read from the repository variables `SUPABASE_URL` (optional,
-  defaults to the am-projects URL) and `SUPABASE_PUBLISHABLE_KEY`. The committed `config.js` keeps
+  defaults to the AM Projects URL) and `SUPABASE_PUBLISHABLE_KEY`. The committed `config.js` keeps
   the local Docker stack's values, so `npx serve web` still works unchanged. The workflow refuses
   a key that looks like a secret key. Both deployed values are public by design: the key only
   identifies the project, and `anon` has no access to schema `recruiting` (step 5's curl check).
@@ -1771,10 +1770,68 @@ unverified (a decision recorded in `_shared/market-links.mjs`); the manager view
 stage; who may delete a position; README sections stay in this file because code comments cite
 them by name.
 
+## What position suggestions created
+
+Summarize now also answers "what else could this person be considered for?" (2026-11-27, branch
+`claude/recruiter-position-matching-296c5a`, migration `20261123000100_position_suggestions.sql`).
+It stays inside the rule that a summary never scores, ranks or recommends:
+`docs/applicant-summary-rules.md` has a new **Other positions** section that HR agrees to before
+using it.
+
+- **What a run does.** Besides the summary, Claude is shown the other open and closed positions
+  at the location the applicant applied to (title, department, description text; drafts never;
+  every location when the application has none, as on the CAS form) and returns up to three the
+  application relates to. A position qualifies only when something the applicant wrote meets a
+  requirement or main duty stated in its description. Each entry carries those facts and what
+  the application does not say about the role. Resumes are still not read.
+- **Not a ranking.** Claude names positions by a key (`P1`, `P2`, ...). The function keeps only
+  keys it sent, drops the position applied for and any entry without a fact, takes title,
+  location and status from the database, and orders the result itself: open first, then by
+  title. Whether a position is open is not sent to Claude at all.
+- **Descriptions.** `loadDescriptions()` in the function uses the linked document's typed text
+  and, when the description is an uploaded file or missing, the text of the position's job page
+  on rexius.com. The careers sync keeps that text in the new column `careers_pages.body_text`
+  (plain text, at most 12,000 characters), so it is there for a closed position whose page has
+  been taken down. The applied-for position gets the same fallback, which gives many summaries
+  a job description they did not have before. A position with neither is compared on its title
+  alone and the drawer says so.
+- **Migration.** `careers_pages.body_text`; `applicant_summaries.other_positions`
+  (`[{position_id, title, location, status, had_description, matches[], not_stated[]}]`) and
+  `catalog_size` (how many other positions were compared; null on runs from before this
+  change); the view `position_suggestions` (admin and hr only): one row per position and
+  application from the application's newest finished summary, leaving out an application
+  already linked to that position.
+- **Tracker.** The drawer's summary has **Other positions this application relates to**, with
+  each position's current status (a closed one says when it was last open) and a link to it. A
+  position's page has a folded section **Other applications that relate to this role** for
+  staff: the list to read when a seasonal role opens again, newest application first.
+  **Summarize shown** in the header runs Summarize for up to 25 of the applications currently
+  shown that have no run with the comparison yet, two at a time, after a confirmation with the
+  count and an estimated cost. Managers see none of this.
+- **Cost.** The positions are a second cached block of the prompt, the same for every applicant
+  at a location, so runs within five minutes of each other read it from cache. Expect five to
+  ten cents a run instead of about three; each row still stores its own cost.
+- **Tests.** `npm run careers:test` covers the kept text; `scripts/test-policies.sql` has ten
+  more checks (314 in all); the stub Claude API answers with two positions plus three entries
+  the function must drop.
+
+To turn it on, in this order (a migration the site depends on goes first):
+
+```sh
+npm run db:migrate
+npx supabase functions deploy recruiting-careers-sync --no-verify-jwt
+npx supabase functions deploy recruiting-applicant-summary --no-verify-jwt
+```
+
+Then merge the pull request (that publishes `web/`), and on the Positions page press **Check
+now** under the rexius.com sync once so every job page's text is stored before the first run.
+Existing summaries show "from before the tracker compared applications with other positions"
+until they are summarized again.
+
 ## Manual steps in Supabase (do these in order)
 
 You need: a terminal with Node 22 or newer (the Supabase CLI runs through `npx`; the
-migration runner needs one `npm install`), and access to the `am-projects` project (currently named Apparel) in the Supabase dashboard; steps 1, 5 and 6
+migration runner needs one `npm install`), and access to the `AM Projects` project in the Supabase dashboard; steps 1, 5 and 6
 need the Administrator or Owner role in the Supabase organization, as does setting the Edge Function secrets in step 14; the rest work as a Developer. Run every command from
 the root of this repo.
 
@@ -2331,7 +2388,7 @@ translation shown, no summary, no translator).
 ## Two repos, one project
 
 The inventory app is its own project in its own repository and environment; the only thing it
-shares with this one is the `am-projects` Supabase project. Nothing in the inventory repo needs
+shares with this one is the `AM Projects` Supabase project. Nothing in the inventory repo needs
 to know this repo exists. Three things make that hold.
 
 **Schemas.** This app creates objects only in schema `recruiting`, plus its own Storage bucket

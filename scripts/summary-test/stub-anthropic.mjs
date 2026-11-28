@@ -12,7 +12,10 @@
 //
 // POST /v1/messages (with or without ?beta=true) answers in the shape the real API uses:
 //   * a summary request (the JSON schema has "overview"): a made-up summary marked "(stub)",
-//     and a "(stub)" translation for every keyed written answer that looks Spanish;
+//     a "(stub)" translation for every keyed written answer that looks Spanish, and, when the
+//     request carries <other_positions>, entries for the first two positions that are not the
+//     one applied for plus three the function must drop: the position applied for, a key that
+//     was never sent ("P999") and one with no stated fact;
 //   * a translate request (the schema has "translation"): the message marked "(stub)".
 // STUB_MODE: ok (default), refusal (stop_reason refusal), badjson (text that is not JSON),
 // slow (answers after 20 seconds), auth (401, as for a wrong key), ratelimit (429, as when the
@@ -38,7 +41,23 @@ function userText(body) {
   return typeof m.content === "string" ? m.content : (m.content || []).map((b) => b.text || "").join("\n");
 }
 
-function summaryResult(prompt) {
+function systemText(body) {
+  return typeof body.system === "string" ? body.system : (body.system || []).map((b) => b.text || "").join("\n");
+}
+
+function otherPositions(prompt, system) {
+  const keys = [...system.matchAll(/^\[(P\d+)\] Title: /gm)].map((m) => m[1]);
+  if (!keys.length) return [];
+  const applied = (/position applied for is \[(P\d+)\]/.exec(prompt) || [])[1] || null;
+  const others = keys.filter((k) => k !== applied);
+  const out = others.slice(0, 2).map((k) => ({ position: k, matches: [`(stub) A stated fact that meets a stated requirement of ${k}.`], not_stated: ["(stub) Does not say whether …"] }));
+  if (applied) out.push({ position: applied, matches: ["(stub) the position applied for: the function must drop this"], not_stated: [] });
+  out.push({ position: "P999", matches: ["(stub) a key that was never sent: the function must drop this"], not_stated: [] });
+  if (others[2]) out.push({ position: others[2], matches: [], not_stated: ["(stub) no stated fact: the function must drop this"] });
+  return out;
+}
+
+function summaryResult(prompt, system) {
   const translations = [];
   const keyed = /\[([a-z0-9_.]+)\][^:\n]*:\s*([^;\n]*)/g;
   let m;
@@ -57,6 +76,7 @@ function summaryResult(prompt) {
     not_stated: ["(stub) Does not say whether …"],
     check_in_application: [],
     translations,
+    other_positions: otherPositions(prompt, system),
   };
 }
 
@@ -89,7 +109,7 @@ createServer((req, res) => {
       const into = /into Spanish/.test(prompt) ? "ES" : "EN";
       content = [{ type: "text", text: JSON.stringify({ translation: `(stub ${into}) ${msg}` }) }];
     } else {
-      content = [{ type: "text", text: JSON.stringify(summaryResult(prompt)) }];
+      content = [{ type: "text", text: JSON.stringify(summaryResult(prompt, systemText(body))) }];
     }
     const message = {
       id: `msg_stub_${n}`, type: "message", role: "assistant", model: body.model || "claude-opus-5-5",

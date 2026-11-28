@@ -102,6 +102,13 @@ test("pageFromEntry maps one location tag and leaves several unset", () => {
   assert.deepEqual([page.pay_min, page.pay_max, page.pay_unit, page.pay_problem, page.job_type], [25, 30, "hour", null, "Full-time"]);
   assert.equal(pageFromEntry(e, ["eugene", "central-oregon", "lake-oswego"]).location, null);
   assert.equal(pageFromEntry(e, []).location, null);
+  // The posting's text is kept for the applicant summary: plain text, no markup.
+  assert.equal(page.body_text, htmlToText(BODY));
+  assert.ok(page.body_text.length > 0 && !/<[a-z]/i.test(page.body_text));
+  const [long] = parseFeed(feed(entry("long1", "Long", "<p>" + "word ".repeat(5000) + "</p>")));
+  assert.equal(pageFromEntry(long, []).body_text.length, 12000);
+  const [empty] = parseFeed(feed(entry("empty1", "Empty", "")));
+  assert.equal(pageFromEntry(empty, []).body_text, null);
   const [noPay] = parseFeed(feed(entry("irrig2", "Irrigation Installation Crew Member", "<p>Job Summary:</p><p>Install systems.</p>")));
   assert.deepEqual([pageFromEntry(noPay, ["eugene"]).pay_text, pageFromEntry(noPay, ["eugene"]).pay_problem], [null, null]);
 });
